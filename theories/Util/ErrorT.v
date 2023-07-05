@@ -1,4 +1,4 @@
-From NeuralNetInterp.Util Require Import Notations.
+From NeuralNetInterp.Util Require Import Notations Monad.
 
 Local Set Boolean Equality Schemes.
 Local Set Decidable Equality Schemes.
@@ -42,8 +42,8 @@ Definition error_bind {ErrT1 ErrT2 A} (x : ErrorT ErrT1 A) (k : ErrT1 -> ErrorT 
      | Error msg => k msg
      end.
 
-Notation "x <- y ; f" := (bind y (fun x => f%error)) : error_scope.
-Notation "' x <- y ; f" := (bind y (fun 'x => f%error)) : error_scope.
+#[export] Instance ErrorT_Monad {err} : Monad (ErrorT err)
+  := { bind A B := bind ; ret A := Success }.
 
 (** ** Equality for [ErrorT] *)
 Section ErrorT.

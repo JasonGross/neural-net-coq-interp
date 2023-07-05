@@ -86,10 +86,18 @@ Fixpoint broadcast_map {A B} {s1 s2 : Size} (f : A -> tensor_of_shape B s2) {str
        => PArray.map (broadcast_map f)
      end.
 
-Definition embed {s : Size} (vec : tensor_of_shape int s) : tensor_of_shape Q (s ++ tl (shape_of W_E))
-  := broadcast_map (s2:=tl (shape_of W_E)) (fun i => W_E.[i]) vec.
-(*
+Definition embed {s : Size} (tokens : tensor_of_shape int s) : tensor_of_shape Q (s ++ tl (shape_of W_E))
+  := broadcast_map (s2:=tl (shape_of W_E)) (fun i => W_E.[i]) tokens.
+
+Definition pos_embed {s : Size} (tokens : tensor_of_shape int s)
+  (tokens_length := (hd 1 (rev s))%uint63)
+  (batch := (hd 1 s)%uint63)
+  (d_model := tl (shape_of W_pos))
+  : tensor_of_shape Q (batch::tokens_length::d_model)
+  := PArray.repeat (W_pos.[[:tokens_length]]) batch.
+
 Eval cbv in embed (tensor_of_list [0; 1]%uint63).
+Eval cbv in pos_embed (tensor_of_list [[0; 1]]%uint63).
   cbn.
 
 Fixpoint map_at_bottom

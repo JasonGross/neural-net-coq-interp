@@ -1,8 +1,7 @@
 Require Import Coq.Classes.Morphisms.
 Require Import Coq.Relations.Relation_Definitions.
-Require Import NeuralNetInterp.Util.Tactics.BreakMatch.
-Require Import NeuralNetInterp.Util.Tactics.DestructHead.
-Require Import NeuralNetInterp.Util.Notations.
+From NeuralNetInterp.Util.Tactics Require Import BreakMatch DestructHead.
+From NeuralNetInterp.Util Require Import Notations Monad.
 
 Scheme Equality for option.
 Arguments option_beq {_} _ _ _.
@@ -57,9 +56,8 @@ Module Export Notations.
   Delimit Scope option_scope with option.
   Bind Scope option_scope with option.
 
-  Notation "A <- X ; B" := (bind X (fun A => B%option)) : option_scope.
-  Notation "' A <- X ; B" := (bind X (fun 'A => B%option)) : option_scope.
-  Infix ";;" := sequence : option_scope.
+  #[export] Instance option_Monad : Monad (fun x => option x) := { ret := @Some ; bind := @bind }.
+
   Infix ";;;" := sequence_return : option_scope.
 End Notations.
 Local Open Scope option_scope.
