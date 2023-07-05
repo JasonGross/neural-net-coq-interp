@@ -386,3 +386,7 @@ Fixpoint strip_leading_newlines (s : list string) : list string
 
 Definition strip_trailing_newlines (s : list string) : list string
   := List.rev_append (strip_leading_newlines (List.rev_append s nil)) nil.
+
+(* count the number of times s2 occurs in s1 *)
+Definition count (s1 s2 : string) : nat
+  := List.length (split s2 s1) - 1.

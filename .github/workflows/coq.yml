@@ -38,7 +38,7 @@ jobs:
           # Work around https://github.com/actions/checkout/issues/766
           git config --global --add safe.directory "*"
           echo '::group::install dependencies'
-          #opam install -y
+          opam install -y coq-record-update
           echo '::endgroup::'
           make pretty-timed -j2
           make print-pretty-timed
