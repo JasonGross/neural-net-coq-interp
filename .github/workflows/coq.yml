@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  docker-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - env: { COQ_VERSION: "master", DOCKER_COQ_VERSION: "dev", DOCKER_OCAML_VERSION: "default" }
+        - env: { COQ_VERSION: "8.17", DOCKER_COQ_VERSION: "8.17", DOCKER_OCAML_VERSION: "default" }
+
+    runs-on: ubuntu-latest
+    env: ${{ matrix.env }}
+    name: ${{ matrix.env.COQ_VERSION }}
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+    - name: all-except-generated
+      uses: coq-community/docker-coq-action@v1
+      with:
+        coq_version: ${{ matrix.env.DOCKER_COQ_VERSION }}
+        ocaml_version: ${{ matrix.env.DOCKER_OCAML_VERSION }}
+        export: CI
+        custom_script: |
+          eval $(opam env)
+          sudo chmod -R a=u .
+          # Work around https://github.com/actions/checkout/issues/766
+          git config --global --add safe.directory "*"
+          echo '::group::install dependencies'
+          #opam install -y
+          echo '::endgroup::'
+          make pretty-timed -j2
+          make print-pretty-timed
