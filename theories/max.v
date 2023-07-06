@@ -142,13 +142,44 @@ Fixpoint tensor_map2 {A B C} {s : Size} (f : A -> B -> C) {struct s} : tensor_of
 #[export] Instance mul {s A} {mulA : has_mul A} : has_mul (tensor_of_shape A s) := tensor_map2 mul.
 #[export] Instance div_by {s A B} {div_byAB : has_div_by A B} : has_div_by (tensor_of_shape A s) (tensor_of_shape B s) := tensor_map2 div.
 
-Fixpoint broadcast_map {A B} {s1 s2 : Size} {keepdim : with_default bool false} (f : A -> tensor_of_shape B s2) {struct s1} : tensor_of_shape A s1 -> tensor_of_shape B (s1 ++' (if keepdim then [1] else []) ++' s2)
-  := match s1, keepdim return tensor_of_shape A s1 -> tensor_of_shape B (s1 ++' (if keepdim then [1] else []) ++' s2) with
-     | [], true => fun x => PArray.make 1 (f x)
-     | [], false => f
-     | s1 ::' _, keepdim
-       => broadcast_map (s1:=s1) (PArray.map f)
+Fixpoint extend_app_nil_l {P : Size -> Type} {s : Size} : P s -> P ([] ++' s)
+  := match s with
+     | [] => fun x => x
+     | s ::' _ => @extend_app_nil_l (fun s => P (s ::' _)) s
      end.
+Fixpoint contract_app_nil_l {P : Size -> Type} {s : Size} : P ([] ++' s) -> P s
+  := match s with
+     | [] => fun x => x
+     | s ::' _ => @contract_app_nil_l (fun s => P (s ::' _)) s
+     end.
+Fixpoint split_tensor_gen_of_shape_app {list_type A s1 s2} : tensor_gen_of_shape list_type A (s1 ++' s2) -> tensor_gen_of_shape list_type (tensor_gen_of_shape list_type A s2) s1
+  := match s2 with
+     | [] => fun x => x
+     | s2 ::' _ => split_tensor_gen_of_shape_app (s2:=s2)
+     end.
+Fixpoint combine_tensor_gen_of_shape_app {list_type A s1 s2} : tensor_gen_of_shape list_type (tensor_gen_of_shape list_type A s2) s1 -> tensor_gen_of_shape list_type A (s1 ++' s2)
+  := match s2 with
+     | [] => fun x => x
+     | s2 ::' _ => combine_tensor_gen_of_shape_app (s2:=s2)
+     end.
+(* infer s1 s2 from the conclusion *)
+#[global] Arguments combine_tensor_gen_of_shape_app list_type A & s1 s2 _.
+#[global] Arguments split_tensor_gen_of_shape_app list_type A & s1 s2 _.
+
+(*
+Require Import Program . Obligation Tactic := cbn; intros.
+Fixpoint broadcast_map_ {A B} {s1 s2 : Size} {keepdim : with_default bool false} (f : A -> tensor_of_shape B s2) {struct s1} : tensor_of_shape A s1 -> tensor_of_shape (tensor_of_shape B (s1 ++' (if keepdim then [1] else []) ++' s2) s1.
+refine match s1, keepdim return tensor_of_shape A s1 -> tensor_of_shape B (s1 ++' (if keepdim then [1] else []) ++' s2) with
+     | [], true => fun x => combine_tensor_gen_of_shape_app (s1:=[1]) (PArray.make 1 (f x))
+     | [], false => fun x => combine_tensor_gen_of_shape_app (s1:=[]) (f x)
+     | s1 ::' _, keepdim
+       => fun x => _ (*(broadcast_map (keepdim:=keepdim) (s1:=s1)) (* _(*PArray.map f*))*)*)
+       end; cbn in *.
+epose (@broadcast_map _ _ s1 _ keepdim _ x).
+epose (@broadcast_map _ _ s1 _ keepdim (fun a => combine_tensor_gen_of_shape_app (s1:=[1])).
+Next Obligation.
+  pose (
+ pose (broa
 
 Fixpoint extended_broadcast_map {A B} {s1 s1' s2 : Size} (f : tensor_of_shape A s1' -> tensor_of_shape B s2) {struct s1} : tensor_of_shape A (s1 ++ s1') -> tensor_of_shape B (s1 ++ s2)
   := match s1 with
@@ -156,22 +187,21 @@ Fixpoint extended_broadcast_map {A B} {s1 s1' s2 : Size} (f : tensor_of_shape A 
      | s :: s1
        => PArray.map (extended_broadcast_map f)
      end.
-
+*)
 Definition slice_none_m1 {A s} : tensor_of_shape A s -> tensor_of_shape A (s ::' 1)
-  := broadcast_map (s2:=[1]) (PArray.make 1).
+  := tensor_map (PArray.make 1).
+Definition slice_none_0 {A s} : tensor_of_shape A s -> tensor_of_shape A ([1] ++' s)
+  := fun x => combine_tensor_gen_of_shape_app (PArray.make 1 x).
 
-Definition keepdim_gen {A B} {s : with_default Size nil} (f : A -> tensor_of_shape B s) : A -> tensor_of_shape B (1 :: s)
-  := fun a => PArray.make 1 (f a).
+Definition keepdim_gen {A B} {s : with_default Size []} (f : A -> tensor_of_shape B s) : A -> tensor_of_shape B ([1] ++' s)
+  := fun a => slice_none_0 (f a).
 Definition keepdim {A B} (f : A -> B) : A -> tensor_of_shape B [1] := keepdim_gen f.
 
-Fixpoint reduce_axis_m1 {A B s1 s2} (reduction : array A -> B) : tensor_of_shape A (s1 ::' s2) -> tensor_of_shape B s1
-  := match s1 with
-     | [] => reduction
-     | _ :: s1 => PArray.map (reduce_axis_m1 (s1:=s1) reduction)
-     end.
+Definition reduce_axis_m1 {A B s1 s2} (reduction : array A -> B) : tensor_of_shape A (s1 ::' s2) -> tensor_of_shape B s1
+  := tensor_map reduction.
 
 Definition embed {s : Size} (tokens : tensor_of_shape int s) : tensor_of_shape Q (s ++' tl (shape_of W_E))
-  := broadcast_map (s2:=tl (shape_of W_E)) (fun i => W_E.[i]) tokens.
+  := slice_none_m1 (tensor_map (fun i => W_E.[i]) tokens).
 
 Definition pos_embed {s : Size} (tokens : tensor_of_shape int s)
   (tokens_length := (hd 1 (rev s))%uint63)
