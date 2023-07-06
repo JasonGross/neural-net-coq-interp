@@ -85,6 +85,28 @@ Definition tensor_of_list_ {A} {default : pointed A} {s : Size} : tensor_list_of
 Notation tensor_of_list ls := (@tensor_of_list_ _ _ (shape_of ls) ls) (only parsing).
 Notation tensor_of_list_map f ls := (@tensor_of_list_map_ _ _ _ (shape_of ls) f ls) (only parsing).
 
+
+
+Fixpoint tensor_gen_index_of_shape_ I (s : Size) : Type -> Type
+  := match s with
+     | [] => fun lhs => lhs
+     | s ::' l => fun lhs => tensor_gen_index_of_shape_ I s lhs * I
+     end%type.
+Definition tensor_gen_index_of_shape I (s : Size) : Type
+  := tensor_gen_index_of_shape_ I s unit.
+Definition tensor_index_of_shape := tensor_gen_index_of_shape int.
+Definition tensor_list_index_of_shape := tensor_gen_index_of_shape nat.
+Fixpoint tensor_gen_get {I list_type A s lhs} (getA : forall s', let A := tensor_gen_of_shape list_type A s' in I -> list_type A -> A) {struct s} : tensor_gen_index_of_shape_ I s lhs -> tensor_gen_of_shape list_type A s -> A
+  := match s return tensor_gen_index_of_shape_ I s lhs -> tensor_gen_of_shape list_type A s -> A with
+     | [] => fun dummy x => x
+     | s ::' _ => fun idxs t => getA [] (snd idxs) (tensor_gen_get (s:=s) (fun s' => getA (s' ::' 1)) (fst idxs) t)
+     end.
+
+Definition tensor_get {A s} : tensor_index_of_shape s -> tensor_of_shape A s -> A
+  := tensor_gen_get (fun _ i xs => xs.[i]).
+Definition tensor_list_get {A s} {default : pointed A} : tensor_list_index_of_shape s -> tensor_list_of_shape A s -> A
+  := tensor_gen_get (fun _ i xs => nth_default point xs i).
+
 (** Hyperparameters *)
 Definition N_LAYERS : nat := 1.
 Definition N_HEADS : nat := 1.
