@@ -1,9 +1,53 @@
-From Coq Require Import QArith Lia List.
+From Coq Require Import String NArith QArith Lia List.
 Local Open Scope Q_scope.
+Local Open Scope string_scope.
 Local Open Scope list_scope.
 Import ListNotations.
 (* Should use IEEE 754 floats from flocq, but let's use rationals for now for ease of linearity, proving, etc *)
 (* Based on https://colab.research.google.com/drive/1N4iPEyBVuctveCA0Zre92SpfgH6nmHXY#scrollTo=Q1h45HnKi-43, Taking the minimum or maximum of two ints *)
+
+Module cfg.
+  Definition n_layers := 1%N.
+  Definition d_model := 32%N.
+  Definition n_ctx := 2%N.
+  Definition d_head := 32%N.
+  Definition model_name := "custom".
+  Definition n_heads := 1%N.
+  Definition d_mlp := @None Z.
+  Definition act_fn := "relu".
+  Definition d_vocab := 64%N.
+  Definition eps := 1e-05.
+  Definition use_attn_result := false.
+  Definition use_attn_scale := true.
+  Definition use_split_qkv_input := false.
+  Definition use_local_attn := false.
+  Definition original_architecture := @None string.
+  Definition from_checkpoint := false.
+  Definition checkpoint_index := @None Z.
+  Definition checkpoint_label_type := @None string.
+  Definition checkpoint_value := @None Z.
+  Definition tokenizer_name := @None string.
+  Definition window_size := @None Z.
+  Definition attn_types := @None (list string).
+  Definition init_mode := "gpt2".
+  Definition normalization_type := "LN".
+  Definition device := "cpu".
+  Definition n_devices := 1%N.
+  Definition attention_dir := "causal".
+  Definition attn_only := true.
+  Definition seed := 123%N.
+  Definition initializer_range := 0.1414213562373095.
+  Definition init_weights := true.
+  Definition scale_attn_by_inverse_layer_idx := false.
+  Definition positional_embedding_type := "standard".
+  Definition final_rms := false.
+  Definition d_vocab_out := 64%N.
+  Definition parallel_attn_mlp := false.
+  Definition rotary_dim := @None Z.
+  Definition n_params := 4096%N.
+  Definition use_hook_tokens := false.
+  Definition gated_mlp := false.
+End cfg.
 
 (*
 def strify(v):

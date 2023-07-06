@@ -21,9 +21,9 @@ Module Concrete.
        ; stop := ((s.(stop) - 1) mod len) + 1
        ; step := s.(step) |}%core.
 
-  Definition length {I} {sub : has_sub I} {div : has_div I} {one : has_one I} {add : has_add I}
+  Definition length {I} {sub : has_sub I} {div : has_int_div I} {one : has_one I} {add : has_add I}
     (s : Slice I) : I
-    := (1 + (s.(stop) - s.(start) - 1) / s.(step))%core.
+    := (1 + (s.(stop) - s.(start) - 1) // s.(step))%core.
 End Concrete.
 
 Module ConcreteProjections.
