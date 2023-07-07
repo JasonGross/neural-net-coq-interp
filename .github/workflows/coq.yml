@@ -26,8 +26,7 @@ jobs:
     - uses: actions/checkout@v3
       with:
         submodules: recursive
-    - name: all-except-generated
-      uses: coq-community/docker-coq-action@v1
+    - uses: coq-community/docker-coq-action@v1
       with:
         coq_version: ${{ matrix.env.DOCKER_COQ_VERSION }}
         ocaml_version: ${{ matrix.env.DOCKER_OCAML_VERSION }}
