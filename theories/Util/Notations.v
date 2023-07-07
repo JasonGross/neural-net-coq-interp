@@ -9,7 +9,8 @@ Reserved Notation "' A <-- X ;; B" (at level 100, X at next level, A strict patt
 
 Reserved Infix "::'" (at level 59, left associativity).
 Reserved Infix "++'" (at level 59, left associativity).
-
+Reserved Infix "+'" (at level 48, left associativity).
+Reserved Infix "-'" (at level 50, left associativity).
 Reserved Infix "<?" (at level 70, no associativity).
 Reserved Infix "<=?" (at level 70, no associativity).
 Reserved Infix "≤?" (at level 70, no associativity).
@@ -32,6 +33,7 @@ Reserved Notation "x ⁶" (at level 29, left associativity).
 Reserved Notation "x ⁷" (at level 29, left associativity).
 Reserved Notation "x ⁸" (at level 29, left associativity).
 Reserved Notation "x ⁹" (at level 29, left associativity).
+Reserved Notation "√ x" (at level 5, right associativity, format "√ x").
 
 Reserved Notation "c >>= f" (at level 50, left associativity).
 Reserved Notation "f =<< c" (at level 51, right associativity).

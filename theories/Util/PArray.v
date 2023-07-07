@@ -105,18 +105,20 @@ Definition prod {A} {one : has_one A} {mul : has_mul A} (xs : array A) : A
   := ∏_(xi <- xs) xi.
 Definition max {A} {max : has_max A} (xs : array A) : A := reduce_no_init max xs.
 Definition min {A} {min : has_max A} (xs : array A) : A := reduce_no_init min xs.
-Definition mean {A B} {zero : has_zero A} {add : has_add A} {div_by : has_div_by A B} {coer : has_coer Z B} (xs : array A) : A
+Definition mean {A B C} {zero : has_zero A} {add : has_add A} {div_by : has_div_by A B C} {coer : has_coer Z B} (xs : array A) : C
   := (sum xs / coer (Uint63.to_Z (PArray.length xs)))%core.
-Definition var {A B} {zero : has_zero A} {add : has_add A} {mul : has_mul A} {sub : has_sub A} {div_by : has_div_by A B} {coer : has_coer Z B} {correction : with_default Z 1%Z}
+Definition var {A B} {zero : has_zero A} {add : has_add A} {mul : has_mul A} {sub : has_sub A} {div_by : has_div_by A B A} {coer : has_coer Z B} {correction : with_default Z 1%Z}
   (xs : array A) : A
-  := let xbar := mean xs in
+  := (let xbar := mean xs in
      let N := Uint63.to_Z (PArray.length xs) in
-     ((∑_(xi <- xs) (xi - xbar)²) / (coer (N - correction)))%core.
+     ((∑_(xi <- xs) (xi - xbar)²) / (coer (N - correction)))%core).
 
-#[export] Instance has_add {A} {addA : has_add A} : has_add (array A) := broadcast_map2 add.
-#[export] Instance has_sub {A} {subA : has_sub A} : has_sub (array A) := broadcast_map2 sub.
-#[export] Instance has_mul {A} {mulA : has_mul A} : has_mul (array A) := broadcast_map2 mul.
-#[export] Instance has_div_by {A B} {div_byAB : has_div_by A B} : has_div_by (array A) (array B) := broadcast_map2 div.
+#[export] Instance has_add {A B C} {addA : has_add_with A B C} : has_add_with (array A) (array B) (array C) := broadcast_map2 add.
+#[export] Instance has_sub {A B C} {subA : has_sub_with A B C} : has_sub_with (array A) (array B) (array C) := broadcast_map2 sub.
+#[export] Instance has_mul {A B C} {mulA : has_mul_with A B C} : has_mul_with (array A) (array B) (array C) := broadcast_map2 mul.
+#[export] Instance has_div_by {A B C} {div_byAB : has_div_by A B C} : has_div_by (array A) (array B) (array C) := broadcast_map2 div.
+#[export] Instance has_sqrt {A} {sqrtA : has_sqrt A} : has_sqrt (array A) := map sqrt.
+#[export] Instance has_opp {A} {oppA : has_opp A} : has_opp (array A) := map opp.
 
 Import Slice.ConcreteProjections.
 
@@ -138,5 +140,5 @@ Definition slice {A} (xs : array A) (s : Slice int) : array A
 Export SliceNotations.
 Notation "x .[ [ s ] ]" := (slice x s) (at level 2, s custom slice at level 60, format "x .[ [ s ] ]") : core_scope.
 
-Definition repeat {A} (xs : array A) (count : int) : array (array A)
+Definition repeat {A} (xs : A) (count : int) : array A
   := PArray.make count xs.

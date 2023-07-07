@@ -10,6 +10,7 @@ theories/Util/Default.v
 theories/Util/ErrorT.v
 theories/Util/List.v
 theories/Util/Monad.v
+theories/Util/Nat.v
 theories/Util/Notations.v
 theories/Util/Option.v
 theories/Util/PArray.v
@@ -19,6 +20,7 @@ theories/Util/Uint63.v
 theories/Util/Wf_Uint63.v
 theories/Util/Arith/Classes.v
 theories/Util/Arith/Instances.v
+theories/Util/Arith/QArith.v
 theories/Util/Strings/Ascii.v
 theories/Util/Strings/Byte.v
 theories/Util/Strings/String.v

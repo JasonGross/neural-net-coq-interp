@@ -1,5 +1,5 @@
 From Coq Require Import List PArray Sint63 Uint63 Arith PArith NArith ZArith QArith.
-From NeuralNetInterp.Util Require Import Arith.Classes.
+From NeuralNetInterp.Util Require Import Arith.Classes Arith.QArith.
 Import ListNotations.
 Set Implicit Arguments.
 #[global] Set Warnings Append "-ambiguous-paths".
@@ -19,6 +19,7 @@ Local Open Scope nat_scope.
 #[export] Instance nat_has_abs : has_abs nat := fun x => x.
 #[export] Instance nat_has_zero : has_zero nat := 0.
 #[export] Instance nat_has_one : has_one nat := 1.
+#[export] Instance nat_has_sqrt : has_sqrt nat := Nat.sqrt.
 
 Local Open Scope N_scope.
 #[global] Coercion N.of_nat : nat >-> N.
@@ -44,6 +45,7 @@ Local Open Scope N_scope.
 #[export] Instance N_has_abs : has_abs N := fun x => x.
 #[export] Instance N_has_zero : has_zero N := 0.
 #[export] Instance N_has_one : has_one N := 1.
+#[export] Instance N_has_sqrt : has_sqrt N := N.sqrt.
 
 Local Open Scope positive_scope.
 #[global] Coercion N.pos : positive >-> N.
@@ -60,6 +62,7 @@ Local Open Scope positive_scope.
 #[export] Instance positive_has_min : has_min positive := Pos.min.
 #[export] Instance positive_has_abs : has_abs positive := fun x => x.
 #[export] Instance positive_has_one : has_one positive := 1.
+#[export] Instance positive_has_sqrt : has_sqrt positive := Pos.sqrt.
 
 Local Open Scope Z_scope.
 #[global] Coercion Z.of_N : N >-> Z.
@@ -79,6 +82,7 @@ Local Open Scope Z_scope.
 #[export] Instance Z_has_min : has_min Z := Z.min.
 #[export] Instance Z_has_zero : has_zero Z := 0.
 #[export] Instance Z_has_one : has_one Z := 1.
+#[export] Instance Z_has_sqrt : has_sqrt Z := Z.sqrt.
 
 Local Open Scope Q_scope.
 #[global] Coercion inject_Z : Z >-> Q.
@@ -94,6 +98,8 @@ Local Open Scope Q_scope.
 #[export] Instance Q_has_div : has_div Q := Qdiv.
 #[export] Instance Q_has_zero : has_zero Q := 0.
 #[export] Instance Q_has_one : has_one Q := 1.
+#[export] Instance Q_has_sqrt : has_sqrt Q := Qsqrt.
+
 
 Local Open Scope int63_scope.
 #[export] Instance int_has_eqb : has_eqb int := Uint63.eqb.
@@ -103,6 +109,7 @@ Local Open Scope int63_scope.
 #[export] Instance int_has_mul : has_mul int := Uint63.mul.
 #[export] Instance int_has_zero : has_zero int := 0.
 #[export] Instance int_has_one : has_one int := 1.
+#[export] Instance int_has_sqrt : has_sqrt int := Uint63.sqrt.
 
 Module Export Uint63.
   #[export] Instance int_has_int_div : has_int_div int := Uint63.div.

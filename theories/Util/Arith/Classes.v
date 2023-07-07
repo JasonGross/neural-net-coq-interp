@@ -7,20 +7,24 @@ Cumulative Polymorphic Inductive TyList := tynil | tycons (_ : Type) (_ : TyList
 Class has_ltb A := ltb : A -> A -> bool.
 Class has_eqb A := eqb : A -> A -> bool.
 Class has_leb A := leb : A -> A -> bool.
-Class has_add A := add : A -> A -> A.
-Class has_sub A := sub : A -> A -> A.
-Class has_mul A := mul : A -> A -> A.
+Class has_add_with A B C := add : A -> B -> C.
+Notation has_add A := (has_add_with A A A).
+Class has_sub_with A B C := sub : A -> B -> C.
+Notation has_sub A := (has_sub_with A A A).
+Class has_mul_with A B C := mul : A -> B -> C.
+Notation has_mul A := (has_mul_with A A A).
 Class has_opp A := opp : A -> A.
 Class has_zero A := zero : A.
 Class has_one A := one : A.
 Class has_mod A := modulo : A -> A -> A.
 Class has_max A := max : A -> A -> A.
 Class has_min A := min : A -> A -> A.
-Class has_int_div_by A B := int_div : A -> B -> A.
+Class has_sqrt A := sqrt : A -> A.
+Class has_int_div_by A B C := int_div : A -> B -> C.
 Class has_abs A := abs : A -> A.
-Notation has_int_div A := (has_int_div_by A A).
-Class has_div_by A B := div : A -> B -> A.
-Notation has_div A := (has_div_by A A).
+Notation has_int_div A := (has_int_div_by A A A).
+Class has_div_by A B C := div : A -> B -> C.
+Notation has_div A := (has_div_by A A A).
 Class has_coer A B := coer : A -> B.
 Definition has_coer_from (avoid : TyList) := has_coer.
 Definition has_coer_to (avoid : TyList) := has_coer.
@@ -51,6 +55,7 @@ Infix "*" := mul : core_scope.
 Infix "/" := div : core_scope.
 Infix "//" := int_div : core_scope.
 Notation "x ²" := (sqr x) : core_scope.
+Notation "√ x" := (sqrt x) : core_scope.
 Notation "- x" := (opp x) : core_scope.
 Infix "mod" := modulo : core_scope.
 Notation "0" := zero : core_scope.
@@ -61,16 +66,20 @@ Notation "1" := one : core_scope.
 #[export] Hint Mode has_eqb ! : typeclass_instances.
 #[export] Hint Mode has_max ! : typeclass_instances.
 #[export] Hint Mode has_min ! : typeclass_instances.
-#[export] Hint Mode has_add ! : typeclass_instances.
-#[export] Hint Mode has_sub ! : typeclass_instances.
-#[export] Hint Mode has_mul ! : typeclass_instances.
-#[export] Hint Mode has_int_div_by ! - : typeclass_instances.
-#[export] Hint Mode has_div_by ! - : typeclass_instances.
+#[export] Hint Mode has_add_with ! - - : typeclass_instances.
+#[export] Hint Mode has_add_with - ! - : typeclass_instances.
+#[export] Hint Mode has_sub_with ! - - : typeclass_instances.
+#[export] Hint Mode has_sub_with - ! - : typeclass_instances.
+#[export] Hint Mode has_mul_with ! - - : typeclass_instances.
+#[export] Hint Mode has_mul_with - ! - : typeclass_instances.
+#[export] Hint Mode has_int_div_by ! - - : typeclass_instances.
+#[export] Hint Mode has_div_by ! - - : typeclass_instances.
 #[export] Hint Mode has_opp ! : typeclass_instances.
 #[export] Hint Mode has_zero ! : typeclass_instances.
 #[export] Hint Mode has_one ! : typeclass_instances.
 #[export] Hint Mode has_mod ! : typeclass_instances.
 #[export] Hint Mode has_abs ! : typeclass_instances.
+#[export] Hint Mode has_sqrt ! : typeclass_instances.
 #[export] Hint Mode has_coer ! ! : typeclass_instances.
 #[export] Hint Mode has_coer_can_trans ! ! : typeclass_instances.
 #[export] Hint Mode has_coer_from + ! - : typeclass_instances.
@@ -102,9 +111,9 @@ Ltac check_unify_has_coer_to A
 
 Local Open Scope core_scope.
 
-#[export] Instance has_default_sub {A} {add : has_add A} {opp : has_opp A} : has_sub A | 10
+#[export] Instance has_default_sub {A B C} {add : has_add_with A B C} {opp : has_opp B} : has_sub_with A B C | 10
   := fun x y => x + (-y).
-#[export] Instance has_default_opp {A} {zero : has_zero A} {sub : has_sub A} : has_opp A | 10
+#[export] Instance has_default_opp {A B} {zero : has_zero B} {sub : has_sub_with B A A} : has_opp A | 10
   := fun x => 0 - x.
 #[export] Instance has_default_eqb {A} {leb : has_leb A} : has_eqb A | 10
   := fun x y => (x ≤? y) && (y ≤? x).
