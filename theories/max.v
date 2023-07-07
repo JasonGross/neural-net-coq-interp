@@ -186,6 +186,8 @@ Definition W_E : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameter
 Definition W_pos : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.W_pos.
 Definition L0_ln1_b : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.L0_ln1_b.
 Definition L0_ln1_w : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.L0_ln1_w.
+Definition ln_final_b : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.ln_final_b.
+Definition ln_final_w : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.ln_final_w.
 
 Declare Scope tensor_scope.
 Delimit Scope tensor_scope with tensor.
@@ -343,26 +345,71 @@ Definition pos_embed {r} {s : Size (S r)} (tokens : tensor_of_shape int s)
   : tensor_of_shape Q (batch ++' [tokens_length] ::' d_model)
   := repeat (W_pos.[[:tokens_length]]) batch.
 
-Definition layernorm {r A} {s : Size r} {d_model}
-  {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A} {sqrtA : has_sqrt A} {zeroA : has_zero A} {coerZ : has_coer Z A}
-  (eps : A) (w b : tensor_of_shape A [d_model])
-  (x : tensor_of_shape A (s ::' d_model))
-  : tensor_of_shape A (s ::' d_model)
-  := (let x : tensor_of_shape A (s ::' d_model)
-        := x - reduce_axis_m1 (keepdim:=true) mean x in
-      let scale : tensor_of_shape A (s ::' 1)
-        := √(reduce_axis_m1 (keepdim:=true) mean (x ²) + broadcast' eps) in
-      let x : tensor_of_shape A (s ::' d_model) := x / scale in
-      x * broadcast w + broadcast b)%core.
+Section layernorm.
+  Context {r A} {s : Size r} {d_model}
+    {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A} {sqrtA : has_sqrt A} {zeroA : has_zero A} {coerZ : has_coer Z A}
+    (eps : A) (w b : tensor_of_shape A [d_model]).
 
-Definition ln1 {r} {s : Size r}
-  (d_model := Uint63.of_Z cfg.d_model)
-  (eps := cfg.eps) (w := L0_ln1_w) (b := L0_ln1_b)
-  (x : tensor_of_shape Q (s ::' d_model))
-  : tensor_of_shape Q (s ::' d_model)
-  := layernorm eps w b x.
+  Definition layernorm_linpart (x : tensor_of_shape A (s ::' d_model))
+    : tensor_of_shape A (s ::' d_model)
+    := (x - reduce_axis_m1 (keepdim:=true) mean x)%core.
 
+  Definition layernorm_scale (x : tensor_of_shape A (s ::' d_model))
+    : tensor_of_shape A (s ::' 1)
+    := (√(reduce_axis_m1 (keepdim:=true) mean (x ²) + broadcast' eps))%core.
 
+  Definition layernorm_rescale (x : tensor_of_shape A (s ::' d_model))
+                               (scale : tensor_of_shape A (s ::' 1))
+    : tensor_of_shape A (s ::' d_model)
+    := (x / scale)%core.
+
+  Definition layernorm_postrescale (x : tensor_of_shape A (s ::' d_model))
+    : tensor_of_shape A (s ::' d_model)
+    := (x * broadcast w + broadcast b)%core.
+
+  Definition layernorm (x : tensor_of_shape A (s ::' d_model))
+    : tensor_of_shape A (s ::' d_model)
+    := let x := layernorm_linpart x in
+       let scale := layernorm_scale x in
+       let x := layernorm_rescale x scale in
+       layernorm_postrescale x.
+End layernorm.
+
+Section ln.
+  Context {r} {s : Size r}
+    (d_model := Uint63.of_Z cfg.d_model)
+    (eps := cfg.eps).
+
+  Section ln1.
+    Context (w := L0_ln1_w) (b := L0_ln1_b).
+
+    Definition ln1_linpart (x : tensor_of_shape Q (s ::' d_model)) : tensor_of_shape Q (s ::' d_model)
+      := layernorm_linpart x.
+    Definition ln1_scale (x : tensor_of_shape Q (s ::' d_model)) : tensor_of_shape Q (s ::' d_model)
+      := layernorm_scale eps x.
+    Definition ln1_rescale (x : tensor_of_shape Q (s ::' d_model)) (scale : tensor_of_shape Q (s ::' 1)) : tensor_of_shape Q (s ::' d_model)
+      := layernorm_rescale x scale.
+    Definition ln1_postrescale (x : tensor_of_shape Q (s ::' d_model)) : tensor_of_shape Q (s ::' d_model)
+      := layernorm_postrescale w b x.
+    Definition ln1 (x : tensor_of_shape Q (s ::' d_model)) : tensor_of_shape Q (s ::' d_model)
+      := layernorm eps w b x.
+  End ln1.
+
+  Section ln_final.
+    Context (w := ln_final_w) (b := ln_final_b).
+
+    Definition ln_final_linpart (x : tensor_of_shape Q (s ::' d_model)) : tensor_of_shape Q (s ::' d_model)
+      := layernorm_linpart x.
+    Definition ln_final_scale (x : tensor_of_shape Q (s ::' d_model)) : tensor_of_shape Q (s ::' d_model)
+      := layernorm_scale eps x.
+    Definition ln_final_rescale (x : tensor_of_shape Q (s ::' d_model)) (scale : tensor_of_shape Q (s ::' 1)) : tensor_of_shape Q (s ::' d_model)
+      := layernorm_rescale x scale.
+    Definition ln_final_postrescale (x : tensor_of_shape Q (s ::' d_model)) : tensor_of_shape Q (s ::' d_model)
+      := layernorm_postrescale w b x.
+    Definition ln_final (x : tensor_of_shape Q (s ::' d_model)) : tensor_of_shape Q (s ::' d_model)
+      := layernorm eps w b x.
+  End ln_final.
+End ln.
 
 Eval cbv in embed (tensor_of_list [0; 1]%uint63).
 Eval cbv in pos_embed (tensor_of_list [[0; 1]]%uint63).
