@@ -509,11 +509,12 @@ Module Einsum.
     := let (overlap, diff) := List.partition (fun a => List.mem Ident.equal a ids2) ids1 in
        diff.
 
+  (* TODO: use reification by type inference from https://popl21.sigplan.org/details/CoqPL-2021-papers/1/A-Limited-Case-for-Reification-by-Type-Inference to count up the rank based on the number of arguments, make something like Notation "'unify_rank' r i1 .. i_ => body" := (update_rank (fun i1 ... (fun i_ => body)) : as_rank r ...) to get the rank out *)
   Declare Custom Entry einsum_args.
   Notation "{{{ {{ i1 .. i_ , j1 .. j_ -> k1 .. k_ }} , t1 , t2 }}}"
-      := (match _ as A, _ as B, _ as C, _ as s1, _ as s2, _ as s3 return tensor_of_shape C s3 with
-          | A, B, C, s1, s2, s3
-            => match t1 : tensor_of_shape A s1, t2 : tensor_of_shape B s2 return tensor_of_shape C s3 with
+      := (match _ as A, _ as B, _ as C, _ as r1, _ as r2, _ as r3, _ as s1, _ as s2, _ as s3 return @tensor_of_shape _ C s3 with
+          | A, B, C, r1, r2, r3, s1, s2, s3
+            => match t1 : @tensor_of_shape r1 A s1, t2 : @tensor_of_shape r2 B s2 return @tensor_of_shape r3 C s3 with
                | t1', t2'
                  => match ((fun i1 => .. ((fun i_ => I) : True -> _) ..) : True -> _),
                       ((fun j1 => .. ((fun j_ => I) : True -> _) ..) : True -> _),
@@ -521,11 +522,18 @@ Module Einsum.
                           return _
                     with
                     | iidxs, jidxs, kidxs
-                      => _
+                      => @init
+                           r3 C s3
+                           ((fun k1
+                             => .. ((fun k_
+                                     => (_:C)
+                                    ) : int -> _) ..
+                            ) : int -> _)
                     end
                end
           end)
            (only parsing, in custom einsum_args at level 0, i1 binder, i_ binder, j1 binder, j_ binder, k1 binder, k_ binder, t1 constr at level 10, t2 constr at level 10).
+
   Notation "'weaksauce_einsum' x" := x (x custom einsum_args at level 10, at level 10).
   Check (weaksauce_einsum {{{ {{ query_pos head_index d_head,
           key_pos head_index d_head
