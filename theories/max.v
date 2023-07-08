@@ -1,11 +1,15 @@
 From Coq Require Import Sint63 Uint63 QArith Lia List PArray.
 From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances.
-From NeuralNetInterp.Util Require Nat.
+From NeuralNetInterp.Util Require Nat Wf_Uint63.
 From NeuralNetInterp Require Import max_parameters.
 Import Util.Nat.Notations.
+Import Util.Wf_Uint63.LoopNotation.
 Local Open Scope Q_scope.
 Local Open Scope list_scope.
 Set Implicit Arguments.
+Set Universe Polymorphism.
+Unset Universe Minimization ToSet.
+Set Polymorphic Inductive Cumulativity.
 Import ListNotations.
 (* Should use IEEE 754 floats from flocq, but let's use rationals for now for ease of linearity, proving, etc *)
 (* Based on https://colab.research.google.com/drive/1N4iPEyBVuctveCA0Zre92SpfgH6nmHXY#scrollTo=Q1h45HnKi-43, Taking the minimum or maximum of two ints *)
@@ -120,8 +124,8 @@ Definition empty_tensor_gen_of_shape {list_type A r} {shape : Size r} {default :
 #[export] Existing Instance empty_tensor_gen_of_shape.
 Definition tensor_of_rank := @tensor_gen_of_rank (fun A => array A).
 Definition tensor_list_of_rank := @tensor_gen_of_rank (fun A => list A).
-Definition tensor_of_shape {r} A (s : Size r) := tensor_of_rank A r.
-Definition tensor_list_of_shape {r} A (s : Size r) := tensor_list_of_rank A r.
+Monomorphic Definition tensor_of_shape {r} A (s : Size r) := tensor_of_rank A r.
+Monomorphic Definition tensor_list_of_shape {r} A (s : Size r) := tensor_list_of_rank A r.
 Polymorphic Definition tensor_fun_of_rank I := tensor_gen_of_rank (fun A => I -> A).
 Polymorphic Definition tensor_fun_of_shape {r} I A (s : Size r) := tensor_fun_of_rank I A r.
 Polymorphic Fixpoint tensor_gen_index_of_shape_make_cps {r B I} {s : Size r} : (tensor_gen_index_of_shape I s -> B) -> tensor_fun_of_shape I B s
@@ -201,10 +205,15 @@ Polymorphic Fixpoint tensor_gen_get {r I list_type A s} (getA : forall r' (s' : 
      | [] => fun dummy x => x
      | s ::' _ => fun idxs t => getA _ [] (snd idxs) (tensor_gen_get (s:=s) (fun r' s' => getA _ (s' ::' 1)) (fst idxs) t)
      end.
-Definition tensor_get {r A} {s : Size r} : tensor_index_of_shape s -> tensor_of_shape A s -> A
-  := tensor_gen_get (fun _ _ i xs => xs.[i]).
-Definition tensor_list_get {r A} {s : Size r} {default : pointed A} : tensor_list_index_of_shape s -> tensor_list_of_shape A s -> A
-  := tensor_gen_get (fun _ _ i xs => nth_default point xs i).
+Definition tensor_get {r A} {s : Size r} : tensor_of_shape A s -> tensor_index_of_shape s -> A
+  := fun t idxs => tensor_gen_get (fun _ _ i xs => xs.[i]) idxs t.
+Definition tensor_list_get {r A} {s : Size r} {default : pointed A} : tensor_list_of_shape A s -> tensor_list_index_of_shape s -> A
+  := fun t idxs => tensor_gen_get (fun _ _ i xs => nth_default point xs i) idxs t.
+
+Definition tensor_get_fun {r A} {s : Size r} (xs : tensor_of_shape A s) : tensor_fun_of_shape int A s
+  := tensor_gen_index_of_shape_make_cps (fun idxs => tensor_get xs idxs).
+Definition tensor_list_get_fun {r A} {s : Size r} {default : pointed A} (xs : tensor_list_of_shape A s) : tensor_fun_of_shape nat A s
+  := tensor_gen_index_of_shape_make_cps (fun idxs => tensor_list_get xs idxs).
 
 Declare Scope tensor_scope.
 Delimit Scope tensor_scope with tensor.
@@ -297,6 +306,10 @@ Definition reshape_app_combine {A r1 r2 s1 s2} : tensor_of_shape (tensor_of_shap
 (* infer s1 s2 from the conclusion *)
 #[global] Arguments reshape_app_combine A & r1 r2 s1 s2 _.
 #[global] Arguments reshape_app_split A & r1 r2 s1 s2 _.
+Definition reshape_S_fun_combine {I A} {r : Rank} : (I -> tensor_fun_of_rank I A r) -> tensor_fun_of_rank I A (1 +' r)
+  := match reshape_app_combine_gen (r1:=1) (r2:=r) with x => x end.
+Definition reshape_S_fun_split {I A} {r : Rank} : tensor_fun_of_rank I A (1 +' r) -> (I -> tensor_fun_of_rank I A r)
+  := match reshape_app_split_gen (r1:=1) (r2:=r) with x => x end.
 (*
 Require Import Program . Obligation Tactic := cbn; intros.
 Fixpoint broadcast_map_ {A B} {s1 s2 : Size} {keepdim : with_default bool false} (f : A -> tensor_of_shape B s2) {struct s1} : tensor_of_shape A s1 -> tensor_of_shape (tensor_of_shape B (s1 ++' (if keepdim then [1] else []) ++' s2) s1.
@@ -479,67 +492,179 @@ Section ln.
   End ln_final.
 End ln.
 
-From Ltac2 Require Ltac2 Constr List Ident.
+From Ltac2 Require Ltac2 Constr List Ident Fresh Printf.
+From NeuralNetInterp.Util.Tactics2 Require Constr FixNotationsForPerformance Constr.Unsafe.MakeAbbreviations.
 Module Einsum.
   Import Ltac2.
+  Import FixNotationsForPerformance MakeAbbreviations Printf.
 
-  Ltac2 rec decompose_lam_idents (c : constr) : ident list
-    := match Constr.Unsafe.kind c with
-       | Constr.Unsafe.Cast c _ _ => decompose_lam_idents c
-       | Constr.Unsafe.Lambda b body
-         => let rest := decompose_lam_idents body in
-            match Constr.Binder.name b with
-            | Some n => n :: rest
-            | None => rest
-            end
-       | _ => []
-       end.
+  Module Import Internals.
+    Ltac2 rec decompose_lam_idents (c : constr) : ident list
+      := match Constr.Unsafe.kind_nocast c with
+         | Constr.Unsafe.Lambda b body
+           => let rest := decompose_lam_idents body in
+              match Constr.Binder.name b with
+              | Some n => n :: rest
+              | None => rest
+              end
+         | _ => []
+         end.
 
-  Ltac2 rec dedup (ids : ident list) : ident list
-    := match ids with
-       | [] => []
-       | id :: ids
-         => let ids := dedup ids in
-            if List.mem Ident.equal id ids
-            then ids
-            else id :: ids
-       end.
+    Ltac2 rec dedup (ids : ident list) : ident list
+      := match ids with
+         | [] => []
+         | id :: ids
+           => let ids := dedup ids in
+              if List.mem Ident.equal id ids
+              then ids
+              else id :: ids
+         end.
 
-  Ltac2 set_diff (ids1 : ident list) (ids2 : ident list) : ident list
-    := let (overlap, diff) := List.partition (fun a => List.mem Ident.equal a ids2) ids1 in
-       diff.
+    Ltac2 set_diff (ids1 : ident list) (ids2 : ident list) : ident list
+      := let (overlap, diff) := List.partition (fun a => List.mem Ident.equal a ids2) ids1 in
+         diff.
 
-  (* TODO: use reification by type inference from https://popl21.sigplan.org/details/CoqPL-2021-papers/1/A-Limited-Case-for-Reification-by-Type-Inference to count up the rank based on the number of arguments, make something like Notation "'unify_rank' r i1 .. i_ => body" := (update_rank (fun i1 ... (fun i_ => body)) : as_rank r ...) to get the rank out *)
+    Ltac2 rec get_body (at_head : bool) (c : constr) :=
+      match Constr.Unsafe.kind_nocast c with
+      | Constr.Unsafe.Var v
+        => let r := Std.VarRef v in
+           eval cbv delta [$r] in c
+      | Constr.Unsafe.Constant n _
+        => let r := Std.ConstRef n in
+           eval cbv delta [$r] in c
+      | Constr.Unsafe.App f args
+        => if at_head
+           then let f := get_body at_head f in
+                Constr.Unsafe.make (Constr.Unsafe.App f args)
+           else c
+      | _ => c
+      end.
+
+    Ltac2 rec make_einsum_noclose_nolift (sum_to : constr (* max *) -> constr (* body *) -> constr) (intT : constr) (ids : ident list) (body : constr) : constr
+      := match ids with
+         | [] => body
+         | id :: ids
+           => let body := make_einsum_noclose_nolift sum_to intT ids body in
+              let body := mkLambda (Constr.Binder.make (Some id) intT) body in
+              sum_to (Constr.Unsafe.make (Constr.Unsafe.Var id)) body
+         end.
+
+    Local Notation try_tc := (ltac:(try typeclasses eauto)) (only parsing).
+    Ltac2 make_einsum (src_ids : ident list list) (dest_ids : ident list) (body : constr) : constr
+      := let ty := Constr.type body in
+         let src_ids := List.flat_map (fun x => x) src_ids in
+         let einsum_ids := dedup (set_diff src_ids dest_ids) in
+         let einsum_ids_rev := List.rev einsum_ids in
+         let nbinders := List.length einsum_ids in
+         let body := Constr.Unsafe.liftn nbinders 1 body in
+         let body := Constr.Unsafe.closenl einsum_ids_rev 1 body in
+         let start := '(0%uint63) in
+         let step := '(1%uint63) in
+         let sum := '(@Wf_Uint63.sum $ty try_tc try_tc) in
+         let sum_to stop body := mkApp sum [start; stop; step; body] in
+         make_einsum_noclose_nolift sum_to 'int einsum_ids body.
+
+    Ltac subst_type_lets_in_goal _ :=
+      repeat match goal with
+        | [ H := [ _ ] : Type |- _ ] => match goal with |- context[H] => idtac end; subst H
+        end.
+  End Internals.
+
+  Local Notation try_tc := (ltac:(try typeclasses eauto)) (only parsing).
+
+  (* Kludge around COQBUG(https://github.com/coq/coq/issues/17833#issuecomment-1627483008) *)
+  Local Notation indirect_einsum tensor_value kidxs iidxs jidxs
+    := ltac2:(let get_body v := get_body false (Constr.pretype v) in
+              let get_idents v := decompose_lam_idents (get_body v) in
+              let t := get_body tensor_value in
+              let src_ids := List.map get_idents [iidxs; jidxs] in
+              let dest_ids := get_idents kidxs in
+              let t := make_einsum src_ids dest_ids t in
+              exact $t)
+               (only parsing).
+
+  #[export] Hint Extern 1 => progress subst_type_lets_in_goal () : typeclass_instances.
   Declare Custom Entry einsum_args.
   Notation "{{{ {{ i1 .. i_ , j1 .. j_ -> k1 .. k_ }} , t1 , t2 }}}"
-      := (match _ as A, _ as B, _ as C, _ as r1, _ as r2, _ as r3, _ as s1, _ as s2, _ as s3 return @tensor_of_shape _ C s3 with
-          | A, B, C, r1, r2, r3, s1, s2, s3
-            => match t1 : @tensor_of_shape r1 A s1, t2 : @tensor_of_shape r2 B s2 return @tensor_of_shape r3 C s3 with
+      := (match t1%tensor, t2%tensor, _ as A, _ as B, _ as C, _ as r1, _ as r2, _ as r3, _ as s1, _ as s2, _ as s3 return @tensor_of_shape _ C s3 with
+          | t1', t2', A, B, C, r1, r2, r3, s1, s2, s3
+            => match t1' : @tensor_of_shape r1 A s1, t2' : @tensor_of_shape r2 B s2 return @tensor_of_shape r3 C s3 with
                | t1', t2'
                  => match ((fun i1 => .. ((fun i_ => I) : True -> _) ..) : True -> _),
                       ((fun j1 => .. ((fun j_ => I) : True -> _) ..) : True -> _),
-                      ((fun k1 => .. ((fun k_ => I) : True -> _) ..) : True -> _)
+                      ((fun k1 => .. ((fun k_ => I) : True -> _) ..) : True -> _),
+                      (* for typing *)
+                      ((@reshape_S_fun_combine
+                          True True _
+                          (fun i1 => .. (@reshape_S_fun_combine
+                                           True True _
+                                           (fun i_ => (I:tensor_fun_of_rank True True 0))) ..)) : tensor_fun_of_rank True True r1),
+                      ((@reshape_S_fun_combine
+                          True True _
+                          (fun j1 => .. (@reshape_S_fun_combine
+                                           True True _
+                                           (fun j_ => (I:tensor_fun_of_rank True True 0))) ..)) : tensor_fun_of_rank True True r2),
+                      ((@reshape_S_fun_combine
+                          True True _
+                          (fun k1 => .. (@reshape_S_fun_combine
+                                           True True _
+                                           (fun k_ => (I:tensor_fun_of_rank True True 0))) ..)) : tensor_fun_of_rank True True r3)
                           return _
                     with
-                    | iidxs, jidxs, kidxs
-                      => @init
-                           r3 C s3
-                           ((fun k1
-                             => .. ((fun k_
-                                     => (_:C)
-                                    ) : int -> _) ..
-                            ) : int -> _)
+                    | __EINSUM_IIDXS, __EINSUM_JIDXS, __EINSUM_KIDXS
+                      , _, _, _
+                      => @with_shape
+                           r1 (tensor_of_shape C s3) s1
+                           (fun i1
+                            => .. (fun i_
+                                   => @with_shape
+                                        r2 (tensor_of_shape C s3) s2
+                                        (fun j1
+                                         => .. (fun j_
+                                                => @init
+                                                     r3 C s3
+                                                     (reshape_S_fun_combine
+                                                        (I:=int)
+                                                        (fun k1
+                                                         => .. (reshape_S_fun_combine
+                                                                  (I:=int)
+                                                                  (fun k_
+                                                                   => match @Arith.Classes.mul
+                                                                              A B C try_tc
+                                                                              (tensor_get t1' (pair .. (pair tt i1) .. i_))
+                                                                              (tensor_get t2' (pair .. (pair tt j1) .. j_))
+                                                                            return @tensor_fun_of_rank int C 0
+                                                                      with
+                                                                      | __EINSUM_TENSOR_VALUE
+                                                                        => indirect_einsum
+                                                                             __EINSUM_TENSOR_VALUE __EINSUM_KIDXS __EINSUM_IIDXS __EINSUM_JIDXS
+                                                                      end
+                                                              )) ..
+                                                     ))
+                                              ) ..
+                                 )) ..
+                           )
                     end
                end
           end)
            (only parsing, in custom einsum_args at level 0, i1 binder, i_ binder, j1 binder, j_ binder, k1 binder, k_ binder, t1 constr at level 10, t2 constr at level 10).
 
-  Notation "'weaksauce_einsum' x" := x (x custom einsum_args at level 10, at level 10).
+  Notation "'weaksauce_einsum' x"
+    := (match x return _ with
+        | y => ltac2:(let y := get_body false &y in
+                      let z := (eval cbv beta iota delta [reshape_S_fun_combine reshape_app_combine_gen with_shape] in y) in
+                      let z := (eval cbn beta iota delta [Nat.radd] in z) in
+                     exact $z)
+        end)
+         (x custom einsum_args at level 10, at level 10, only parsing).
+  (*
+  Set Printing Implicit.
   Check (weaksauce_einsum {{{ {{ query_pos head_index d_head,
           key_pos head_index d_head
           -> head_index query_pos key_pos }}, (_:tensor_of_shape _ [2;1;5]), (_:tensor_of_shape _ [2;1;5]) }}} : tensor_of_shape _ [1; 2; 2]).
+   *)
 End Einsum.
-
+Import Einsum.
 Section Attention.
   Context {A r} {batch : Size r}
     {sqrtA : has_sqrt A} {coerZ : has_coer Z A} {addA : has_add A} {zeroA : has_zero A} {mulA : has_mul A} {divA : has_div A}
@@ -593,50 +718,25 @@ Section Attention.
   Definition v : tensor_of_shape A ((batch ::' pos) ++' [n_heads; d_head])
     := (einsum_input query_input W_V + broadcast b_V)%core.
 
-  Definition attn_scores : tensor_of_shape A (batch ::' n_heads ::' pos ::' pos).
-    refine (let q : tensor_of_shape (tensor_of_shape A [pos; n_heads; d_head]) batch := q in
-            let k : tensor_of_shape (tensor_of_shape A [pos; n_heads; d_head]) batch := k in
-            let qk : tensor_of_shape (tensor_of_shape A [n_heads; pos; pos]) batch
-              := tensor_map2
-                   _
-                   q
-                   k in
-            let qk : tensor_of_shape A (batch ::' n_heads ::' pos ::' pos) := qk in
-            qk / broadcast' attn_scale)%core.
-    (*
-    From Ltac2 Require Ltac2.
-    Notation "'weaksauce_einsum' {{ i1 .. in , j1 .. jn -> k1 .. kn }} t1 t2"
-      := (match _ as s1, _ as s2, _ as s3 return tensor_of_shape _ s3 with
-          | s1, s2, s3
-            => match t1 : tensor_of_shape _ s1, t2 : tensor_of_shape _ s2 return tensor_of_shape _ s3 with
-               | t1', t2'
-                 =>
-               end
-          end)
-           (only parsing).
-    refine match _ as s1, _ as s2, _ as s3 return tensor_of_shape _ s1 -> tensor_of_shape _ s2 -> tensor_of_shape _ s3 with
-           | s1, s2, s3 => _
-           end.
-    epose (init
-             [_; _; _]
-             (fun head_index query_pos key_pos
-              => _)).
-   attn_scores = (
-            einsum(
-                "batch query_pos head_index d_head, \
-                    batch key_pos head_index d_head \
-                    -> batch head_index query_pos key_pos",
-                q,
-                k,
-            )
-            / self.attn_scale
 
-    refine (_).
+  Definition attn_scores : tensor_of_shape A (batch ::' n_heads ::' pos ::' pos)
+    := (let q : tensor_of_shape (tensor_of_shape A [pos; n_heads; d_head]) batch := q in
+        let k : tensor_of_shape (tensor_of_shape A [pos; n_heads; d_head]) batch := k in
+        let qk : tensor_of_shape (tensor_of_shape A [n_heads; pos; pos]) batch
+          := tensor_map2
+               (fun q k : tensor_of_shape A [pos; n_heads; d_head]
+                => weaksauce_einsum
+                     {{{ {{ query_pos head_index d_head ,
+                               key_pos head_index d_head
+                               -> head_index query_pos key_pos }}
+                           , q
+                           , k }}})
+               q
+               k in
+        let qk : tensor_of_shape A (batch ::' n_heads ::' pos ::' pos) := qk in
+        qk / broadcast' attn_scale)%core.
 
-Definition attn
-             {r} {batch : Size r} {pos
-     *)
-  Abort.
+  (*HERE*)
 End Attention.
 Eval cbv in embed (tensor_of_list [0; 1]%uint63).
 Eval cbv in pos_embed (tensor_of_list [[0; 1]]%uint63).

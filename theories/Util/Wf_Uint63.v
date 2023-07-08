@@ -1,5 +1,5 @@
 From Coq Require Import Bool Uint63 ZArith Wellfounded Wf_Z Wf_nat Lia.
-From NeuralNetInterp.Util Require Import Monad.
+From NeuralNetInterp.Util Require Import Monad Notations Arith.Classes.
 Set Universe Polymorphism.
 Set Polymorphic Inductive Cumulativity.
 Unset Universe Minimization ToSet.
@@ -16,7 +16,7 @@ Proof.
   intros *; rewrite Uint63.ltb_spec, Z2Nat.inj_lt by apply to_Z_bounded; trivial.
 Qed.
 
-Lemma lt_wf : well_founded ltb.
+Lemma lt_wf : well_founded Uint63.ltb.
 Proof.
   apply @well_founded_ltof with (f:=fun x => x).
 Qed.
@@ -107,8 +107,7 @@ Proof.
        lia). }
 Defined.
 
-Module LoopNotation.
-  Export MonadNotation.
+Module LoopNotationAlises.
   Notation break := break.
   Notation continue := continue.
   Notation get := get.
@@ -116,6 +115,10 @@ Module LoopNotation.
   Notation set := set.
   Notation ret := Monad.ret (only parsing).
   Notation bind := Monad.bind (only parsing).
+End LoopNotationAlises.
+
+Module Import LoopNotation1.
+  Export MonadNotation.
   #[export] Existing Instance LoopBody_Monad.
 
   Notation "'with_state' state 'for' ( x := init ;; x <? max ;; x += step ) {{ body }}"
@@ -139,4 +142,36 @@ Module LoopNotation.
   (*
   Check with_state 0 for (x := 0;; x <? 10;; x++) {{ y <- get;; set (y+x) }}.
    *)
+
+End LoopNotation1.
+
+Definition sum {A} {zeroA : has_zero A} {addA : has_add A} (start : int) (stop : int) (step : int) (f : int -> A) : A
+  := (with_state 0
+        for (i := start;; i <? stop;; i += step) {{
+            val <-- get;;
+            set (val + f i)
+     }})%core.
+
+Definition prod {A} {oneA : has_one A} {mulA : has_mul A} (start : int) (stop : int) (step : int) (f : int -> A) : A
+  := (with_state 1
+        for (i := start;; i <? stop;; i += step) {{
+            val <-- get;;
+            set (val * f i)
+     }})%core.
+
+Module Import LoopNotation2.
+  Notation "\sum_ ( m <= i < n ) F" := (sum m n 1 (fun i => F%core)).
+  Notation "\sum_ ( m ≤ i < n ) F" := (sum m n 1 (fun i => F%core)).
+  Notation "∑_ ( m <= i < n ) F" := (sum m n 1 (fun i => F%core)).
+  Notation "∑_ ( m ≤ i < n ) F" := (sum m n 1 (fun i => F%core)).
+  Notation "\prod_ ( m <= i < n ) F" := (prod m n 1 (fun i => F%core)).
+  Notation "\prod_ ( m ≤ i < n ) F" := (prod m n 1 (fun i => F%core)).
+  Notation "∏_ ( m <= i < n ) F" := (prod m n 1 (fun i => F%core)).
+  Notation "∏_ ( m ≤ i < n ) F" := (prod m n 1 (fun i => F%core)).
+End LoopNotation2.
+
+Module LoopNotation.
+  Include LoopNotationAlises.
+  Export LoopNotation1.
+  Export LoopNotation2.
 End LoopNotation.

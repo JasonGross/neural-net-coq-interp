@@ -64,3 +64,28 @@ Reserved Notation "\prod_ ( i <- r ) F"
 Reserved Notation "∏_ ( i <- r ) F"
   (at level 36, F at level 36, i, r at level 50,
     format "'[' ∏_ ( i <- r ) '/ ' F ']'").
+
+Reserved Notation "\sum_ ( m <= i < n ) F"
+  (at level 41, F at level 41, i, m, n at level 50,
+    format "'[' \sum_ ( m <= i < n ) '/ ' F ']'").
+Reserved Notation "\sum_ ( m ≤ i < n ) F"
+  (at level 41, F at level 41, i, m, n at level 50,
+    format "'[' \sum_ ( m ≤ i < n ) '/ ' F ']'").
+Reserved Notation "∑_ ( m <= i < n ) F"
+  (at level 41, F at level 41, i, m, n at level 50,
+    format "'[' ∑_ ( m <= i < n ) '/ ' F ']'").
+Reserved Notation "∑_ ( m ≤ i < n ) F"
+  (at level 41, F at level 41, i, m, n at level 50,
+    format "'[' ∑_ ( m ≤ i < n ) '/ ' F ']'").
+Reserved Notation "\prod_ ( m <= i < n ) F"
+  (at level 36, F at level 36, i, m, n at level 50,
+    format "'[' \prod_ ( m <= i < n ) '/ ' F ']'").
+Reserved Notation "\prod_ ( m ≤ i < n ) F"
+  (at level 36, F at level 36, i, m, n at level 50,
+    format "'[' \prod_ ( m ≤ i < n ) '/ ' F ']'").
+Reserved Notation "∏_ ( m <= i < n ) F"
+  (at level 36, F at level 36, i, m, n at level 50,
+    format "'[' ∏_ ( m <= i < n ) '/ ' F ']'").
+Reserved Notation "∏_ ( m ≤ i < n ) F"
+  (at level 36, F at level 36, i, m, n at level 50,
+    format "'[' ∏_ ( m ≤ i < n ) '/ ' F ']'").

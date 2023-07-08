@@ -28,3 +28,6 @@ theories/Util/Tactics/BreakMatch.v
 theories/Util/Tactics/DestructHead.v
 theories/Util/Tactics/DestructHyps.v
 theories/Util/Tactics/Head.v
+theories/Util/Tactics2/Constr.v
+theories/Util/Tactics2/FixNotationsForPerformance.v
+theories/Util/Tactics2/Constr/Unsafe/MakeAbbreviations.v
