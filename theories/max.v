@@ -479,6 +479,59 @@ Section ln.
   End ln_final.
 End ln.
 
+From Ltac2 Require Ltac2 Constr List Ident.
+Module Einsum.
+  Import Ltac2.
+
+  Ltac2 rec decompose_lam_idents (c : constr) : ident list
+    := match Constr.Unsafe.kind c with
+       | Constr.Unsafe.Cast c _ _ => decompose_lam_idents c
+       | Constr.Unsafe.Lambda b body
+         => let rest := decompose_lam_idents body in
+            match Constr.Binder.name b with
+            | Some n => n :: rest
+            | None => rest
+            end
+       | _ => []
+       end.
+
+  Ltac2 rec dedup (ids : ident list) : ident list
+    := match ids with
+       | [] => []
+       | id :: ids
+         => let ids := dedup ids in
+            if List.mem Ident.equal id ids
+            then ids
+            else id :: ids
+       end.
+
+  Ltac2 set_diff (ids1 : ident list) (ids2 : ident list) : ident list
+    := let (overlap, diff) := List.partition (fun a => List.mem Ident.equal a ids2) ids1 in
+       diff.
+
+  Declare Custom Entry einsum_args.
+  Notation "{{{ {{ i1 .. i_ , j1 .. j_ -> k1 .. k_ }} , t1 , t2 }}}"
+      := (match _ as A, _ as B, _ as C, _ as s1, _ as s2, _ as s3 return tensor_of_shape C s3 with
+          | A, B, C, s1, s2, s3
+            => match t1 : tensor_of_shape A s1, t2 : tensor_of_shape B s2 return tensor_of_shape C s3 with
+               | t1', t2'
+                 => match ((fun i1 => .. ((fun i_ => I) : True -> _) ..) : True -> _),
+                      ((fun j1 => .. ((fun j_ => I) : True -> _) ..) : True -> _),
+                      ((fun k1 => .. ((fun k_ => I) : True -> _) ..) : True -> _)
+                          return _
+                    with
+                    | iidxs, jidxs, kidxs
+                      => _
+                    end
+               end
+          end)
+           (only parsing, in custom einsum_args at level 0, i1 binder, i_ binder, j1 binder, j_ binder, k1 binder, k_ binder, t1 constr at level 10, t2 constr at level 10).
+  Notation "'weaksauce_einsum' x" := x (x custom einsum_args at level 10, at level 10).
+  Check (weaksauce_einsum {{{ {{ query_pos head_index d_head,
+          key_pos head_index d_head
+          -> head_index query_pos key_pos }}, (_:tensor_of_shape _ [2;1;5]), (_:tensor_of_shape _ [2;1;5]) }}} : tensor_of_shape _ [1; 2; 2]).
+End Einsum.
+
 Section Attention.
   Context {A r} {batch : Size r}
     {sqrtA : has_sqrt A} {coerZ : has_coer Z A} {addA : has_add A} {zeroA : has_zero A} {mulA : has_mul A} {divA : has_div A}
