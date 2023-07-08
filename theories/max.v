@@ -718,7 +718,6 @@ Section Attention.
   Definition v : tensor_of_shape A ((batch ::' pos) ++' [n_heads; d_head])
     := (einsum_input query_input W_V + broadcast b_V)%core.
 
-
   Definition attn_scores : tensor_of_shape A (batch ::' n_heads ::' pos ::' pos)
     := (let q : tensor_of_shape (tensor_of_shape A [pos; n_heads; d_head]) batch := q in
         let k : tensor_of_shape (tensor_of_shape A [pos; n_heads; d_head]) batch := k in
