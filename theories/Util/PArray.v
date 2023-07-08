@@ -1,4 +1,4 @@
-From Coq Require Import Bool ZArith NArith Uint63 List PArray Wellfounded Lia.
+From Coq Require Import Bool ZArith NArith Sint63 Uint63 List PArray Wellfounded Lia.
 From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Slice Arith.Classes Arith.Instances Default Notations.
 Local Open Scope list_scope.
 Set Implicit Arguments.
@@ -30,7 +30,14 @@ Definition map_default {A B} {default : pointed B} (f : A -> B) (xs : array A) :
 Definition map {A B} (f : A -> B) (xs : array A) : array B
   := map_default (default:=f (PArray.default xs)) f xs.
 
-Definition map2_default {A B C} {default : pointed C} {reduce_len : with_default (int -> int -> int) min} (f : A -> B -> C) (xs : array A) (ys : array B) : array C
+Definition init {A} (len : int) (f : int -> A) : array A
+  := with_state (PArray.make len (f 0))
+       for (i := 0;; i <? len;; i++) {{
+           res <-- get;;
+           set (res.[i <- f i])
+       }}.
+
+Definition map2_default {A B C} {default : pointed C} {reduce_len : with_default "reduce_len" (int -> int -> int) min} (f : A -> B -> C) (xs : array A) (ys : array B) : array C
   := let lenA := PArray.length xs in
      let lenB := PArray.length ys in
      let len := reduce_len lenA lenB in
@@ -107,7 +114,7 @@ Definition max {A} {max : has_max A} (xs : array A) : A := reduce_no_init max xs
 Definition min {A} {min : has_max A} (xs : array A) : A := reduce_no_init min xs.
 Definition mean {A B C} {zero : has_zero A} {add : has_add A} {div_by : has_div_by A B C} {coer : has_coer Z B} (xs : array A) : C
   := (sum xs / coer (Uint63.to_Z (PArray.length xs)))%core.
-Definition var {A B} {zero : has_zero A} {add : has_add A} {mul : has_mul A} {sub : has_sub A} {div_by : has_div_by A B A} {coer : has_coer Z B} {correction : with_default Z 1%Z}
+Definition var {A B} {zero : has_zero A} {add : has_add A} {mul : has_mul A} {sub : has_sub A} {div_by : has_div_by A B A} {coer : has_coer Z B} {correction : with_default "correction" Z 1%Z}
   (xs : array A) : A
   := (let xbar := mean xs in
      let N := Uint63.to_Z (PArray.length xs) in
@@ -142,3 +149,78 @@ Notation "x .[ [ s ] ]" := (slice x s) (at level 2, s custom slice at level 60, 
 
 Definition repeat {A} (xs : A) (count : int) : array A
   := PArray.make count xs.
+
+Definition to_bool {A} {zero : has_zero A} {eqb : has_eqb A} (xs : array A) : array bool
+  := map (fun x => x ≠? 0)%core xs.
+
+(** Quoting https://pytorch.org/docs/stable/generated/torch.tril.html
+
+torch.tril(input, diagonal=0, *, out=None) → Tensor
+
+Returns the lower triangular part of the matrix (2-D tensor) or batch
+of matrices [input], the other elements of the result tensor [out] are
+set to 0.
+
+The lower triangular part of the matrix is defined as the elements on
+and below the diagonal.
+
+The argument [diagonal] controls which diagonal to consider. If
+[diagonal = 0], all elements on and below the main diagonal are
+retained. A positive value includes just as many diagonals above the
+main diagonal, and similarly a negative value excludes just as many
+diagonals below the main diagonal. The main diagonal are the set of
+indices {(i,i)} for i ∈ [0,min{d₁,d₂}−1] where d₁,d₂ are the
+dimensions of the matrix. *)
+Definition tril {A} {zero : has_zero A} {diagonal : with_default "diagonal" int 0} (input : array (array A)) : array (array A)
+  := let len := PArray.length input in
+     with_state input
+       for (i := 0;; i <? len;; i++) {{
+           out <-- get;;
+           let row := out.[i] in
+           let clen := PArray.length row in
+           let row
+             := with_state row
+                  for (j := Sint63.max 0 (1 + i + diagonal);; j <? clen;; j++) {{
+                      row <-- get;;
+                      set (row.[j <- 0%core])
+                  }}
+           in
+           set (out.[i <- row])
+       }}.
+#[global] Arguments tril {A%type_scope zero diagonal%sint63} input.
+
+(** Quoting https://pytorch.org/docs/stable/generated/torch.triu.html
+
+torch.triu(input, diagonal=0, *, out=None) → Tensor
+
+Returns the upper triangular part of the matrix (2-D tensor) or batch
+of matrices [input], the other elements of the result tensor [out] are
+set to 0.
+
+The upper triangular part of the matrix is defined as the elements on
+and above the diagonal.
+
+The argument [diagonal] controls which diagonal to consider. If
+[diagonal = 0], all elements on and above the main diagonal are
+retained. A positive value excludes just as many diagonals above the
+main diagonal, and similarly a negative value includes just as many
+diagonals below the main diagonal. The main diagonal are the set of
+indices {(i,i)} for i ∈ [0,min{d₁,d₂}−1] where d₁,d₂ are the
+dimensions of the matrix. *)
+Definition triu {A} {zero : has_zero A} {diagonal : with_default "diagonal" int 0} (input : array (array A)) : array (array A)
+  := let len := PArray.length input in
+     with_state input
+       for (i := 0;; i <? len;; i++) {{
+           out <-- get;;
+           let row := out.[i] in
+           let clen := PArray.length row in
+           let row
+             := with_state row
+                  for (j := 0;; j <? Sint63.max 0 (i + diagonal);; j++) {{
+                      row <-- get;;
+                      set (row.[j <- 0%core])
+                  }}
+           in
+           set (out.[i <- row])
+       }}.
+#[global] Arguments triu {A%type_scope zero diagonal%sint63} input.

@@ -1,4 +1,4 @@
-From Coq Require Import Uint63 QArith Lia List PArray.
+From Coq Require Import Sint63 Uint63 QArith Lia List PArray.
 From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances.
 From NeuralNetInterp.Util Require Nat.
 From NeuralNetInterp Require Import max_parameters.
@@ -122,6 +122,14 @@ Definition tensor_of_rank := @tensor_gen_of_rank (fun A => array A).
 Definition tensor_list_of_rank := @tensor_gen_of_rank (fun A => list A).
 Definition tensor_of_shape {r} A (s : Size r) := tensor_of_rank A r.
 Definition tensor_list_of_shape {r} A (s : Size r) := tensor_list_of_rank A r.
+Polymorphic Definition tensor_fun_of_rank I := tensor_gen_of_rank (fun A => I -> A).
+Polymorphic Definition tensor_fun_of_shape {r} I A (s : Size r) := tensor_fun_of_rank I A r.
+Polymorphic Fixpoint tensor_gen_index_of_shape_make_cps {r B I} {s : Size r} : (tensor_gen_index_of_shape I s -> B) -> tensor_fun_of_shape I B s
+  := match s with
+     | [] => fun f => f tt
+     | s ::' _ => fun k => tensor_gen_index_of_shape_make_cps (s:=s) (fun idxs idx => k (idxs, idx))
+     end.
+
 Ltac get_shape val :=
   lazymatch type of val with
   | tensor_gen_of_shape _ _ ?shape => shape
@@ -145,6 +153,20 @@ Notation shape_of x := (match x return _ with y => ltac:(let s := get_shape y in
 Class compute_shape_of {A r} (x : A) := get_shape_of : Size r.
 #[global] Hint Extern 0 (compute_shape_of ?x) => let s := get_shape x in exact s : typeclass_instances.
 
+Fixpoint init_map {r A B} (f : A -> B) (s : Size r) : tensor_fun_of_shape int A s -> tensor_of_shape B s
+  := match s return tensor_fun_of_shape int A s -> tensor_of_shape B s with
+     | [] => f
+     | s ::' l => @init_map _ _ (array B) (fun F => PArray.init l (fun i => f (F i))) s
+     end.
+
+Definition init {r A} (s : Size r) : tensor_fun_of_shape int A s -> tensor_of_shape A s
+  := init_map (fun x => x) s.
+Fixpoint with_shape {r A} (s : Size r) : tensor_fun_of_shape int A s -> A
+  := match s with
+     | [] => fun x => x
+     | s ::' l => fun ls => with_shape s ls l
+     end.
+
 (*
 Structure ndtype := { ndshape : Size ; ty :> Type }.
 Definition ndtype_raw
@@ -163,6 +185,17 @@ Definition tensor_of_list_ {r} {A} {default : pointed A} {s : Size r} : tensor_l
 Notation tensor_of_list ls := (@tensor_of_list_ _ _ _ (shape_of ls%list) ls%list) (only parsing).
 Notation tensor_of_list_map f ls := (@tensor_of_list_map_ _ _ _ _ (shape_of ls%list) f ls%list) (only parsing).
 
+Fixpoint tensor_make {r} {A} (s : Size r) (x : A) : tensor_of_shape A s
+  := match s with
+     | [] => x
+     | s ::' len => tensor_make s (PArray.make len x)
+     end.
+
+Definition ones {r} {A} {one : has_one A} (s : Size r) : tensor_of_shape A s
+  := tensor_make s one.
+Definition zeros {r} {A} {zero : has_zero A} (s : Size r) : tensor_of_shape A s
+  := tensor_make s zero.
+
 Polymorphic Fixpoint tensor_gen_get {r I list_type A s} (getA : forall r' (s' : Size r'), let A := tensor_gen_of_shape list_type A s' in I -> list_type A -> A) {struct s} : tensor_gen_index_of_shape I s -> tensor_gen_of_shape list_type A s -> A
   := match s return tensor_gen_index_of_shape I s -> tensor_gen_of_shape list_type A s -> A with
      | [] => fun dummy x => x
@@ -173,24 +206,12 @@ Definition tensor_get {r A} {s : Size r} : tensor_index_of_shape s -> tensor_of_
 Definition tensor_list_get {r A} {s : Size r} {default : pointed A} : tensor_list_index_of_shape s -> tensor_list_of_shape A s -> A
   := tensor_gen_get (fun _ _ i xs => nth_default point xs i).
 
-(** Hyperparameters *)
-Definition N_LAYERS : nat := 1.
-Definition N_HEADS : nat := 1.
-Definition D_MODEL : nat := 32.
-Definition D_HEAD : nat := 32.
-(*Definition D_MLP = None*)
-
-Definition D_VOCAB : nat := 64.
-
-Definition W_E : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.W_E.
-Definition W_pos : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.W_pos.
-Definition L0_ln1_b : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.L0_ln1_b.
-Definition L0_ln1_w : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.L0_ln1_w.
-Definition ln_final_b : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.ln_final_b.
-Definition ln_final_w : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.ln_final_w.
-
 Declare Scope tensor_scope.
 Delimit Scope tensor_scope with tensor.
+Bind Scope tensor_scope with tensor_of_rank.
+Bind Scope tensor_scope with tensor_of_shape.
+Bind Scope tensor_scope with tensor_list_of_rank.
+Bind Scope tensor_scope with tensor_list_of_shape.
 Local Open Scope tensor_scope.
 
 Fixpoint tensor_map {r A B} {s : Size r} (f : A -> B) {struct s} : tensor_of_shape A s -> tensor_of_shape B s
@@ -208,32 +229,40 @@ Fixpoint tensor_map2 {r} {A B C} (f : A -> B -> C) {struct r} : forall {sA : Siz
        => fun sA sB => tensor_map2 (PArray.broadcast_map2 f) (sA:=shd sA) (sB:=shd sB)
      end.
 
-#[export] Instance add {r} {sA sB : Size r} {A B C} {addA : has_add_with A B C} : has_add_with (tensor_of_shape A sA) (tensor_of_shape B sB) (tensor_of_shape C (broadcast_size2 sA sB)) := tensor_map2 add.
-#[export] Instance sub {r} {sA sB : Size r} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor_of_shape A sA) (tensor_of_shape B sB) (tensor_of_shape C (broadcast_size2 sA sB)) := tensor_map2 sub.
-#[export] Instance mul {r} {sA sB : Size r} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor_of_shape A sA) (tensor_of_shape B sB) (tensor_of_shape C (broadcast_size2 sA sB)) := tensor_map2 mul.
-#[export] Instance div_by {r} {sA sB : Size r} {A B C} {div_byAB : has_div_by A B C} : has_div_by (tensor_of_shape A sA) (tensor_of_shape B sB) (tensor_of_shape C (broadcast_size2 sA sB)) := tensor_map2 div.
-#[export] Instance sqrt {r} {s : Size r} {A} {sqrtA : has_sqrt A} : has_sqrt (tensor_of_shape A s) := tensor_map sqrt.
-#[export] Instance opp {r} {s : Size r} {A} {oppA : has_opp A} : has_opp (tensor_of_shape A s) := tensor_map opp.
-#[export] Instance add'1 {r} {s : Size r} {a b} {A B C} {addA : has_add_with A B C} : has_add_with (tensor_of_shape A (s ::' a)) (tensor_of_shape B (s ::' b)) (tensor_of_shape C (s ::' max a b)) | 10 := add.
-#[export] Instance sub'1 {r} {s : Size r} {a b} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor_of_shape A (s ::' a)) (tensor_of_shape B (s ::' b)) (tensor_of_shape C (s ::' max a b)) | 10 := sub.
-#[export] Instance mul'1 {r} {s : Size r} {a b} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor_of_shape A (s ::' a)) (tensor_of_shape B (s ::' b)) (tensor_of_shape C (s ::' max a b)) | 10 := mul.
-#[export] Instance div_by'1 {r} {s : Size r} {a b} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor_of_shape A (s ::' a)) (tensor_of_shape B (s ::' b)) (tensor_of_shape C (s ::' max a b)) | 10 := div_by.
-#[export] Instance add'1s_r {r} {s : Size r} {A B C} {addA : has_add_with A B C} : has_add_with (tensor_of_shape A s) (tensor_of_shape B (shape_ones r)) (tensor_of_shape C s) | 10 := add.
-#[export] Instance add'1s_l {r} {s : Size r} {A B C} {addA : has_add_with A B C} : has_add_with (tensor_of_shape A (shape_ones r)) (tensor_of_shape B s) (tensor_of_shape C s) | 10 := add.
-#[export] Instance sub'1s_r {r} {s : Size r} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor_of_shape A s) (tensor_of_shape B (shape_ones r)) (tensor_of_shape C s) | 10 := sub.
-#[export] Instance sub'1s_l {r} {s : Size r} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor_of_shape A (shape_ones r)) (tensor_of_shape B s) (tensor_of_shape C s) | 10 := sub.
-#[export] Instance mul'1s_r {r} {s : Size r} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor_of_shape A s) (tensor_of_shape B (shape_ones r)) (tensor_of_shape C s) | 10 := mul.
-#[export] Instance mul'1s_l {r} {s : Size r} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor_of_shape A (shape_ones r)) (tensor_of_shape B s) (tensor_of_shape C s) | 10 := mul.
-#[export] Instance div_by'1s_r {r} {s : Size r} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor_of_shape A s) (tensor_of_shape B (shape_ones r)) (tensor_of_shape C s) | 10 := div_by.
-#[export] Instance div_by'1s_l {r} {s : Size r} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor_of_shape A (shape_ones r)) (tensor_of_shape B s) (tensor_of_shape C s) | 10 := div_by.
-#[export] Instance add'1s_r'1_same {r} {s : Size r} {a} {A B C} {addA : has_add_with A B C} : has_add_with (tensor_of_shape A (s ::' a)) (tensor_of_shape B (shape_ones r ::' a)) (tensor_of_shape C (s ::' a)) | 10 := add.
-#[export] Instance add'1s_l'1_same {r} {s : Size r} {a} {A B C} {addA : has_add_with A B C} : has_add_with (tensor_of_shape A (shape_ones r ::' a)) (tensor_of_shape B (s ::' a)) (tensor_of_shape C (s ::' a)) | 10 := add.
-#[export] Instance sub'1s_r'1_same {r} {s : Size r} {a} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor_of_shape A (s ::' a)) (tensor_of_shape B (shape_ones r ::' a)) (tensor_of_shape C (s ::' a)) | 10 := sub.
-#[export] Instance sub'1s_l'1_same {r} {s : Size r} {a} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor_of_shape A (shape_ones r ::' a)) (tensor_of_shape B (s ::' a)) (tensor_of_shape C (s ::' a)) | 10 := sub.
-#[export] Instance mul'1s_r'1_same {r} {s : Size r} {a} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor_of_shape A (s ::' a)) (tensor_of_shape B (shape_ones r ::' a)) (tensor_of_shape C (s ::' a)) | 10 := mul.
-#[export] Instance mul'1s_l'1_same {r} {s : Size r} {a} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor_of_shape A (shape_ones r ::' a)) (tensor_of_shape B (s ::' a)) (tensor_of_shape C (s ::' a)) | 10 := mul.
-#[export] Instance div_by'1s_r'1_same {r} {s : Size r} {a} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor_of_shape A (s ::' a)) (tensor_of_shape B (shape_ones r ::' a)) (tensor_of_shape C (s ::' a)) | 10 := div_by.
-#[export] Instance div_by'1s_l'1_same {r} {s : Size r} {a} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor_of_shape A (shape_ones r ::' a)) (tensor_of_shape B (s ::' a)) (tensor_of_shape C (s ::' a)) | 10 := div_by.
+#[export] Instance tensor_add {r} {sA sB : Size r} {A B C} {addA : has_add_with A B C} : has_add_with (tensor_of_shape A sA) (tensor_of_shape B sB) (tensor_of_shape C (broadcast_size2 sA sB)) := tensor_map2 add.
+#[export] Instance tensor_sub {r} {sA sB : Size r} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor_of_shape A sA) (tensor_of_shape B sB) (tensor_of_shape C (broadcast_size2 sA sB)) := tensor_map2 sub.
+#[export] Instance tensor_mul {r} {sA sB : Size r} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor_of_shape A sA) (tensor_of_shape B sB) (tensor_of_shape C (broadcast_size2 sA sB)) := tensor_map2 mul.
+#[export] Instance tensor_div_by {r} {sA sB : Size r} {A B C} {div_byAB : has_div_by A B C} : has_div_by (tensor_of_shape A sA) (tensor_of_shape B sB) (tensor_of_shape C (broadcast_size2 sA sB)) := tensor_map2 div.
+#[export] Instance tensor_sqrt {r} {s : Size r} {A} {sqrtA : has_sqrt A} : has_sqrt (tensor_of_shape A s) := tensor_map sqrt.
+#[export] Instance tensor_opp {r} {s : Size r} {A} {oppA : has_opp A} : has_opp (tensor_of_shape A s) := tensor_map opp.
+#[export] Instance add'1 {r} {s : Size r} {a b} {A B C} {addA : has_add_with A B C} : has_add_with (tensor_of_shape A (s ::' a)) (tensor_of_shape B (s ::' b)) (tensor_of_shape C (s ::' max a b)) | 10 := tensor_add.
+#[export] Instance sub'1 {r} {s : Size r} {a b} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor_of_shape A (s ::' a)) (tensor_of_shape B (s ::' b)) (tensor_of_shape C (s ::' max a b)) | 10 := tensor_sub.
+#[export] Instance mul'1 {r} {s : Size r} {a b} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor_of_shape A (s ::' a)) (tensor_of_shape B (s ::' b)) (tensor_of_shape C (s ::' max a b)) | 10 := tensor_mul.
+#[export] Instance div_by'1 {r} {s : Size r} {a b} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor_of_shape A (s ::' a)) (tensor_of_shape B (s ::' b)) (tensor_of_shape C (s ::' max a b)) | 10 := tensor_div_by.
+#[export] Instance add'1s_r {r} {s : Size r} {A B C} {addA : has_add_with A B C} : has_add_with (tensor_of_shape A s) (tensor_of_shape B (shape_ones r)) (tensor_of_shape C s) | 10 := tensor_add.
+#[export] Instance add'1s_l {r} {s : Size r} {A B C} {addA : has_add_with A B C} : has_add_with (tensor_of_shape A (shape_ones r)) (tensor_of_shape B s) (tensor_of_shape C s) | 10 := tensor_add.
+#[export] Instance sub'1s_r {r} {s : Size r} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor_of_shape A s) (tensor_of_shape B (shape_ones r)) (tensor_of_shape C s) | 10 := tensor_sub.
+#[export] Instance sub'1s_l {r} {s : Size r} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor_of_shape A (shape_ones r)) (tensor_of_shape B s) (tensor_of_shape C s) | 10 := tensor_sub.
+#[export] Instance mul'1s_r {r} {s : Size r} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor_of_shape A s) (tensor_of_shape B (shape_ones r)) (tensor_of_shape C s) | 10 := tensor_mul.
+#[export] Instance mul'1s_l {r} {s : Size r} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor_of_shape A (shape_ones r)) (tensor_of_shape B s) (tensor_of_shape C s) | 10 := tensor_mul.
+#[export] Instance div_by'1s_r {r} {s : Size r} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor_of_shape A s) (tensor_of_shape B (shape_ones r)) (tensor_of_shape C s) | 10 := tensor_div_by.
+#[export] Instance div_by'1s_l {r} {s : Size r} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor_of_shape A (shape_ones r)) (tensor_of_shape B s) (tensor_of_shape C s) | 10 := tensor_div_by.
+#[export] Instance add'1s_r'1_same {r} {s : Size r} {a} {A B C} {addA : has_add_with A B C} : has_add_with (tensor_of_shape A (s ::' a)) (tensor_of_shape B (shape_ones r ::' a)) (tensor_of_shape C (s ::' a)) | 10 := tensor_add.
+#[export] Instance add'1s_l'1_same {r} {s : Size r} {a} {A B C} {addA : has_add_with A B C} : has_add_with (tensor_of_shape A (shape_ones r ::' a)) (tensor_of_shape B (s ::' a)) (tensor_of_shape C (s ::' a)) | 10 := tensor_add.
+#[export] Instance sub'1s_r'1_same {r} {s : Size r} {a} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor_of_shape A (s ::' a)) (tensor_of_shape B (shape_ones r ::' a)) (tensor_of_shape C (s ::' a)) | 10 := tensor_sub.
+#[export] Instance sub'1s_l'1_same {r} {s : Size r} {a} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor_of_shape A (shape_ones r ::' a)) (tensor_of_shape B (s ::' a)) (tensor_of_shape C (s ::' a)) | 10 := tensor_sub.
+#[export] Instance mul'1s_r'1_same {r} {s : Size r} {a} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor_of_shape A (s ::' a)) (tensor_of_shape B (shape_ones r ::' a)) (tensor_of_shape C (s ::' a)) | 10 := tensor_mul.
+#[export] Instance mul'1s_l'1_same {r} {s : Size r} {a} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor_of_shape A (shape_ones r ::' a)) (tensor_of_shape B (s ::' a)) (tensor_of_shape C (s ::' a)) | 10 := tensor_mul.
+#[export] Instance div_by'1s_r'1_same {r} {s : Size r} {a} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor_of_shape A (s ::' a)) (tensor_of_shape B (shape_ones r ::' a)) (tensor_of_shape C (s ::' a)) | 10 := tensor_div_by.
+#[export] Instance div_by'1s_l'1_same {r} {s : Size r} {a} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor_of_shape A (shape_ones r ::' a)) (tensor_of_shape B (s ::' a)) (tensor_of_shape C (s ::' a)) | 10 := tensor_div_by.
+#[export] Instance add'1s_r'1_same_app {r r'} {s : Size r} {s' : Size r'} {A B C} {addA : has_add_with A B C} : has_add_with (tensor_of_shape A (s ++' s')) (tensor_of_shape B (shape_ones r ++' s')) (tensor_of_shape C (s ++' s')) | 10 := tensor_add.
+#[export] Instance add'1s_l'1_same_app {r r'} {s : Size r} {s' : Size r'} {A B C} {addA : has_add_with A B C} : has_add_with (tensor_of_shape A (shape_ones r ++' s')) (tensor_of_shape B (s ++' s')) (tensor_of_shape C (s ++' s')) | 10 := tensor_add.
+#[export] Instance sub'1s_r'1_same_app {r r'} {s : Size r} {s' : Size r'} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor_of_shape A (s ++' s')) (tensor_of_shape B (shape_ones r ++' s')) (tensor_of_shape C (s ++' s')) | 10 := tensor_sub.
+#[export] Instance sub'1s_l'1_same_app {r r'} {s : Size r} {s' : Size r'} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor_of_shape A (shape_ones r ++' s')) (tensor_of_shape B (s ++' s')) (tensor_of_shape C (s ++' s')) | 10 := tensor_sub.
+#[export] Instance mul'1s_r'1_same_app {r r'} {s : Size r} {s' : Size r'} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor_of_shape A (s ++' s')) (tensor_of_shape B (shape_ones r ++' s')) (tensor_of_shape C (s ++' s')) | 10 := tensor_mul.
+#[export] Instance mul'1s_l'1_same_app {r r'} {s : Size r} {s' : Size r'} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor_of_shape A (shape_ones r ++' s')) (tensor_of_shape B (s ++' s')) (tensor_of_shape C (s ++' s')) | 10 := tensor_mul.
+#[export] Instance div_by'1s_r'1_same_app {r r'} {s : Size r} {s' : Size r'} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor_of_shape A (s ++' s')) (tensor_of_shape B (shape_ones r ++' s')) (tensor_of_shape C (s ++' s')) | 10 := tensor_div_by.
+#[export] Instance div_by'1s_l'1_same_app {r r'} {s : Size r} {s' : Size r'} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor_of_shape A (shape_ones r ++' s')) (tensor_of_shape B (s ++' s')) (tensor_of_shape C (s ++' s')) | 10 := tensor_div_by.
 
 (*
 Fixpoint extend_app_nil_l {P : Size -> Type} {s : Size} : P s -> P ([] ++' s)
@@ -325,7 +354,7 @@ Definition keepdim {A B} (f : A -> B) : A -> tensor_of_shape B [1] := keepdim_ge
 Definition reduce_axis_m1' {r A B} {s1 : Size r} {s2} (reduction : array A -> B) : tensor_of_shape A (s1 ::' s2) -> tensor_of_shape B s1
   := tensor_map reduction.
 
-Definition reduce_axis_m1 {r A B} {s1 : Size r} {s2} {keepdim : with_default bool false} (reduction : array A -> B)
+Definition reduce_axis_m1 {r A B} {s1 : Size r} {s2} {keepdim : with_default "keepdim" bool false} (reduction : array A -> B)
   : tensor_of_shape A (s1 ::' s2) -> tensor_of_shape B (s1 ++' if keepdim return Size (if keepdim then _ else _) then [1] else [])
   := fun t
      => let keepdimf :=
@@ -334,6 +363,45 @@ Definition reduce_axis_m1 {r A B} {s1 : Size r} {s2} {keepdim : with_default boo
           then keepdimf reduction
           else reduction in
         reshape_app_combine (reduce_axis_m1' keepdimf t).
+
+Definition to_bool {A} {zero : has_zero A} {eqb : has_eqb A} {r} {s : Size r} (xs : tensor_of_shape A s) : tensor_of_shape bool s
+  := tensor_map (fun x => x ≠? 0)%core xs.
+
+Definition tril {A} {zero : has_zero A} {rnk} {s : Size rnk} {r c}
+  {diagonal : with_default "diagonal" int 0%int63} (input : tensor_of_shape A (s ++' [r; c]))
+  : tensor_of_shape A (s ++' [r; c])
+  := reshape_app_combine (tensor_map (PArray.tril (diagonal:=diagonal)) input).
+#[global] Arguments tril {A%type_scope zero rnk%nat s%size} {r c}%uint63 {diagonal}%sint63 input%tensor.
+Definition triu {A} {zero : has_zero A} {rnk} {s : Size rnk} {r c}
+  {diagonal : with_default "diagonal" int 0%int63} (input : tensor_of_shape A (s ++' [r; c]))
+  : tensor_of_shape A (s ++' [r; c])
+  := reshape_app_combine (tensor_map (PArray.triu (diagonal:=diagonal)) input).
+#[global] Arguments triu {A%type_scope zero rnk%nat s%size} {r c}%uint63 {diagonal}%sint63 input%tensor.
+
+(** Hyperparameters *)
+Definition N_LAYERS : nat := 1.
+Definition N_HEADS : nat := 1.
+Definition D_MODEL : nat := 32.
+Definition D_HEAD : nat := 32.
+(*Definition D_MLP = None*)
+
+Definition D_VOCAB : nat := 64.
+
+Definition W_E : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.W_E.
+Definition W_pos : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.W_pos.
+Definition L0_attn_W_Q : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.L0_attn_W_Q.
+Definition L0_attn_W_K : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.L0_attn_W_K.
+Definition L0_attn_W_V : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.L0_attn_W_V.
+Definition L0_attn_W_O : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.L0_attn_W_O.
+Definition L0_attn_b_Q : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.L0_attn_b_Q.
+Definition L0_attn_b_K : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.L0_attn_b_K.
+Definition L0_attn_b_V : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.L0_attn_b_V.
+Definition L0_attn_b_O : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.L0_attn_b_O.
+Definition L0_ln1_b : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.L0_ln1_b.
+Definition L0_ln1_w : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.L0_ln1_w.
+Definition ln_final_b : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.ln_final_b.
+Definition ln_final_w : tensor_of_shape _ _ := Eval cbv in tensor_of_list max_parameters.ln_final_w.
+
 
 Definition embed {r} {s : Size r} (tokens : tensor_of_shape int s) : tensor_of_shape Q (s ::' stl (shape_of W_E))
   := tensor_map (fun i => W_E.[i]) tokens.
@@ -411,5 +479,103 @@ Section ln.
   End ln_final.
 End ln.
 
+Section Attention.
+  Context {A r} {batch : Size r}
+    {sqrtA : has_sqrt A} {coerZ : has_coer Z A} {addA : has_add A} {zeroA : has_zero A} {mulA : has_mul A} {divA : has_div A}
+    {pos n_heads d_model d_head} {n_ctx:N}
+    {use_split_qkv_input : with_default "use_split_qkv_input" bool false}
+    (W_Q W_K W_V W_O : tensor_of_shape A [n_heads; d_model; d_head])
+    (b_Q b_K b_V : tensor_of_shape A [n_heads; d_head])
+    (b_O : tensor_of_shape A [d_model])
+    (IGNORE : A)
+    (n_ctx' : int := Uint63.of_Z n_ctx)
+    (attn_scale : A := √(coer (Uint63.to_Z d_head)))
+    (maybe_n_heads := fun b : bool => if b return Size (if b then _ else _) then [n_heads] else [])
+    (query_input key_input value_input : tensor_of_shape A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model)))
+    (mask : tensor_of_shape bool [n_ctx'; n_ctx'] := to_bool (tril (A:=bool) (ones [n_ctx'; n_ctx']))).
+
+  (*         if self.cfg.use_split_qkv_input:
+            qkv_einops_string = "batch pos head_index d_model"
+        else:
+            qkv_einops_string = "batch pos d_model"
+
+        q = self.hook_q(
+            einsum(
+                f"{qkv_einops_string}, head_index d_model d_head \
+                -> batch pos head_index d_head",
+                query_input,
+                self.W_Q,
+            )
+            + self.b_Q
+        )  # [batch, pos, head_index, d_head]*)
+  Definition einsum_input
+    (input : tensor_of_shape A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model)))
+    (W : tensor_of_shape A [n_heads; d_model; d_head])
+    : tensor_of_shape A ((batch ::' pos) ++' [n_heads; d_head])
+    := (let input : tensor_of_shape (tensor_of_shape A _) (batch ::' pos) := reshape_app_split input in
+        let W : tensor_of_shape (tensor_of_shape (tensor_of_shape A [d_head]) [d_model]) [n_heads] := W in
+        let f (input : tensor_of_shape A [d_model]) (W : tensor_of_shape (tensor_of_shape A [d_head]) [d_model]) : tensor_of_shape A [d_head]
+          := let input_W : tensor_of_shape (tensor_of_shape A [d_head]) [d_model] := tensor_map2 (fun i w => broadcast' i * w)%core input W in
+             reduce_axis_m1 (keepdim:=false) PArray.sum (input_W:tensor_of_shape A [d_model; d_head]) in
+        tensor_map
+          (if use_split_qkv_input return tensor_of_shape (tensor_of_shape A [d_model]) (maybe_n_heads use_split_qkv_input) -> tensor_of_shape (tensor_of_shape A [d_head]) [n_heads]
+           then fun input
+                => tensor_map2 f input W
+           else fun input : tensor_of_shape A [d_model]
+                => tensor_map (f input) W)
+          input).
+
+  Definition q : tensor_of_shape A ((batch ::' pos) ++' [n_heads; d_head])
+    := (einsum_input query_input W_Q + broadcast b_Q)%core.
+  Definition k : tensor_of_shape A ((batch ::' pos) ++' [n_heads; d_head])
+    := (einsum_input query_input W_K + broadcast b_K)%core.
+  Definition v : tensor_of_shape A ((batch ::' pos) ++' [n_heads; d_head])
+    := (einsum_input query_input W_V + broadcast b_V)%core.
+
+  Definition attn_scores : tensor_of_shape A (batch ::' n_heads ::' pos ::' pos).
+    refine (let q : tensor_of_shape (tensor_of_shape A [pos; n_heads; d_head]) batch := q in
+            let k : tensor_of_shape (tensor_of_shape A [pos; n_heads; d_head]) batch := k in
+            let qk : tensor_of_shape (tensor_of_shape A [n_heads; pos; pos]) batch
+              := tensor_map2
+                   _
+                   q
+                   k in
+            let qk : tensor_of_shape A (batch ::' n_heads ::' pos ::' pos) := qk in
+            qk / broadcast' attn_scale)%core.
+    (*
+    From Ltac2 Require Ltac2.
+    Notation "'weaksauce_einsum' {{ i1 .. in , j1 .. jn -> k1 .. kn }} t1 t2"
+      := (match _ as s1, _ as s2, _ as s3 return tensor_of_shape _ s3 with
+          | s1, s2, s3
+            => match t1 : tensor_of_shape _ s1, t2 : tensor_of_shape _ s2 return tensor_of_shape _ s3 with
+               | t1', t2'
+                 =>
+               end
+          end)
+           (only parsing).
+    refine match _ as s1, _ as s2, _ as s3 return tensor_of_shape _ s1 -> tensor_of_shape _ s2 -> tensor_of_shape _ s3 with
+           | s1, s2, s3 => _
+           end.
+    epose (init
+             [_; _; _]
+             (fun head_index query_pos key_pos
+              => _)).
+   attn_scores = (
+            einsum(
+                "batch query_pos head_index d_head, \
+                    batch key_pos head_index d_head \
+                    -> batch head_index query_pos key_pos",
+                q,
+                k,
+            )
+            / self.attn_scale
+
+    refine (_).
+
+Definition attn
+             {r} {batch : Size r} {pos
+     *)
+  Abort.
+End Attention.
 Eval cbv in embed (tensor_of_list [0; 1]%uint63).
 Eval cbv in pos_embed (tensor_of_list [[0; 1]]%uint63).

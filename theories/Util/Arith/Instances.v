@@ -5,6 +5,15 @@ Set Implicit Arguments.
 #[global] Set Warnings Append "-ambiguous-paths".
 #[export] Set Warnings Append "-ambiguous-paths".
 
+Local Open Scope bool_scope.
+#[export] Instance bool_has_eqb : has_eqb bool := Bool.eqb.
+#[export] Instance bool_has_add : has_add bool := orb.
+#[export] Instance bool_has_mul : has_mul bool := andb.
+#[export] Instance bool_has_max : has_max bool := orb.
+#[export] Instance bool_has_min : has_min bool := andb.
+#[export] Instance bool_has_zero : has_zero bool := false.
+#[export] Instance bool_has_one : has_one bool := true.
+
 Local Open Scope nat_scope.
 #[export] Instance nat_has_ltb : has_ltb nat := Nat.ltb.
 #[export] Instance nat_has_leb : has_leb nat := Nat.leb.
@@ -111,19 +120,23 @@ Local Open Scope int63_scope.
 #[export] Instance int_has_one : has_one int := 1.
 #[export] Instance int_has_sqrt : has_sqrt int := Uint63.sqrt.
 
-Module Export Uint63.
-  #[export] Instance int_has_int_div : has_int_div int := Uint63.div.
-  #[export] Instance int_has_mod : has_mod int := Uint63.mod.
-  #[export] Instance int_has_ltb : has_ltb int := Uint63.ltb.
-  #[export] Instance int_has_leb : has_leb int := Uint63.leb.
-End Uint63.
-
 Module Sint63.
-  #[export] Instance int_has_int_div : has_int_div int := Sint63.div.
-  #[export] Instance int_has_mod : has_mod int := Sint63.rem.
-  #[export] Instance int_has_ltb : has_ltb int := Sint63.ltb.
-  #[export] Instance int_has_leb : has_leb int := Sint63.leb.
+  #[export] Instance int_div : has_int_div int := Sint63.div.
+  #[export] Instance modulo : has_mod int := Sint63.rem.
+  #[export] Instance ltb : has_ltb int := Sint63.ltb.
+  #[export] Instance leb : has_leb int := Sint63.leb.
+  #[export] Instance min : has_min int := _.
+  #[export] Instance max : has_max int := _.
 End Sint63.
+
+Module Export Uint63.
+  #[export] Instance int_div : has_int_div int := Uint63.div.
+  #[export] Instance modulo : has_mod int := Uint63.mod.
+  #[export] Instance ltb : has_ltb int := Uint63.ltb.
+  #[export] Instance leb : has_leb int := Uint63.leb.
+  #[export] Instance min : has_min int := _.
+  #[export] Instance max : has_max int := _.
+End Uint63.
 
 Local Open Scope list_scope.
 Scheme Equality for list.
