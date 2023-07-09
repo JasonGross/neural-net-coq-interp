@@ -85,6 +85,13 @@ Fixpoint size_map2 {r} (f : int -> int -> int) : Size r -> Size r -> Size r
      | S r => fun xs ys => size_map2 f (shd xs) (shd ys) ::' f (stl xs) (stl ys)
      end.
 
+(* TODO: nary *)
+Fixpoint size_map3 {r} (f : int -> int -> int -> int) : Size r -> Size r -> Size r -> Size r
+  := match r with
+     | 0%nat => fun _ _ _ => []
+     | S r => fun xs ys zs => size_map3 f (shd xs) (shd ys) (shd zs) ::' f (stl xs) (stl ys) (stl zs)
+     end.
+
 Fixpoint sdroplastn {r : Rank} (n : Rank) : Size r -> Size (r -' n)
   := match n, r with
      | 0%nat, _ => fun xs => xs
@@ -236,6 +243,14 @@ Fixpoint tensor_map2 {r} {A B C} (f : A -> B -> C) {struct r} : forall {sA : Siz
      | 0%nat => fun _ _ => f
      | S r
        => fun sA sB => tensor_map2 (PArray.broadcast_map2 f) (sA:=shd sA) (sB:=shd sB)
+     end.
+
+Definition broadcast_size3 {r} : Size r -> Size r -> Size r -> Size r := size_map3 (fun x y z => max (max x y) z).
+Fixpoint tensor_map3 {r} {A B C D} (f : A -> B -> C -> D) {struct r} : forall {sA : Size r} {sB : Size r} {sC : Size r}, tensor_of_shape A sA -> tensor_of_shape B sB -> tensor_of_shape C sC -> tensor_of_shape D (broadcast_size3 sA sB sC)
+  := match r with
+     | 0%nat => fun _ _ _ => f
+     | S r
+       => fun sA sB sC => tensor_map3 (PArray.broadcast_map3 f) (sA:=shd sA) (sB:=shd sB) (sC:=shd sC)
      end.
 
 #[export] Instance tensor_add {r} {sA sB : Size r} {A B C} {addA : has_add_with A B C} : has_add_with (tensor_of_shape A sA) (tensor_of_shape B sB) (tensor_of_shape C (broadcast_size2 sA sB)) := tensor_map2 add.

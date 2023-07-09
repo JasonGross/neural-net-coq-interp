@@ -73,6 +73,17 @@ Definition broadcast_map2 {A B C} (f : A -> B -> C) (xs : array A) (ys : array B
                 set (res.[i <- f xs.[0] ys.[i]])
             }}.
 
+(* TODO: make nary version *)
+Definition broadcast_map3 {A B C D} (f : A -> B -> C -> D) (xs : array A) (ys : array B) (zs : array C) : array D
+  := let lenA := PArray.length xs in
+     let lenB := PArray.length ys in
+     let lenC := PArray.length zs in
+     let len := max (max lenA lenB) lenC in
+     with_state (PArray.make len (f (PArray.default xs) (PArray.default ys) (PArray.default zs)))
+       for (i := 0;; i <? len;; i++) {{
+           res <-- get;;
+           set (res.[i <- f xs.[i] ys.[i] zs.[i]])
+       }}.
 
 Definition reduce {A B} (f : B -> A -> B) (init : B) (xs : array A) : B
   := let len := PArray.length xs in
