@@ -1,5 +1,5 @@
 From Coq Require Import Sint63 Uint63 QArith Lia List PArray.
-From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances.
+From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool.
 From NeuralNetInterp.Util Require Nat Wf_Uint63.
 From NeuralNetInterp Require Import max_parameters.
 Import Util.Nat.Notations.
@@ -252,6 +252,10 @@ Fixpoint tensor_map3 {r} {A B C D} (f : A -> B -> C -> D) {struct r} : forall {s
      | S r
        => fun sA sB sC => tensor_map3 (PArray.broadcast_map3 f) (sA:=shd sA) (sB:=shd sB) (sC:=shd sC)
      end.
+
+(* TODO: probably want to broadcast torch.where without having to allocate arrays of bool, etc *)
+Definition where_ {r A} {sA : Size r} {sB : Size r} {sC : Size r} (condition : tensor_of_shape bool sA) (input : tensor_of_shape A sB) (other : tensor_of_shape A sC) : tensor_of_shape A (broadcast_size3 sA sB sC)
+  := tensor_map3 Bool.where_ condition input other.
 
 #[export] Instance tensor_add {r} {sA sB : Size r} {A B C} {addA : has_add_with A B C} : has_add_with (tensor_of_shape A sA) (tensor_of_shape B sB) (tensor_of_shape C (broadcast_size2 sA sB)) := tensor_map2 add.
 #[export] Instance tensor_sub {r} {sA sB : Size r} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor_of_shape A sA) (tensor_of_shape B sB) (tensor_of_shape C (broadcast_size2 sA sB)) := tensor_map2 sub.

@@ -5,6 +5,7 @@ theories/max_parameters.v
 theories/Einops/Parsing.v
 theories/Torch/FancyEinsum.v
 theories/Util/ArrayView.v
+theories/Util/Bool.v
 theories/Util/Classes.v
 theories/Util/Default.v
 theories/Util/ErrorT.v
