@@ -343,17 +343,17 @@ Ltac get_shape val :=
   lazymatch type of val with
   | tensor _ ?shape => shape
   | list ?x
-    => let len := uconstr:(Uint63.of_Z (Z.of_N (N.of_nat (List.length val)))) in
+    => let len := (eval cbv in (Uint63.of_Z (Z.of_N (N.of_nat (List.length val))))) in
        let rest := lazymatch (eval hnf in val) with
                    | cons ?val _ => get_shape val
                    | ?val => fail 1 "Could not find cons in" val
                    end in
-       (eval cbv in (Shape.cons len rest))
+       constr:(Shape.cons len rest)
   | array ?x
-    => let len := uconstr:(PArray.length val) in
+    => let len := (eval cbv in (PArray.length val)) in
        let rest := let val := (eval cbv in (PArray.get val 0)) in
                    get_shape val in
-       (eval cbv in (Shape.cons len rest))
+       constr:(Shape.cons len rest)
   | _ => constr:(Shape.nil)
   end.
 Notation shape_of x := (match x return _ with y => ltac:(let s := get_shape y in exact s) end) (only parsing).

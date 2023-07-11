@@ -3,6 +3,7 @@
 theories/max.v
 theories/max_parameters.v
 theories/Einops/Parsing.v
+theories/Torch/Einsum.v
 theories/Torch/FancyEinsum.v
 theories/Torch/Tensor.v
 theories/Torch/Tensor/Proofs.v
