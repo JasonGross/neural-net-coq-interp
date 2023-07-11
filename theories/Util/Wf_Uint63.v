@@ -159,6 +159,18 @@ Definition prod {A} {oneA : has_one A} {mulA : has_mul A} (start : int) (stop : 
             set (val * f i)
      }})%core.
 
+HERE FIXME
+Definition max {A} {max : has_max A} (xs : array A) : A := reduce_no_init max xs.
+Definition min {A} {min : has_max A} (xs : array A) : A := reduce_no_init min xs.
+Definition mean {A B C} {zero : has_zero A} {add : has_add A} {div_by : has_div_by A B C} {coer : has_coer Z B} (xs : array A) : C
+  := (sum xs / coer (Uint63.to_Z (PArray.length xs)))%core.
+Definition var {A B} {zero : has_zero A} {add : has_add A} {mul : has_mul A} {sub : has_sub A} {div_by : has_div_by A B A} {coer : has_coer Z B} {correction : with_default "correction" Z 1%Z}
+  (xs : array A) : A
+  := (let xbar := mean xs in
+     let N := Uint63.to_Z (PArray.length xs) in
+     ((∑_(xi <- xs) (xi - xbar)²) / (coer (N - correction)))%core).
+
+
 Module Import LoopNotation2.
   Notation "\sum_ ( m <= i < n ) F" := (sum m n 1 (fun i => F%core)).
   Notation "\sum_ ( m ≤ i < n ) F" := (sum m n 1 (fun i => F%core)).
