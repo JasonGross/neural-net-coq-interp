@@ -754,6 +754,7 @@ Section Attention.
         let qk : tensor_of_shape A (batch ::' n_heads ::' pos ::' pos) := qk in
         qk / broadcast' attn_scale)%core.
 
+
   (*HERE*)
 End Attention.
 Eval cbv in embed (tensor_of_list [0; 1]%uint63).

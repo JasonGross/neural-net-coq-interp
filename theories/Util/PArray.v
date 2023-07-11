@@ -30,12 +30,16 @@ Definition map_default {A B} {default : pointed B} (f : A -> B) (xs : array A) :
 Definition map {A B} (f : A -> B) (xs : array A) : array B
   := map_default (default:=f (PArray.default xs)) f xs.
 
-Definition init {A} (len : int) (f : int -> A) : array A
-  := with_state (PArray.make len (f 0))
+Definition init_default {A} {default : pointed A} (len : int) (f : int -> A) : array A
+  := let len := if len <=? PArray.max_length then len else PArray.max_length in
+     with_state (PArray.make len default)
        for (i := 0;; i <? len;; i++) {{
            res <-- get;;
            set (res.[i <- f i])
        }}.
+
+Definition init {A} (len : int) (f : int -> A) : array A
+  := @init_default A (f 0) len f.
 
 Definition map2_default {A B C} {default : pointed C} {reduce_len : with_default "reduce_len" (int -> int -> int) min} (f : A -> B -> C) (xs : array A) (ys : array B) : array C
   := let lenA := PArray.length xs in
