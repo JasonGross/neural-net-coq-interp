@@ -10,17 +10,17 @@ Set Decidable Equality Schemes.
 #[local] Coercion is_true : bool >-> Sortclass.
 
 (* no tensor *)
-Inductive SliceIndexType :=
-| slice_index (s : Slice IndexType)
-| broadcast_one_index
-| single_index (i : IndexType)
+Inductive SliceIndexType : Rank -> Rank -> Type :=
+| slice_index (s : Slice IndexType) : SliceIndexType 1 0
+| broadcast_one_index : SliceIndexType 0 1
+| single_index (i : IndexType) : SliceIndexType 1 0
 .
 
-Inductive FancyIndexType {r} (s : Shape r) :=
-| tensor_index (_ : @tensor r IndexType s)
-| normal_index (_ : SliceIndexType)
+Inductive FancyIndexType {r} (s : Shape r) : Rank -> Rank -> Type :=
+| tensor_index (_ : @tensor r IndexType s) : FancyIndexType s 1 0
+| normal_index {ri ro} (_ : SliceIndexType ri ro) : FancyIndexType s ri ro
 .
-#[global] Arguments normal_index {r s} _.
+#[global] Arguments normal_index {r s ri ro} _.
 #[global] Arguments tensor_index {r s} _.
 #[export] Set Warnings Append "-uniform-inheritance".
 #[global] Set Warnings Append "-uniform-inheritance".
@@ -30,6 +30,13 @@ Inductive FancyIndexType {r} (s : Shape r) :=
 #[export] Set Warnings Append "uniform-inheritance".
 #[global] Set Warnings Append "uniform-inheritance".
 #[global] Coercion single_index : IndexType >-> SliceIndexType.
+Module Type InjectIndexTypeHack.
+  Definition t := IndexType.
+End InjectIndexTypeHack.
+Module InjectIndexType (T : InjectIndexTypeHack).
+  #[global] Identity Coercion inject_raw : T.t >-> IndexType.
+End InjectIndexType.
+Module Export InjectRawIndexType := InjectIndexType RawIndex.RawIndexType.
 
 Module FancySlicingNotations.
   Declare Custom Entry fancy_slice.
@@ -53,6 +60,8 @@ Module SliceIndex.
     Definition t@{u} : Type@{u} := SliceIndexType@{u u}.
     Definition eqb : has_eqb t := SliceIndexType_beq.
   End SliceIndexType.
+
+
 
   #[export] Set Warnings Append "-notation-overridden".
   Include IndexGen.Make SliceIndexType.
