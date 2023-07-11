@@ -1,5 +1,6 @@
+From Coq Require Import Sint63 Uint63.
 From NeuralNetInterp.Torch Require Import Tensor.
-From NeuralNetInterp.Util Require Import Slice Arith.Classes PolymorphicOption.
+From NeuralNetInterp.Util Require Import Slice Arith.Classes Arith.Instances PolymorphicOption Nat Notations.
 Set Implicit Arguments.
 Set Universe Polymorphism.
 Unset Universe Minimization ToSet.
@@ -10,12 +11,11 @@ Set Decidable Equality Schemes.
 #[local] Coercion is_true : bool >-> Sortclass.
 
 (* no tensor *)
-Inductive SliceIndexType : Rank -> Rank -> Type :=
-| slice_index (s : Slice IndexType) : SliceIndexType 1 0
+Inductive SliceIndexType@{u} : Rank -> Rank -> Type@{u} :=
+| slice_index (s : Slice IndexType@{u}) : SliceIndexType 1 1
 | broadcast_one_index : SliceIndexType 0 1
-| single_index (i : IndexType) : SliceIndexType 1 0
+| single_index (i : IndexType@{u}) : SliceIndexType 1 0
 .
-
 Inductive FancyIndexType {r} (s : Shape r) : Rank -> Rank -> Type :=
 | tensor_index (_ : @tensor r IndexType s) : FancyIndexType s 1 0
 | normal_index {ri ro} (_ : SliceIndexType ri ro) : FancyIndexType s ri ro
@@ -30,57 +30,128 @@ Inductive FancyIndexType {r} (s : Shape r) : Rank -> Rank -> Type :=
 #[export] Set Warnings Append "uniform-inheritance".
 #[global] Set Warnings Append "uniform-inheritance".
 #[global] Coercion single_index : IndexType >-> SliceIndexType.
-Module Type InjectIndexTypeHack.
-  Definition t := IndexType.
-End InjectIndexTypeHack.
-Module InjectIndexType (T : InjectIndexTypeHack).
-  #[global] Identity Coercion inject_raw : T.t >-> IndexType.
-End InjectIndexType.
-Module Export InjectRawIndexType := InjectIndexType RawIndex.RawIndexType.
+#[global] Coercion inject_int (x : int) : IndexType := x.
 
 Module FancySlicingNotations.
   Declare Custom Entry fancy_slice.
-  Notation ":" := (slice_index (@Build_Slice _ None None None)) (in custom fancy_slice at level 5).
-  Notation "start : stop : step" := (slice_index (@Build_Slice _ (Some start) (Some stop) (Some step))) (in custom fancy_slice at level 58, start constr at level 59, stop constr at level 59, step constr at level 59, format "start : stop : step").
-  Notation "start :: step" := (slice_index (@Build_Slice _ (Some start) None (Some step))) (in custom fancy_slice at level 58, start constr at level 59, step constr at level 59, format "start :: step").
-  Notation "start : : step" := (slice_index (@Build_Slice _ (Some start) None (Some step))) (in custom fancy_slice at level 58, start constr at level 59, step constr at level 59, format "start : : step").
-  Notation "start :: step" := (slice_index (@Build_Slice _ (Some start) None (Some step))) (in custom fancy_slice at level 58, start constr at level 59, step constr at level 59, format "start :: step").
-  Notation ": stop : step" := (slice_index (@Build_Slice _ None (Some stop) (Some step))) (in custom fancy_slice at level 58, stop constr at level 59, step constr at level 59, format ": stop : step").
-  Notation ": : step" := (slice_index (@Build_Slice _ None None (Some step))) (in custom fancy_slice at level 58, step constr at level 59, format ": : step").
-  Notation ":: step" := (slice_index (@Build_Slice _ None None (Some step))) (in custom fancy_slice at level 58, step constr at level 59, format ":: step").
-  Notation "start : stop" := (slice_index (@Build_Slice _ (Some start) (Some stop) None)) (in custom fancy_slice at level 58, start constr at level 59, stop constr at level 59, format "start : stop").
-  Notation "start :" := (slice_index (@Build_Slice _ (Some start) None None)) (in custom fancy_slice at level 58, start constr at level 59, format "start :").
-  Notation ": stop" := (slice_index (@Build_Slice _ None (Some stop) None)) (in custom fancy_slice at level 58, stop constr at level 59, format ": stop").
-  Notation "'None'" := broadcast_one_index (in custom fancy_slice at level 0).
-  Notation "x" := x (in custom fancy_slice at level 58, x constr at level 59).
+  Notation ":" := (slice_index (@Build_Slice _ None None None)) (in custom fancy_slice at level 59).
+  Notation "start : stop : step" := (slice_index (@Build_Slice _ (Some start) (Some stop) (Some step))) (in custom fancy_slice at level 59, start constr at level 59, stop constr at level 59, step constr at level 59, format "start : stop : step").
+  Notation "start :: step" := (slice_index (@Build_Slice _ (Some start) None (Some step))) (in custom fancy_slice at level 59, start constr at level 59, step constr at level 59, format "start :: step").
+  Notation "start : : step" := (slice_index (@Build_Slice _ (Some start) None (Some step))) (in custom fancy_slice at level 59, start constr at level 59, step constr at level 59, format "start : : step").
+  Notation "start :: step" := (slice_index (@Build_Slice _ (Some start) None (Some step))) (in custom fancy_slice at level 59, start constr at level 59, step constr at level 59, format "start :: step").
+  Notation ": stop : step" := (slice_index (@Build_Slice _ None (Some stop) (Some step))) (in custom fancy_slice at level 59, stop constr at level 59, step constr at level 59, format ": stop : step").
+  Notation ": : step" := (slice_index (@Build_Slice _ None None (Some step))) (in custom fancy_slice at level 59, step constr at level 59, format ": : step").
+  Notation ":: step" := (slice_index (@Build_Slice _ None None (Some step))) (in custom fancy_slice at level 59, step constr at level 59, format ":: step").
+  Notation "start : stop" := (slice_index (@Build_Slice _ (Some start) (Some stop) None)) (in custom fancy_slice at level 59, start constr at level 59, stop constr at level 59, format "start : stop").
+  Notation "start :" := (slice_index (@Build_Slice _ (Some start) None None)) (in custom fancy_slice at level 59, start constr at level 59, format "start :").
+  Notation ": stop" := (slice_index (@Build_Slice _ None (Some stop) None)) (in custom fancy_slice at level 59, stop constr at level 59, format ": stop").
+  Notation "'None'" := broadcast_one_index (in custom fancy_slice at level 59).
+  Notation "x" := x%sint63 (in custom fancy_slice at level 59, x constr at level 55).
 End FancySlicingNotations.
 
 Module SliceIndex.
-  Module SliceIndexType <: IndexType.
-    Definition t@{u} : Type@{u} := SliceIndexType@{u u}.
-    Definition eqb : has_eqb t := SliceIndexType_beq.
+  Module SliceIndexType.
+    Definition t := SliceIndexType.
+    Notation IndexType := t.
   End SliceIndexType.
+  Notation IndexType := SliceIndexType.t.
+  Notation SliceIndexType := SliceIndexType.t.
 
+  Inductive t : Rank (* input *) -> Rank (* output *) -> Type :=
+  | nil : t 0 0
+  | elipsis {r} : t r r
+  | snoc {ris ros ri ro} : t ris ros -> SliceIndexType ri ro -> t (ris +' ri) (ros +' ro).
+  Notation SliceIndex := t.
 
-
-  #[export] Set Warnings Append "-notation-overridden".
-  Include IndexGen.Make SliceIndexType.
-  #[export] Set Warnings Append "notation-overridden".
-
-  Module Export SliceNotations.
+  Module Import SliceIndexNotations0.
+    Export FancySlicingNotations.
+    Declare Scope slice_index_scope.
+    Delimit Scope slice_index_scope with slice_index.
+    Bind Scope slice_index_scope with SliceIndex.
+    Notation "xs ::' x" := (snoc xs x) : slice_index_scope.
+    Notation "[ ]" := nil : slice_index_scope.
+    Notation "[ x ]" := (snoc nil x) : slice_index_scope.
+    Notation "[ x ; y ; .. ; z ]" := (snoc .. (snoc (snoc nil x) y) .. z) : slice_index_scope.
+    Notation "…" := elipsis : slice_index_scope.
     Declare Custom Entry slice_index.
-    Reserved Infix "::'" (in custom slice_index at level 59, left associativity).
-    Notation "xs ::' x" := (snoc xs x) (in custom slice_index).
-    Notation "x ; .. ; z" :=  (snoc .. (snoc nil x) .. z) (in custom slice_index at level 99, x custom fancy_slice, z custom fancy_slice).
-    (*Notation "x :: xs" := (cons x xs) : slice_scope.
-    Notation "s1 ++ s2" := (app s1 s2) : slice_scope.
-    Notation "s1 ++' s2" := (app s1 s2) : slice_scope.*)
-  End SliceNotations.
+    Notation "x" := (snoc nil x) (in custom slice_index at level 200, x custom fancy_slice at level 60).
+    Notation "x , .. , z" := (snoc .. (snoc nil x) .. z) (in custom slice at level 200, x custom fancy_slice at level 60, z custom fancy_slice at level 60).
+    Notation "… , x , .. , z" := (snoc .. (snoc elipsis x) .. z) (in custom slice at level 60, x custom fancy_slice at level 60, z custom fancy_slice at level 60).
+  End SliceIndexNotations0.
+  #[local] Open Scope slice_index_scope.
 
-  Fixpoint rank_of_slice (s :
+  Import Slice.SlicingNotations.
+  Fixpoint transfer_shape {ri ro} (idxs : t ri ro) : Shape ri -> Shape ro
+    := match idxs with
+       | [] => fun tt => tt
+       | … => fun x => x
+       | @snoc ris ros ri ro idxs idx
+         => match idx in Slicing.SliceIndexType ri ro return Shape (ris +' ri) -> Shape (ros +' ro) with
+            | slice_index idx
+              => fun s
+                 => Shape.snoc
+                      (@transfer_shape ris ros idxs (Shape.hd s))
+                      match idx with
+                      | slice[:] => Shape.tl s
+                      | _ => Concrete.length (Slice.norm_concretize idx (Shape.tl s))
+                      end
+            | broadcast_one_index
+              => fun s => Shape.snoc (@transfer_shape ris ros idxs s) 1
+            | single_index idx
+              => fun s => @transfer_shape ris ros idxs (Shape.hd s)
+            end
+       end.
+
+  Fixpoint slice {A ri ro} (idxs : t ri ro) : forall {s : Shape ri}, tensor A s -> tensor A (transfer_shape idxs s)
+    := match idxs with
+       | [] => fun _s t idxs' => t tt
+       | … => fun _s t idxs' => t idxs'
+       | @snoc ris ros ri ro idxs idx
+         => match idx in Slicing.SliceIndexType ri ro return forall s : Shape (ris +' ri), tensor A s -> tensor A (transfer_shape (idxs ::' idx) s) with
+            | slice_index sl
+              => fun s t idxs' (* adjust slice at last index *)
+                 => let idx := RawIndex.tl idxs' in
+                    @slice A ris ros idxs (Shape.hd s) (fun idxs' => t (RawIndex.snoc idxs' (Slice.invert_index sl (Shape.tl s) idx))) (RawIndex.hd idxs')
+            | broadcast_one_index
+              => fun s t idxs' (* ignore final idxs', which is just 1 *)
+                 => @slice A ris ros idxs s t (RawIndex.hd idxs')
+            | single_index idx
+              => fun s t idxs' (* adjoin idx as final index *)
+                 => @slice A ris ros idxs (Shape.hd s) (fun idxs' => t (RawIndex.snoc idxs' (adjust_index_for (Shape.tl s) idx))) idxs'
+            end
+       end.
+
+  Module Import SliceIndexNotations.
+    Export SliceIndexNotations0.
+    Notation "t .[ x , .. , y ]"
+      := (SliceIndex.slice (snoc .. (snoc nil x) .. y) t%raw_tensor)
+           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ x ,  .. ,  y ]")
+        : raw_tensor_scope.
+    Notation "t .[ x , .. , y ]"
+      := (SliceIndex.slice (snoc .. (snoc nil x) .. y) t%tensor)
+           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ x ,  .. ,  y ]")
+        : tensor_scope.
+    Notation "t .[ … , x , .. , y ]"
+      := (SliceIndex.slice (snoc .. (snoc elipsis x) .. y) t%raw_tensor)
+           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ … ,  x ,  .. ,  y ]")
+        : raw_tensor_scope.
+    Notation "t .[ … , x , .. , y ]"
+      := (SliceIndex.slice (snoc .. (snoc elipsis x) .. y) t%tensor)
+           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ … ,  x ,  .. ,  y ]")
+        : tensor_scope.
+    Notation "t .[< i >]"
+      := (SliceIndex.slice (snoc nil i) t%tensor)
+           (at level 2, i custom fancy_slice at level 60, left associativity, format "t .[< i >]")
+        : tensor_scope.
+  End SliceIndexNotations.
 End SliceIndex.
 
+Export SliceIndex.SliceIndexNotations.
 
+(*
+Local Open Scope tensor_scope.
+Eval cbn in  _.[:, None, 0].
+*)
 
 (*
 Module FancyIndex.

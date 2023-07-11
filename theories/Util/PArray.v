@@ -1,5 +1,5 @@
 From Coq Require Import Bool ZArith NArith Sint63 Uint63 List PArray Wellfounded Lia.
-From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Slice Arith.Classes Arith.Instances Default Notations Bool.
+From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Slice Arith.Classes Arith.Instances Default Notations Bool PolymorphicOption.
 Local Open Scope list_scope.
 Set Implicit Arguments.
 Import ListNotations.
@@ -151,7 +151,7 @@ Import Slice.ConcreteProjections.
 Definition slice {A} (xs : array A) (s : Slice int) : array A
   := let len := PArray.length xs in
      let s := Slice.norm_concretize s len in
-     if (s.(start) =? 0) && (s.(step) =? 1) && (s.(stop) =? len)
+     if (s.(start) =? 0) && (s.(step) =? 1) && (Option.value s.(stop) len =? len)
      then
        xs
      else

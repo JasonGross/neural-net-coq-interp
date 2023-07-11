@@ -351,7 +351,7 @@ Definition tensor {r : Rank} (A : Type) (s : Shape r) : Type
 Declare Scope tensor_scope.
 Delimit Scope tensor_scope with tensor.
 Declare Scope raw_tensor_scope.
-Delimit Scope raw_tensor_scope with tensor.
+Delimit Scope raw_tensor_scope with raw_tensor.
 Bind Scope tensor_scope with tensor_of_rank.
 Bind Scope tensor_scope with tensor.
 Local Open Scope tensor_scope.
@@ -489,8 +489,11 @@ Module List.
   Qed.
 End List.
 
+Definition adjust_index_for (s : ShapeType) : Index.IndexType -> RawIndex.IndexType
+  := fun i => i mod s.
+
 Definition adjust_indices_for {r} (s : Shape r) : Index r -> RawIndex r
-  := Index.map2 (fun s i => i mod s) s.
+  := Index.map2 adjust_index_for s.
 
 Definition with_shape {r A} (s : Shape r) : @Shape.curriedT r A -> A
   := fun f => Shape.uncurry f s.
@@ -498,12 +501,12 @@ Definition with_shape {r A} (s : Shape r) : @Shape.curriedT r A -> A
 Notation of_array ls := (PArray.to_tensor ls) (only parsing).
 Notation of_list ls := (List.to_tensor ls) (only parsing).
 
-Definition repeat {r A} (x : A) {s : Shape r} : tensor A s
+Definition repeat' {r A} (x : A) {s : Shape r} : tensor A s
   := fun _ => x.
 Definition ones {r} {A} {one : has_one A} (s : Shape r) : tensor A s
-  := repeat one.
+  := repeat' one.
 Definition zeros {r} {A} {zero : has_zero A} (s : Shape r) : tensor A s
-  := repeat zero.
+  := repeat' zero.
 
 Definition raw_get {r A} {s : Shape r} (t : tensor A s) (idxs : RawIndex r) : A
   := t idxs.
@@ -583,6 +586,10 @@ Definition reshape_app_combine {A r1 r2 s1 s2} : tensor (tensor A s2) s1 -> @ten
 (* infer s1 s2 from the conclusion *)
 #[global] Arguments reshape_app_combine A & r1 r2 s1 s2 _.
 #[global] Arguments reshape_app_split A & r1 r2 s1 s2 _.
+Definition reshape_app_split' {A r1 r2 s1 s2} : @tensor (r1 +' r2) A (s1 ++' s2) -> tensor (tensor A s2) s1
+  := reshape_app_split.
+Definition reshape_app_combine' {A r1 r2 s1 s2} : tensor (tensor A s2) s1 -> @tensor (r1 +' r2) A (s1 ++' s2)
+  := reshape_app_combine.
 Definition reshape_snoc_split {A r s1 s2} : @tensor (r +' 1) A (s1 ::' s2) -> tensor (tensor A [s2]) s1
   := RawIndex.curry_radd.
 Definition reshape_snoc_combine {A r s1 s2} : tensor (tensor A [s2]) s1 -> @tensor (r +' 1) A (s1 ::' s2)
@@ -634,9 +641,11 @@ Definition slice_none_0 {A s} : tensor_of_shape A s -> tensor_of_shape A ([1] ++
 *)
 
 Definition broadcast' {A} (x : A) {r : Rank} : tensor A (@Shape.ones r)
-  := repeat x.
+  := repeat' x.
 Definition broadcast {r A} {s : Shape r} (x : tensor A s) {r' : Rank} : tensor A (@Shape.ones r' ++' s)
   := reshape_app_combine (broadcast' x).
+Definition repeat {r A} {s : Shape r} (x : tensor A s) {r' : Rank} (s' : Shape r') : tensor A (s' ++' s)
+  := reshape_app_combine (repeat' x (s:=s')).
 
 Definition keepdim_gen {r} {s : Shape r} {A B} (f : A -> tensor B s) : A -> tensor B ([1] ++' s)
   := fun a => broadcast (f a).

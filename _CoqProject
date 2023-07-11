@@ -24,6 +24,7 @@ theories/Util/PArray.v
 theories/Util/Pointed.v
 theories/Util/PolymorphicOption.v
 theories/Util/PrimitiveProd.v
+theories/Util/RList.v
 theories/Util/Slice.v
 theories/Util/Uint63.v
 theories/Util/Wf_Uint63.v
