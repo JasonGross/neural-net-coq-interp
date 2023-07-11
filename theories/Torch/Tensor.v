@@ -1,6 +1,6 @@
 From Coq.Structures Require Import Equalities.
 From Coq Require Import ZArith Sint63 Uint63 List PArray Lia.
-From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool PrimitiveProd.
+From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool (*PrimitiveProd*).
 From NeuralNetInterp.Util Require Nat Wf_Uint63.
 From NeuralNetInterp.Util Require Import PArray.Proofs List.Proofs.
 Import Util.Nat.Notations.
@@ -11,7 +11,7 @@ Set Universe Polymorphism.
 Unset Universe Minimization ToSet.
 Set Polymorphic Inductive Cumulativity.
 Import ListNotations.
-Import PrimitiveProd.Primitive.
+(*Import PrimitiveProd.Primitive.*)
 
 Definition Rank := nat.
 #[global] Bind Scope nat_scope with Rank.
@@ -126,43 +126,31 @@ Module IndexGen.
 
     Fixpoint curriedT_dep {r : Rank} : (Index r -> Type) -> Type
       := match r with
-         | O => fun f => f tt
-         | S r => fun f => curriedT_dep (fun init => forall i, f (init, i))
+         | O => fun f => f []
+         | S r => fun f => curriedT_dep (fun init => forall i, f (init ::' i))
          end.
     Definition curriedT {r} (T : Type) : Type := @curriedT_dep r (fun _ => T).
 
-    Fixpoint uncurry_dep {r} : forall {T}, @curriedT_dep r T -> (forall i : Index r, T i)
-      := match r with
-         | O => fun T f 'tt => f
-         | S r => fun T f '(rest, i) => @uncurry_dep r _ f rest i
-         end.
     Fixpoint curry_dep {r} : forall {T}, (forall i : Index r, T i) -> @curriedT_dep r T
       := match r return forall {T}, (forall i : Index r, T i) -> @curriedT_dep r T with
-         | O => fun T f => f tt
-         | S r => fun T f => @curry_dep r _ (fun rest i => f (rest, i))
+         | O => fun T f => f []
+         | S r => fun T f => @curry_dep r _ (fun rest i => f (rest ::' i))
          end.
     Definition curry {r T} : (Index r -> T) -> @curriedT r T
       := @curry_dep r (fun _ => T).
+    Fixpoint uncurry_map_dep {r} : forall {A B}, (forall i, A i -> B i) -> @curriedT_dep r A -> (forall i : Index r, B i)
+      := match r return forall {A B}, (forall i, A i -> B i) -> @curriedT_dep r A -> (forall i : Index r, B i) with
+         | O => fun A B F f 'tt => F _ f
+         | S r => fun A B F f '(rest, i)
+                  => @uncurry_map_dep
+                       r (fun rest => forall i, A (rest ::' i)) (fun rest => B (rest ::' i))
+                       (fun rest f => F _ (f _))
+                       f rest
+         end.
+    Definition uncurry_dep {r} {T} : @curriedT_dep r T -> (forall i : Index r, T i)
+      := @uncurry_map_dep r T T (fun _ x => x).
     Definition uncurry {r T} : @curriedT r T -> (Index r -> T)
-      := @uncurry_dep r (fun _ => T).
-
-    Module UncurryNotation.
-      Notation "'uncurry_fun' x1 .. xn => body"
-        := (match _ return _ with
-            | ty => @uncurry 1%nat _ (fun x1 => .. (@uncurry 1%nat _ (fun xn => match body return @curriedT O ty with v => v end)) .. )
-            end)
-             (only parsing, at level 200, x1 binder, xn binder, body at level 200).
-    End UncurryNotation.
-
-    Module Export IndexNotations.
-      Include IndexNotations1.
-      (*Include UncurryNotation.*)
-    End IndexNotations.
-
-    Module UncurryCoercions.
-      Coercion uncurry_dep : curriedT_dep >-> Funclass.
-      Coercion uncurry : curriedT >-> Funclass.
-    End UncurryCoercions.
+      := uncurry_dep.
 
     Fixpoint split_radd {r1 r2} {struct r2} : Index (r1 +' r2) -> Index r1 * Index r2
       := match r2 with
@@ -188,6 +176,24 @@ Module IndexGen.
       := curry_radd.
     Definition uncurry_S {A r} : (Index 1 -> Index r -> A) -> (Index (1 +' r) -> A)
       := uncurry_radd.
+
+    Module UncurryNotation.
+      Notation "'uncurry_fun' x1 .. xn => body"
+        := (match _ return _ with
+            | ty => uncurry_S (fun x1 => .. (uncurry_S (fun xn => match body return Index 0 -> ty with v => fun 'tt => v end)) .. )
+            end)
+             (only parsing, at level 200, x1 binder, xn binder, body at level 200).
+    End UncurryNotation.
+
+    Module Export IndexNotations.
+      Include IndexNotations1.
+      (*Include UncurryNotation.*)
+    End IndexNotations.
+
+    Module UncurryCoercions.
+      Coercion uncurry_dep : curriedT_dep >-> Funclass.
+      Coercion uncurry : curriedT >-> Funclass.
+    End UncurryCoercions.
 
     Fixpoint droplastn {r : Rank} (n : Rank) : Index r -> Index (r -' n)
       := match n, r with
@@ -253,6 +259,7 @@ Module Shape.
     Declare Scope shape_scope.
     Delimit Scope shape_scope with shape.
     Bind Scope shape_scope with t.
+    Bind Scope uint63_scope with IndexType.
     Notation "xs ::' x" := (snoc xs x) : shape_scope.
     Notation "[ ]" := nil : shape_scope.
     Notation "[ x ]" := (snoc nil x) : shape_scope.
@@ -289,6 +296,7 @@ Module RawIndex.
     Declare Scope raw_index_scope.
     Delimit Scope raw_index_scope with raw_index.
     Bind Scope raw_index_scope with t.
+    Bind Scope uint63_scope with IndexType.
     Notation "xs ::' x" := (snoc xs x) : raw_index_scope.
     Notation "[ ]" := nil : raw_index_scope.
     Notation "[ x ]" := (snoc nil x) : raw_index_scope.
@@ -316,11 +324,13 @@ Module Index.
 
   Include IndexGen.Make IndexType.
   Export IndexNotations.
+  Bind Scope sint63_scope with IndexType.
 End Index.
 Notation IndexType := Index.IndexType.
 Notation Index := Index.Index.
 Export Index.IndexNotations.
 Export (hints) Index.
+Bind Scope sint63_scope with Index.IndexType.
 
 Definition tensor_of_rank (A : Type) (r : Rank) : Type
   := RawIndex r -> A.
@@ -398,6 +408,7 @@ Module PArray.
     { destruct idxs; reflexivity. }
     { cbv [is_true] in *.
       rewrite RawIndex.expand_ltb, Bool.andb_true_iff in in_bounds, in_max_bounds.
+      destruct idxs, s.
       rewrite IH by first [ apply in_bounds | apply in_max_bounds ].
       rewrite PArray.get_init_default.
       rewrite RawIndex.tl_repeat in *.
@@ -446,6 +457,7 @@ Module List.
     { destruct idxs; reflexivity. }
     { cbv [is_true] in *.
       rewrite RawIndex.expand_ltb, Bool.andb_true_iff in in_bounds.
+      destruct idxs as [idxs idx], s as [ss s].
       rewrite IH by first [ apply in_bounds | apply in_max_bounds ].
       cbv [nth_default].
       rewrite nth_error_map.
@@ -453,8 +465,8 @@ Module List.
       cbv [Classes.ltb Classes.leb RawIndex.RawIndexType.ltb RawIndex.tl] in *.
       cbn in in_bounds.
       rewrite Uint63.ltb_spec in in_bounds.
-      destruct (Uint63.to_Z_bounded (snd idxs)).
-      destruct (Uint63.to_Z_bounded (snd s)).
+      destruct (Uint63.to_Z_bounded idx).
+      destruct (Uint63.to_Z_bounded s).
       destruct Nat.ltb eqn:H'; cbn [option_map].
       1:rewrite Nat.ltb_lt, <- Z2Nat.inj_lt in H' by assumption.
       2:rewrite Nat.ltb_ge, <- Z2Nat.inj_le in H' by assumption.
@@ -483,6 +495,11 @@ Definition raw_get {r A} {s : Shape r} (t : tensor A s) (idxs : RawIndex r) : A
   := t idxs.
 Definition get {r A} {s : Shape r} (t : tensor A s) (idxs : Index r) : A
   := raw_get t (adjust_indices_for s idxs).
+
+Definition curried_raw_get {r A} {s : Shape r} (t : tensor A s) : @RawIndex.curriedT r A
+  := RawIndex.curry (fun idxs => raw_get t idxs).
+Definition curried_get {r A} {s : Shape r} (t : tensor A s) : @Index.curriedT r A
+  := Index.curry (fun idxs => get t idxs).
 
 Definition map {r A B} {s : Shape r} (f : A -> B) (t : tensor A s) : tensor B s
   := fun i => f (t i).
@@ -553,6 +570,10 @@ Definition reshape_snoc_split {A r s1 s2} : @tensor (r +' 1) A (s1 ::' s2) -> te
   := RawIndex.curry_radd.
 Definition reshape_snoc_combine {A r s1 s2} : tensor (tensor A [s2]) s1 -> @tensor (r +' 1) A (s1 ::' s2)
   := RawIndex.uncurry_radd.
+Definition uncurry {r A} {s : Shape r} : @RawIndex.curriedT r A -> tensor A s
+  := RawIndex.uncurry.
+Definition curry {r A} {s : Shape r} : tensor A s -> @RawIndex.curriedT r A
+  := RawIndex.curry.
 (*
 Definition reshape_S_fun_combine {I A} {r : Rank} : (I -> tensor_fun_of_rank I A r) -> tensor_fun_of_rank I A (1 +' r)
   := match reshape_app_combine_gen (r1:=1) (r2:=r) with x => x end.
