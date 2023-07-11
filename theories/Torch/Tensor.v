@@ -19,13 +19,18 @@ Definition Rank := nat.
 
 Module Type IndexType.
   Parameter t : Type.
+  Notation IndexType := t.
+End IndexType.
+
+Module Type ExtendedIndexType.
+  Include IndexType.
   Parameter one : has_one t.
   Parameter leb : has_leb t.
   Parameter ltb : has_ltb t.
   Parameter eqb : has_eqb t.
-  #[export] Existing Instances one leb.
-  Notation IndexType := t.
-End IndexType.
+  #[export] Existing Instances eqb.
+  #[export] Existing Instances one ltb leb.
+End ExtendedIndexType.
 
 Module IndexGen.
   Module Make (IndexType : IndexType).
@@ -90,8 +95,6 @@ Module IndexGen.
     End repeat.
 
     Definition item : Index 1 -> IndexType := tl.
-
-    Definition ones {r} := repeat 1%core r.
 
     Fixpoint map {r} (f : IndexType -> IndexType) : Index r -> Index r
       := match r with
@@ -208,26 +211,35 @@ Module IndexGen.
          | _, 0%nat => fun _ => []
          | S n, S r => fun xs => lastn n (hd xs) ::' (tl xs)
          end.
+  End Make.
 
-    #[export] Instance leb {r : Rank} : has_leb (Index r)
-      := fold_map2 IndexType.leb andb true.
+  Module Type MakeSig (IndexType : IndexType) := Nop <+ Make IndexType.
+
+  Module ExtendedMake (IndexType : ExtendedIndexType).
+    Import (hints) IndexType.
+    Include Make IndexType.
+
+    Definition ones {r} := repeat 1%core r.
+
     #[export] Instance eqb {r : Rank} : has_eqb (Index r)
       := fold_map2 IndexType.eqb andb true.
+    #[export] Instance leb {r : Rank} : has_leb (Index r)
+      := fold_map2 IndexType.leb andb true.
     #[export] Instance ltb {r : Rank} : has_ltb (Index r)
       := match r with O => fun _ _ => false | _ => fold_map2 IndexType.ltb andb true end.
-    Lemma expand_leb {r} (xs ys : Index (S r)) : ((xs <=? ys) = ((hd xs <=? hd ys) && (tl xs <=? tl ys)))%core%bool.
-    Proof.
-      cbv [Classes.leb]; cbn.
-      set (b := IndexType.leb _ _); clearbody b.
-      revert b; induction r as [|r IH]; cbn; try reflexivity; intros.
-      rewrite !IH; destruct b, IndexType.leb, leb; reflexivity.
-    Qed.
     Lemma expand_eqb {r} (xs ys : Index (S r)) : ((xs =? ys) = ((hd xs =? hd ys) && (@Classes.eqb _ IndexType.eqb (tl xs) (tl ys))))%core%bool.
     Proof.
       cbv [Classes.eqb]; cbn.
       set (b := IndexType.eqb _ _); clearbody b.
       revert b; induction r as [|r IH]; cbn; try reflexivity; intros.
       rewrite !IH; destruct b, IndexType.eqb, eqb; reflexivity.
+    Qed.
+    Lemma expand_leb {r} (xs ys : Index (S r)) : ((xs <=? ys) = ((hd xs <=? hd ys) && (tl xs <=? tl ys)))%core%bool.
+    Proof.
+      cbv [Classes.leb]; cbn.
+      set (b := IndexType.leb _ _); clearbody b.
+      revert b; induction r as [|r IH]; cbn; try reflexivity; intros.
+      rewrite !IH; destruct b, IndexType.leb, leb; reflexivity.
     Qed.
     Lemma expand_ltb {r} (xs ys : Index (S r)) : ((xs <? ys) = (match r with O => true | _ => hd xs <? hd ys end && (@Classes.ltb _ IndexType.ltb (tl xs) (tl ys))))%core%bool.
     Proof.
@@ -237,13 +249,13 @@ Module IndexGen.
       rewrite !IH; destruct b, IndexType.ltb, r; try reflexivity.
       all: destruct fold_map2; reflexivity.
     Qed.
-  End Make.
+  End ExtendedMake.
 
-  Module Type MakeSig (IndexType : IndexType) := Nop <+ Make IndexType.
+  Module Type ExtendedMakeSig (IndexType : ExtendedIndexType) := Nop <+ ExtendedMake IndexType.
 End IndexGen.
 
 Module Shape.
-  Module ShapeType <: IndexType.
+  Module ShapeType <: ExtendedIndexType.
     Definition t : Type := int.
     #[global] Strategy 100 [t].
     #[global] Bind Scope uint63_scope with t.
@@ -253,7 +265,7 @@ Module Shape.
     Definition ltb : has_ltb t := Uint63.ltb.
   End ShapeType.
 
-  Include IndexGen.Make ShapeType.
+  Include IndexGen.ExtendedMake ShapeType.
 
   Module Export ShapeNotations.
     Declare Scope shape_scope.
@@ -280,7 +292,7 @@ Export Shape.ShapeNotations.
 Export (hints) Shape.
 
 Module RawIndex.
-  Module RawIndexType <: IndexType.
+  Module RawIndexType <: ExtendedIndexType.
     Definition t : Type := int.
     #[global] Strategy 100 [t].
     #[global] Bind Scope uint63_scope with t.
@@ -290,7 +302,7 @@ Module RawIndex.
     Definition ltb : has_ltb t := Uint63.ltb.
   End RawIndexType.
 
-  Include IndexGen.Make RawIndexType.
+  Include IndexGen.ExtendedMake RawIndexType.
 
   Module Export RawIndexNotations.
     Declare Scope raw_index_scope.
@@ -312,7 +324,7 @@ Export RawIndex.RawIndexNotations.
 Export (hints) RawIndex.
 
 Module Index.
-  Module IndexType <: IndexType.
+  Module IndexType <: ExtendedIndexType.
     Definition t : Type := int.
     #[global] Strategy 100 [t].
     #[global] Bind Scope sint63_scope with t.
@@ -322,7 +334,7 @@ Module Index.
     Definition ltb : has_ltb t := Sint63.ltb.
   End IndexType.
 
-  Include IndexGen.Make IndexType.
+  Include IndexGen.ExtendedMake IndexType.
   Export IndexNotations.
   Bind Scope sint63_scope with IndexType.
 End Index.

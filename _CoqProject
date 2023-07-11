@@ -5,6 +5,7 @@ theories/max_parameters.v
 theories/Einops/Parsing.v
 theories/Torch/Einsum.v
 theories/Torch/FancyEinsum.v
+theories/Torch/Slicing.v
 theories/Torch/Tensor.v
 theories/Torch/Tensor/Proofs.v
 theories/Util/ArrayView.v
@@ -21,6 +22,7 @@ theories/Util/Notations.v
 theories/Util/Option.v
 theories/Util/PArray.v
 theories/Util/Pointed.v
+theories/Util/PolymorphicOption.v
 theories/Util/PrimitiveProd.v
 theories/Util/Slice.v
 theories/Util/Uint63.v

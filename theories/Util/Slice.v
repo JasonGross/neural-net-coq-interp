@@ -1,6 +1,6 @@
 (* Implements a view of an array, a la Python lists *)
 From NeuralNetInterp Require Import Util.Classes.
-From NeuralNetInterp.Util Require Import ErrorT Arith.Classes Option.
+From NeuralNetInterp.Util Require Import ErrorT Arith.Classes PolymorphicOption.
 #[local] Set Primitive Projections.
 #[local] Set Implicit Arguments.
 #[local] Set Universe Polymorphism.
