@@ -164,7 +164,7 @@ Definition slice {A} (xs : array A) (s : Slice int) : array A
          }}.
 
 Export SliceNotations.
-Notation "x .[ [ s ] ]" := (slice x s) (at level 2, s custom slice at level 60, format "x .[ [ s ] ]") : core_scope.
+Notation "x .[ < s > ]" := (slice x s) (at level 2, s custom slice at level 60, format "x .[ < s > ]") : core_scope.
 
 Definition repeat {A} (xs : A) (count : int) : array A
   := PArray.make count xs.

@@ -338,6 +338,8 @@ Definition tensor {r : Rank} (A : Type) (s : Shape r) : Type
   := tensor_of_rank A r.
 Declare Scope tensor_scope.
 Delimit Scope tensor_scope with tensor.
+Declare Scope raw_tensor_scope.
+Delimit Scope raw_tensor_scope with tensor.
 Bind Scope tensor_scope with tensor_of_rank.
 Bind Scope tensor_scope with tensor.
 Local Open Scope tensor_scope.
@@ -495,6 +497,9 @@ Definition raw_get {r A} {s : Shape r} (t : tensor A s) (idxs : RawIndex r) : A
   := t idxs.
 Definition get {r A} {s : Shape r} (t : tensor A s) (idxs : Index r) : A
   := raw_get t (adjust_indices_for s idxs).
+
+Notation "x .[ y ]" := (get x y) : tensor_scope.
+Notation "x .[ y ]" := (raw_get x y) : raw_tensor_scope.
 
 Definition curried_raw_get {r A} {s : Shape r} (t : tensor A s) : @RawIndex.curriedT r A
   := RawIndex.curry (fun idxs => raw_get t idxs).

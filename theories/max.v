@@ -12,6 +12,7 @@ Set Universe Polymorphism.
 Unset Universe Minimization ToSet.
 Set Polymorphic Inductive Cumulativity.
 Import ListNotations.
+Local Open Scope raw_tensor_scope.
 (* Should use IEEE 754 floats from flocq, but let's use rationals for now for ease of linearity, proving, etc *)
 (* Based on https://colab.research.google.com/drive/1N4iPEyBVuctveCA0Zre92SpfgH6nmHXY#scrollTo=Q1h45HnKi-43, Taking the minimum or maximum of two ints *)
 
@@ -44,14 +45,14 @@ Definition ln_final_b : tensor _ _ := Eval cbv in tensor_of_list max_parameters.
 Definition ln_final_w : tensor _ _ := Eval cbv in tensor_of_list max_parameters.ln_final_w.
 
 Definition embed {r} {s : Shape r} (tokens : tensor int s) : tensor Q (s ::' Shape.tl (shape_of W_E))
-  := Tensor.map (fun i => W_E.[i]) tokens.
+  := fun '(rest, j) => W_E.[[tokens.[rest] ; j]].
 
 Definition pos_embed {r} {s : Shape (S r)} (tokens : tensor int s)
-  (tokens_length := stl s) (* s[-1] *)
-  (batch := sdroplastn 1 s) (* s[:-1] *)
-  (d_model := stl (shape_of W_pos)) (* s[-1] *)
+  (tokens_length := Shape.tl s) (* s[-1] *)
+  (batch := Shape.droplastn 1 s) (* s[:-1] *)
+  (d_model := Shape.tl (shape_of W_pos)) (* s[-1] *)
   : tensor Q (batch ++' [tokens_length] ::' d_model)
-  := repeat (W_pos.[[:tokens_length]]) batch.
+  := repeat (W_pos.[< :tokens_length >]) batch.
 
 Section layernorm.
   Context {r A} {s : Shape r} {d_model}
