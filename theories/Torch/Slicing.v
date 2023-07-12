@@ -23,7 +23,10 @@ Inductive FancyIndexType {r} (s : Shape r) : Rank -> Rank -> Type :=
 | normal_index {ri ro} (_ : SliceIndexType ri ro) : FancyIndexType s ri ro
 .
 Set Printing Universes.
+Set Printing All.
 Print FancyIndexType.
+Print tensor_of_rank.
+Print R
 TODO BOOL indexing
 Print tensor_of_rank.
 Set Printing All.
@@ -34,6 +37,7 @@ Print RawIndex.t.
 #[global] Set Warnings Append "-uniform-inheritance".
 #[global] Coercion slice_index : Slice >-> SliceIndexType.
 #[global] Coercion tensor_index : tensor >-> FancyIndexType.
+#[global] Coercion bool_tensor_index : tensor >-> FancyIndexType.
 #[global] Coercion normal_index : SliceIndexType >-> FancyIndexType.
 #[export] Set Warnings Append "uniform-inheritance".
 #[global] Set Warnings Append "uniform-inheritance".

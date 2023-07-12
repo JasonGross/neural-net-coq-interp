@@ -27,7 +27,8 @@ Class has_div_by A B C := div : A -> B -> C.
 Notation has_div A := (has_div_by A A A).
 Class has_pow_by A B C := pow : A -> B -> C.
 Notation has_pow A := (has_pow_by A A A).
-Class has_exp A := exp : A -> A.
+Class has_exp_to A B := exp : A -> B.
+Notation has_exp A := (has_exp_to A A).
 Class has_coer A B := coer : A -> B.
 Definition has_coer_from (avoid : TyList) := has_coer.
 Definition has_coer_to (avoid : TyList) := has_coer.
@@ -80,7 +81,7 @@ Notation "1" := one : core_scope.
 #[export] Hint Mode has_div_by ! - - : typeclass_instances.
 #[export] Hint Mode has_pow_by ! - - : typeclass_instances.
 #[export] Hint Mode has_pow_by - ! - : typeclass_instances.
-#[export] Hint Mode has_exp ! : typeclass_instances.
+#[export] Hint Mode has_exp_to ! - : typeclass_instances.
 #[export] Hint Mode has_opp ! : typeclass_instances.
 #[export] Hint Mode has_zero ! : typeclass_instances.
 #[export] Hint Mode has_one ! : typeclass_instances.

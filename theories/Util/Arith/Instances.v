@@ -106,6 +106,9 @@ Local Open Scope Z_scope.
 #[export] Instance Z_has_one : has_one Z := 1.
 #[export] Instance Z_has_sqrt : has_sqrt Z := Z.sqrt.
 
+#[export] Instance default_pow_Z {A} {oneA : has_one A} {mulA : has_mul A} {divA : has_div A} : has_pow_by A Z A | 10
+  := @pow_Z A oneA mulA divA.
+
 Local Open Scope Q_scope.
 #[global] Coercion inject_Z : Z >-> Q.
 #[export] Instance inject_Z_coer : has_coer Z Q := fun x => x.
@@ -122,8 +125,7 @@ Local Open Scope Q_scope.
 #[export] Instance Q_has_one : has_one Q := 1.
 #[export] Instance Q_has_sqrt : has_sqrt Q := Qsqrt.
 #[export] Instance Q_has_pow_Z : has_pow_by Q Z Q := Qpower.
-HERE FIGURE OUT power of Q -> Q -> Q https://stackoverflow.com/a/3519308/377022 or taylor expansion
-(*#[export] Instance Q_has_exp : has_exp Q *)
+#[export] Instance Q_has_exp : has_exp Q := Qexp.
 
 Local Open Scope int63_scope.
 #[export] Instance int_has_eqb : has_eqb int := Uint63.eqb.

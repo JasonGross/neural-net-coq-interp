@@ -1,8 +1,8 @@
 From Coq.Structures Require Import Equalities.
 From Coq Require Import ZArith Sint63 Uint63 List PArray Lia.
+From NeuralNetInterp.Util Require Nat.
+From NeuralNetInterp.Util Require Import Wf_Uint63 PArray.Proofs List.Proofs.
 From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool (*PrimitiveProd*).
-From NeuralNetInterp.Util Require Nat Wf_Uint63.
-From NeuralNetInterp.Util Require Import PArray.Proofs List.Proofs.
 Import Util.Nat.Notations.
 Import Util.Wf_Uint63.LoopNotation.
 Local Open Scope list_scope.
@@ -344,10 +344,12 @@ Export Index.IndexNotations.
 Export (hints) Index.
 Bind Scope sint63_scope with Index.IndexType.
 
-Definition tensor_of_rank (A : Type) (r : Rank) : Type
-  := RawIndex r -> A.
-Definition tensor {r : Rank} (A : Type) (s : Shape r) : Type
-  := tensor_of_rank A r.
+Definition tensor_of_rank@{a r} (A : Type@{a}) (r : Rank)
+  := RawIndex@{r} r -> A.
+(* we could have a separate universe for the shape, but since the shape argument is a phantom one anyway, we don't bother *)
+Definition tensor@{a r} {r : Rank} (A : Type@{a}) (s : Shape@{r} r)
+  := tensor_of_rank@{a r} A r.
+
 Declare Scope tensor_scope.
 Delimit Scope tensor_scope with tensor.
 Declare Scope raw_tensor_scope.
@@ -665,6 +667,11 @@ Definition reduce_axis_m1 {r A B} {s1 : Shape r} {s2} {keepdim : with_default "k
           return tensor A (s1 ::' s2) -> tensor B (s1 ++' if keepdim return Shape (if keepdim then _ else _) then [1] else [])
      then fun t idxs => reduce_axis_m1' reduction t (RawIndex.hd idxs)
      else reduce_axis_m1' reduction.
+
+Definition softmax_dim_m1 {r A B C} {addB : has_add B} {expA : has_exp_to A B} {zeroB : has_zero B} {divB : has_div_by B B C} {s0 : Shape r} {s'} (s:=(s0 ::' s')%shape) (t : tensor A s) : tensor C s
+  := (let exp_t : tensor B s := map exp t in
+      let sum_exp_t : tensor B s := reduce_axis_m1 (keepdim:=true) Wf_Uint63.sum exp_t in
+      exp_t / sum_exp_t)%core.
 
 Definition to_bool {A} {zero : has_zero A} {eqb : has_eqb A} {r} {s : Shape r} (xs : tensor A s) : tensor bool s
   := map (fun x => x ≠? 0)%core xs.

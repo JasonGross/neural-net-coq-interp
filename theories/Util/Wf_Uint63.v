@@ -5,8 +5,10 @@ Set Polymorphic Inductive Cumulativity.
 Unset Universe Minimization ToSet.
 Local Open Scope uint63_scope.
 
+#[local] Set Warnings Append "-ambiguous-paths".
 #[local] Coercion Uint63.to_Z : int >-> Z.
 #[local] Coercion Z.to_nat : Z >-> nat.
+#[local] Set Warnings Append "ambiguous-paths".
 #[local] Coercion is_true : bool >-> Sortclass.
 Definition ltof {A} (f : A -> int) (a b : A) := f a <? f b.
 
