@@ -1,9 +1,12 @@
 From Coq Require Import List PArray Sint63 Uint63 Arith PArith NArith ZArith QArith.
-From NeuralNetInterp.Util Require Import Arith.Classes Arith.QArith.
+From NeuralNetInterp.Util.Arith Require Import Classes QArith ZArith.
 Import ListNotations.
 Set Implicit Arguments.
 #[global] Set Warnings Append "-ambiguous-paths".
 #[export] Set Warnings Append "-ambiguous-paths".
+
+#[export] Instance default_pow_N {A} {oneA : has_one A} {mulA : has_mul A} : has_pow_by A N A
+  := @pow_N A 1%core mul.
 
 Local Open Scope bool_scope.
 #[export] Instance bool_has_eqb : has_eqb bool := Bool.eqb.
@@ -25,6 +28,7 @@ Local Open Scope nat_scope.
 #[export] Instance nat_has_mod : has_mod nat := Nat.modulo.
 #[export] Instance nat_has_max : has_max nat := Nat.max.
 #[export] Instance nat_has_min : has_min nat := Nat.min.
+#[export] Instance nat_has_pow : has_pow nat := Nat.pow.
 #[export] Instance nat_has_abs : has_abs nat := fun x => x.
 #[export] Instance nat_has_zero : has_zero nat := 0.
 #[export] Instance nat_has_one : has_one nat := 1.
@@ -51,10 +55,14 @@ Local Open Scope N_scope.
 #[export] Instance N_has_mod : has_mod N := N.modulo.
 #[export] Instance N_has_max : has_max N := N.max.
 #[export] Instance N_has_min : has_min N := N.min.
+#[export] Instance N_has_pow : has_pow N := N.pow.
 #[export] Instance N_has_abs : has_abs N := fun x => x.
 #[export] Instance N_has_zero : has_zero N := 0.
 #[export] Instance N_has_one : has_one N := 1.
 #[export] Instance N_has_sqrt : has_sqrt N := N.sqrt.
+
+#[export] Instance default_pow_nat {A} {oneA : has_one A} {mulA : has_mul A} : has_pow_by A nat A | 10
+  := default_pow_N.
 
 Local Open Scope positive_scope.
 #[global] Coercion N.pos : positive >-> N.
@@ -69,9 +77,13 @@ Local Open Scope positive_scope.
 #[export] Instance positive_has_mul : has_mul positive := Pos.mul.
 #[export] Instance positive_has_max : has_max positive := Pos.max.
 #[export] Instance positive_has_min : has_min positive := Pos.min.
+#[export] Instance positive_has_pow : has_pow positive := Pos.pow.
 #[export] Instance positive_has_abs : has_abs positive := fun x => x.
 #[export] Instance positive_has_one : has_one positive := 1.
 #[export] Instance positive_has_sqrt : has_sqrt positive := Pos.sqrt.
+
+#[export] Instance default_pow_positive {A} {oneA : has_one A} {mulA : has_mul A} : has_pow_by A positive A | 10
+  := default_pow_N.
 
 Local Open Scope Z_scope.
 #[global] Coercion Z.of_N : N >-> Z.
@@ -89,6 +101,7 @@ Local Open Scope Z_scope.
 #[export] Instance Z_has_mod : has_mod Z := Z.modulo.
 #[export] Instance Z_has_max : has_max Z := Z.max.
 #[export] Instance Z_has_min : has_min Z := Z.min.
+#[export] Instance Z_has_pow : has_pow_by Z N Z := Z.pow_N.
 #[export] Instance Z_has_zero : has_zero Z := 0.
 #[export] Instance Z_has_one : has_one Z := 1.
 #[export] Instance Z_has_sqrt : has_sqrt Z := Z.sqrt.
@@ -108,7 +121,9 @@ Local Open Scope Q_scope.
 #[export] Instance Q_has_zero : has_zero Q := 0.
 #[export] Instance Q_has_one : has_one Q := 1.
 #[export] Instance Q_has_sqrt : has_sqrt Q := Qsqrt.
-
+#[export] Instance Q_has_pow_Z : has_pow_by Q Z Q := Qpower.
+HERE FIGURE OUT power of Q -> Q -> Q https://stackoverflow.com/a/3519308/377022 or taylor expansion
+(*#[export] Instance Q_has_exp : has_exp Q *)
 
 Local Open Scope int63_scope.
 #[export] Instance int_has_eqb : has_eqb int := Uint63.eqb.

@@ -1,5 +1,5 @@
 From Coq Require Import Bool Uint63 ZArith Wellfounded Wf_Z Wf_nat Lia.
-From NeuralNetInterp.Util Require Import Monad Notations Arith.Classes.
+From NeuralNetInterp.Util Require Import Monad Notations Arith.Classes Arith.Instances Default.
 Set Universe Polymorphism.
 Set Polymorphic Inductive Cumulativity.
 Unset Universe Minimization ToSet.
@@ -145,31 +145,28 @@ Module Import LoopNotation1.
 
 End LoopNotation1.
 
+Definition map_reduce {A B} (reduce : B -> A -> B) (init : B) (start : int) (stop : int) (step : int) (f : int -> A) : B
+  := (with_state init
+        for (i := start;; i <? stop;; i += step) {{
+            val <-- get;;
+            set (reduce val (f i))
+     }})%core.
+
+Definition map_reduce_no_init {A} (reduce : A -> A -> A) (start : int) (stop : int) (step : int) (f : int -> A) : A
+  := (with_state (f start)
+        for (i := (start + step);; i <? stop;; i += step) {{
+            val <-- get;;
+            set (reduce val (f i))
+     }})%core.
+
 Definition sum {A} {zeroA : has_zero A} {addA : has_add A} (start : int) (stop : int) (step : int) (f : int -> A) : A
-  := (with_state 0
-        for (i := start;; i <? stop;; i += step) {{
-            val <-- get;;
-            set (val + f i)
-     }})%core.
-
+  := map_reduce add zero start stop step f.
 Definition prod {A} {oneA : has_one A} {mulA : has_mul A} (start : int) (stop : int) (step : int) (f : int -> A) : A
-  := (with_state 1
-        for (i := start;; i <? stop;; i += step) {{
-            val <-- get;;
-            set (val * f i)
-     }})%core.
-
-HERE FIXME
-Definition max {A} {max : has_max A} (xs : array A) : A := reduce_no_init max xs.
-Definition min {A} {min : has_max A} (xs : array A) : A := reduce_no_init min xs.
-Definition mean {A B C} {zero : has_zero A} {add : has_add A} {div_by : has_div_by A B C} {coer : has_coer Z B} (xs : array A) : C
-  := (sum xs / coer (Uint63.to_Z (PArray.length xs)))%core.
-Definition var {A B} {zero : has_zero A} {add : has_add A} {mul : has_mul A} {sub : has_sub A} {div_by : has_div_by A B A} {coer : has_coer Z B} {correction : with_default "correction" Z 1%Z}
-  (xs : array A) : A
-  := (let xbar := mean xs in
-     let N := Uint63.to_Z (PArray.length xs) in
-     ((∑_(xi <- xs) (xi - xbar)²) / (coer (N - correction)))%core).
-
+  := map_reduce mul one start stop step f.
+Definition max {A} {max : has_max A} (start : int) (stop : int) (step : int) (f : int -> A) : A
+  := map_reduce_no_init max start stop step f.
+Definition min {A} {min : has_min A} (start : int) (stop : int) (step : int) (f : int -> A) : A
+  := map_reduce_no_init min start stop step f.
 
 Module Import LoopNotation2.
   Notation "\sum_ ( m <= i < n ) F" := (sum m n 1 (fun i => F%core)).
@@ -181,6 +178,14 @@ Module Import LoopNotation2.
   Notation "∏_ ( m <= i < n ) F" := (prod m n 1 (fun i => F%core)).
   Notation "∏_ ( m ≤ i < n ) F" := (prod m n 1 (fun i => F%core)).
 End LoopNotation2.
+
+Definition mean {A B C} {zero : has_zero A} {add : has_add A} {div_by : has_div_by A B C} {coer : has_coer Z B} (start : int) (stop : int) (step : int) (f : int -> A) : C
+  := (sum start stop step f / coer (Uint63.to_Z (1 + (stop - start - 1) // step)))%core.
+Definition var {A B} {zero : has_zero A} {add : has_add A} {mul : has_mul A} {sub : has_sub A} {div_by : has_div_by A B A} {coer : has_coer Z B} {correction : with_default "correction" Z 1%Z}
+  (start : int) (stop : int) (step : int) (f : int -> A) : A
+  := (let xbar := mean start stop step f in
+      let N := Uint63.to_Z (1 + (stop - start - 1) // step) in
+      (sum start stop step (fun i => (f i - xbar)²) / (coer (N - correction)))%core).
 
 Module LoopNotation.
   Include LoopNotationAlises.

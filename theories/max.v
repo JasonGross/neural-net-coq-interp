@@ -2,9 +2,10 @@ From Coq Require Import Sint63 Uint63 QArith Lia List PArray.
 From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool.
 From NeuralNetInterp.Util Require Nat Wf_Uint63.
 From NeuralNetInterp Require Import max_parameters.
-From NeuralNetInterp.Torch Require Import Tensor Einsum.
+From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
 Import Util.Nat.Notations.
 Import Util.Wf_Uint63.LoopNotation.
+Import Util.Wf_Uint63.
 Local Open Scope Q_scope.
 Local Open Scope list_scope.
 Set Implicit Arguments.
@@ -44,15 +45,16 @@ Definition L0_ln1_w : tensor _ _ := Eval cbv in tensor_of_list max_parameters.L0
 Definition ln_final_b : tensor _ _ := Eval cbv in tensor_of_list max_parameters.ln_final_b.
 Definition ln_final_w : tensor _ _ := Eval cbv in tensor_of_list max_parameters.ln_final_w.
 
-Definition embed {r} {s : Shape r} (tokens : tensor int s) : tensor Q (s ::' Shape.tl (shape_of W_E))
-  := fun '(rest, j) => W_E.[[tokens.[rest] ; j]].
+(* TODO: fancy slicing by tensor *)
+Definition embed {r} {s : Shape r} (tokens : tensor IndexType s) : tensor Q (s ::' Shape.tl (shape_of W_E))
+  := reshape_app_combine (Tensor.map (fun i : RawIndexType => W_E.[i , :]) tokens).
 
 Definition pos_embed {r} {s : Shape (S r)} (tokens : tensor int s)
   (tokens_length := Shape.tl s) (* s[-1] *)
   (batch := Shape.droplastn 1 s) (* s[:-1] *)
   (d_model := Shape.tl (shape_of W_pos)) (* s[-1] *)
   : tensor Q (batch ++' [tokens_length] ::' d_model)
-  := repeat (W_pos.[< :tokens_length >]) batch.
+  := repeat (W_pos.[:tokens_length, :]) batch.
 
 Section layernorm.
   Context {r A} {s : Shape r} {d_model}
@@ -131,7 +133,7 @@ Section Attention.
     (IGNORE : A)
     (n_ctx' : int := Uint63.of_Z n_ctx)
     (attn_scale : A := √(coer (Uint63.to_Z d_head)))
-    (maybe_n_heads := fun b : bool => if b return Shape (if b then _ else _) then [n_heads] else [])
+    (maybe_n_heads := fun b : bool => (if b return Shape (if b then _ else _) then [n_heads] else [])%shape)
     (query_input key_input value_input : tensor A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model)))
     (mask : tensor bool [n_ctx'; n_ctx'] := to_bool (tril (A:=bool) (ones [n_ctx'; n_ctx']))).
 
@@ -153,18 +155,20 @@ Section Attention.
     (input : tensor A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model)))
     (W : tensor A [n_heads; d_model; d_head])
     : tensor A ((batch ::' pos) ++' [n_heads; d_head])
-    := (let input : tensor (tensor A _) (batch ::' pos) := reshape_app_split input in
-        let W : tensor (tensor (tensor A [d_head]) [d_model]) [n_heads] := W in
-        let f (input : tensor A [d_model]) (W : tensor (tensor A [d_head]) [d_model]) : tensor A [d_head]
-          := let input_W : tensor (tensor A [d_head]) [d_model] := tensor_map2 (fun i w => broadcast' i * w)%core input W in
-             reduce_axis_m1 (keepdim:=false) PArray.sum (input_W:tensor A [d_model; d_head]) in
-        tensor_map
-          (if use_split_qkv_input return tensor (tensor A [d_model]) (maybe_n_heads use_split_qkv_input) -> tensor (tensor A [d_head]) [n_heads]
-           then fun input
-                => tensor_map2 f input W
-           else fun input : tensor A [d_model]
-                => tensor_map (f input) W)
-          input).
+    := reshape_app_combine
+         (Tensor.map
+            (if use_split_qkv_input return tensor A (maybe_n_heads use_split_qkv_input ::' d_model) -> tensor A [n_heads; d_head]
+             then fun input => weaksauce_einsum {{{ {{ head_index d_model,
+                                           head_index d_model d_head
+                                           -> head_index d_head }}
+                                       , input
+                                       , W }}}
+             else fun input => weaksauce_einsum {{{ {{ d_model,
+                                           head_index d_model d_head
+                                           -> head_index d_head }}
+                                       , input
+                                       , W }}})
+            (reshape_app_split input)).
 
   Definition q : tensor A ((batch ::' pos) ++' [n_heads; d_head])
     := (einsum_input query_input W_Q + broadcast b_Q)%core.
@@ -174,10 +178,10 @@ Section Attention.
     := (einsum_input query_input W_V + broadcast b_V)%core.
 
   Definition attn_scores : tensor A (batch ::' n_heads ::' pos ::' pos)
-    := (let q : tensor (tensor A [pos; n_heads; d_head]) batch := q in
-        let k : tensor (tensor A [pos; n_heads; d_head]) batch := k in
+    := (let q : tensor (tensor A [pos; n_heads; d_head]) batch := reshape_app_split' q in
+        let k : tensor (tensor A [pos; n_heads; d_head]) batch := reshape_app_split' k in
         let qk : tensor (tensor A [n_heads; pos; pos]) batch
-          := tensor_map2
+          := Tensor.map2
                (fun q k : tensor A [pos; n_heads; d_head]
                 => weaksauce_einsum
                      {{{ {{ query_pos head_index d_head ,
@@ -187,11 +191,48 @@ Section Attention.
                            , k }}})
                q
                k in
-        let qk : tensor A (batch ::' n_heads ::' pos ::' pos) := qk in
+        let qk : tensor A (batch ::' n_heads ::' pos ::' pos) := reshape_app_combine qk in
         qk / broadcast' attn_scale)%core.
 
+  Definition apply_causal_mask (attn_scores : tensor A (batch ::' n_heads ::' pos ::' pos))
+    : tensor A (batch ::' n_heads ::' pos ::' pos)
+    := reshape_app_combine
+         (Tensor.map
+            (fun attn_scores : tensor A [pos; pos]
+             => Tensor.where_ mask.[:pos,:pos] attn_scores (broadcast' IGNORE))
+            (reshape_app_split' attn_scores)).
 
-  (*HERE*)
+  Definition masked_attn_scores : tensor A (batch ::' n_heads ::' pos ::' pos)
+    := apply_causal_mask attn_scores.
+HERE FIGURE OUT SOFTMAX
+  Definition pattern : tensor A (batch ::' n_heads ::' pos ::' pos)
+    := reduce_axis_m1 (keepdim:=true) softmax masked_attn_scores.
+
+  Definition z : tensor A (batch ::' pos ::' n_heads ::' d_head)
+    := reshape_app_combine
+         (Tensor.map2
+            (fun (v : tensor A [pos; n_heads; d_head])
+                 (pattern : tensor A [n_heads; pos; pos])
+             => weaksauce_einsum {{{ {{  key_pos head_index d_head,
+                            head_index query_pos key_pos ->
+                            query_pos head_index d_head }}
+                        , v
+                        , pattern }}})
+            (reshape_app_split' v)
+            (reshape_app_split' pattern)).
+
+  (*  out = (
+                (
+                    einsum(
+                        "batch pos head_index d_head, \
+                            head_index d_head d_model -> \
+                            batch pos d_model",
+                        z,
+                        self.W_O,
+                    )
+                )
+                + self.b_O
+            )  # [batch, pos, d_model]*)
 End Attention.
 Eval cbv in embed (tensor_of_list [0; 1]%uint63).
 Eval cbv in pos_embed (tensor_of_list [[0; 1]]%uint63).

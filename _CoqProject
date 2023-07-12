@@ -31,6 +31,7 @@ theories/Util/Wf_Uint63.v
 theories/Util/Arith/Classes.v
 theories/Util/Arith/Instances.v
 theories/Util/Arith/QArith.v
+theories/Util/Arith/ZArith.v
 theories/Util/List/Proofs.v
 theories/Util/PArray/Proofs.v
 theories/Util/Strings/Ascii.v

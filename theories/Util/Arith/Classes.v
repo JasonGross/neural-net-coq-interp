@@ -25,6 +25,9 @@ Class has_abs A := abs : A -> A.
 Notation has_int_div A := (has_int_div_by A A A).
 Class has_div_by A B C := div : A -> B -> C.
 Notation has_div A := (has_div_by A A A).
+Class has_pow_by A B C := pow : A -> B -> C.
+Notation has_pow A := (has_pow_by A A A).
+Class has_exp A := exp : A -> A.
 Class has_coer A B := coer : A -> B.
 Definition has_coer_from (avoid : TyList) := has_coer.
 Definition has_coer_to (avoid : TyList) := has_coer.
@@ -54,6 +57,7 @@ Infix "-" := sub : core_scope.
 Infix "*" := mul : core_scope.
 Infix "/" := div : core_scope.
 Infix "//" := int_div : core_scope.
+Infix "^" := pow : core_scope.
 Notation "x ²" := (sqr x) : core_scope.
 Notation "√ x" := (sqrt x) : core_scope.
 Notation "- x" := (opp x) : core_scope.
@@ -74,6 +78,9 @@ Notation "1" := one : core_scope.
 #[export] Hint Mode has_mul_with - ! - : typeclass_instances.
 #[export] Hint Mode has_int_div_by ! - - : typeclass_instances.
 #[export] Hint Mode has_div_by ! - - : typeclass_instances.
+#[export] Hint Mode has_pow_by ! - - : typeclass_instances.
+#[export] Hint Mode has_pow_by - ! - : typeclass_instances.
+#[export] Hint Mode has_exp ! : typeclass_instances.
 #[export] Hint Mode has_opp ! : typeclass_instances.
 #[export] Hint Mode has_zero ! : typeclass_instances.
 #[export] Hint Mode has_one ! : typeclass_instances.

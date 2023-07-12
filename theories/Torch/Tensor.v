@@ -579,17 +579,17 @@ Fixpoint contract_app_nil_l {P : Size -> Type} {s : Size} : P ([] ++' s) -> P s
      end.
  *)
 
-Definition reshape_app_split {A r1 r2 s1 s2} : @tensor (r1 +' r2) A (s1 ++' s2) -> tensor (tensor A s2) s1
+Definition reshape_app_split' {A r1 r2 s1 s2} : @tensor (r1 +' r2) A (s1 ++' s2) -> tensor (tensor A s2) s1
   := RawIndex.curry_radd.
-Definition reshape_app_combine {A r1 r2 s1 s2} : tensor (tensor A s2) s1 -> @tensor (r1 +' r2) A (s1 ++' s2)
+Definition reshape_app_combine' {A r1 r2 s1 s2} : tensor (tensor A s2) s1 -> @tensor (r1 +' r2) A (s1 ++' s2)
   := RawIndex.uncurry_radd.
 (* infer s1 s2 from the conclusion *)
-#[global] Arguments reshape_app_combine A & r1 r2 s1 s2 _.
-#[global] Arguments reshape_app_split A & r1 r2 s1 s2 _.
-Definition reshape_app_split' {A r1 r2 s1 s2} : @tensor (r1 +' r2) A (s1 ++' s2) -> tensor (tensor A s2) s1
-  := reshape_app_split.
-Definition reshape_app_combine' {A r1 r2 s1 s2} : tensor (tensor A s2) s1 -> @tensor (r1 +' r2) A (s1 ++' s2)
-  := reshape_app_combine.
+#[global] Arguments reshape_app_combine' A & r1 r2 s1 s2 _.
+#[global] Arguments reshape_app_split' A & r1 r2 s1 s2 _.
+Definition reshape_app_split {A r1 r2 s1 s2} : @tensor (r1 +' r2) A (s1 ++' s2) -> tensor (tensor A s2) s1
+  := reshape_app_split'.
+Definition reshape_app_combine {A r1 r2 s1 s2} : tensor (tensor A s2) s1 -> @tensor (r1 +' r2) A (s1 ++' s2)
+  := reshape_app_combine'.
 Definition reshape_snoc_split {A r s1 s2} : @tensor (r +' 1) A (s1 ::' s2) -> tensor (tensor A [s2]) s1
   := RawIndex.curry_radd.
 Definition reshape_snoc_combine {A r s1 s2} : tensor (tensor A [s2]) s1 -> @tensor (r +' 1) A (s1 ::' s2)
