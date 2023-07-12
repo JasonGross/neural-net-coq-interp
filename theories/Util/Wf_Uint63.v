@@ -161,33 +161,35 @@ Definition map_reduce_no_init {A} (reduce : A -> A -> A) (start : int) (stop : i
             set (reduce val (f i))
      }})%core.
 
-Definition sum {A} {zeroA : has_zero A} {addA : has_add A} (start : int) (stop : int) (step : int) (f : int -> A) : A
-  := map_reduce add zero start stop step f.
-Definition prod {A} {oneA : has_one A} {mulA : has_mul A} (start : int) (stop : int) (step : int) (f : int -> A) : A
-  := map_reduce mul one start stop step f.
-Definition max {A} {max : has_max A} (start : int) (stop : int) (step : int) (f : int -> A) : A
-  := map_reduce_no_init max start stop step f.
-Definition min {A} {min : has_min A} (start : int) (stop : int) (step : int) (f : int -> A) : A
-  := map_reduce_no_init min start stop step f.
+Module Import Reduction.
+  Definition sum {A} {zeroA : has_zero A} {addA : has_add A} (start : int) (stop : int) (step : int) (f : int -> A) : A
+    := map_reduce add zero start stop step f.
+  Definition prod {A} {oneA : has_one A} {mulA : has_mul A} (start : int) (stop : int) (step : int) (f : int -> A) : A
+    := map_reduce mul one start stop step f.
+  Definition max {A} {max : has_max A} (start : int) (stop : int) (step : int) (f : int -> A) : A
+    := map_reduce_no_init max start stop step f.
+  Definition min {A} {min : has_min A} (start : int) (stop : int) (step : int) (f : int -> A) : A
+    := map_reduce_no_init min start stop step f.
 
-Module Import LoopNotation2.
-  Notation "\sum_ ( m <= i < n ) F" := (sum m n 1 (fun i => F%core)).
-  Notation "\sum_ ( m ≤ i < n ) F" := (sum m n 1 (fun i => F%core)).
-  Notation "∑_ ( m <= i < n ) F" := (sum m n 1 (fun i => F%core)).
-  Notation "∑_ ( m ≤ i < n ) F" := (sum m n 1 (fun i => F%core)).
-  Notation "\prod_ ( m <= i < n ) F" := (prod m n 1 (fun i => F%core)).
-  Notation "\prod_ ( m ≤ i < n ) F" := (prod m n 1 (fun i => F%core)).
-  Notation "∏_ ( m <= i < n ) F" := (prod m n 1 (fun i => F%core)).
-  Notation "∏_ ( m ≤ i < n ) F" := (prod m n 1 (fun i => F%core)).
-End LoopNotation2.
+  Module Import LoopNotation2.
+    Notation "\sum_ ( m <= i < n ) F" := (sum m n 1 (fun i => F%core)).
+    Notation "\sum_ ( m ≤ i < n ) F" := (sum m n 1 (fun i => F%core)).
+    Notation "∑_ ( m <= i < n ) F" := (sum m n 1 (fun i => F%core)).
+    Notation "∑_ ( m ≤ i < n ) F" := (sum m n 1 (fun i => F%core)).
+    Notation "\prod_ ( m <= i < n ) F" := (prod m n 1 (fun i => F%core)).
+    Notation "\prod_ ( m ≤ i < n ) F" := (prod m n 1 (fun i => F%core)).
+    Notation "∏_ ( m <= i < n ) F" := (prod m n 1 (fun i => F%core)).
+    Notation "∏_ ( m ≤ i < n ) F" := (prod m n 1 (fun i => F%core)).
+  End LoopNotation2.
 
-Definition mean {A B C} {zero : has_zero A} {add : has_add A} {div_by : has_div_by A B C} {coer : has_coer Z B} (start : int) (stop : int) (step : int) (f : int -> A) : C
-  := (sum start stop step f / coer (Uint63.to_Z (1 + (stop - start - 1) // step)))%core.
-Definition var {A B} {zero : has_zero A} {add : has_add A} {mul : has_mul A} {sub : has_sub A} {div_by : has_div_by A B A} {coer : has_coer Z B} {correction : with_default "correction" Z 1%Z}
-  (start : int) (stop : int) (step : int) (f : int -> A) : A
-  := (let xbar := mean start stop step f in
-      let N := Uint63.to_Z (1 + (stop - start - 1) // step) in
-      (sum start stop step (fun i => (f i - xbar)²) / (coer (N - correction)))%core).
+  Definition mean {A B C} {zero : has_zero A} {add : has_add A} {div_by : has_div_by A B C} {coer : has_coer Z B} (start : int) (stop : int) (step : int) (f : int -> A) : C
+    := (sum start stop step f / coer (Uint63.to_Z (1 + (stop - start - 1) // step)))%core.
+  Definition var {A B} {zero : has_zero A} {add : has_add A} {mul : has_mul A} {sub : has_sub A} {div_by : has_div_by A B A} {coer : has_coer Z B} {correction : with_default "correction" Z 1%Z}
+    (start : int) (stop : int) (step : int) (f : int -> A) : A
+    := (let xbar := mean start stop step f in
+        let N := Uint63.to_Z (1 + (stop - start - 1) // step) in
+        (sum start stop step (fun i => (f i - xbar)²) / (coer (N - correction)))%core).
+End Reduction.
 
 Module LoopNotation.
   Include LoopNotationAlises.

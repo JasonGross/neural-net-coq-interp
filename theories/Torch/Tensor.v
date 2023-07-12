@@ -1,10 +1,11 @@
 From Coq.Structures Require Import Equalities.
 From Coq Require Import ZArith Sint63 Uint63 List PArray Lia.
 From NeuralNetInterp.Util Require Nat.
-From NeuralNetInterp.Util Require Import Wf_Uint63 PArray.Proofs List.Proofs.
-From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool (*PrimitiveProd*).
+From NeuralNetInterp.Util Require Import Wf_Uint63 PArray.Proofs List.Proofs Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool (*PrimitiveProd*).
 Import Util.Nat.Notations.
 Import Util.Wf_Uint63.LoopNotation.
+Import Util.Wf_Uint63.Reduction.
+Import Arith.Classes.
 Local Open Scope list_scope.
 Set Implicit Arguments.
 Set Universe Polymorphism.
@@ -350,6 +351,12 @@ Definition tensor_of_rank@{a r} (A : Type@{a}) (r : Rank)
 Definition tensor@{a r} {r : Rank} (A : Type@{a}) (s : Shape@{r} r)
   := tensor_of_rank@{a r} A r.
 
+Definition tensor_dep {r A s} (P : A -> Type) (x : @tensor r A s)
+  := forall i : RawIndex r, P (x i).
+
+Definition tensor_undep {r A s P x} (t : @tensor_dep r A s (fun _ => P) x) : @tensor r P s
+  := t.
+
 Declare Scope tensor_scope.
 Delimit Scope tensor_scope with tensor.
 Declare Scope raw_tensor_scope.
@@ -530,6 +537,9 @@ Definition map2 {r A B C} {sA sB : Shape r} (f : A -> B -> C) (tA : tensor A sA)
 Definition map3 {r A B C D} {sA sB sC : Shape r} (f : A -> B -> C -> D) (tA : tensor A sA) (tB : tensor B sB) (tC : tensor C sC) : tensor D (Shape.broadcast3 sA sB sC)
   := fun i => f (tA i) (tB i) (tC i).
 
+Definition map_dep {r A B} {s : Shape r} (f : forall a : A, B a) (t : tensor A s) : tensor_dep B t
+  := fun i => f (t i).
+
 Definition where_ {r A} {sA : Shape r} {sB : Shape r} {sC : Shape r} (condition : tensor bool sA) (input : tensor A sB) (other : tensor A sC) : tensor A (Shape.broadcast3 sA sB sC)
   := map3 Bool.where_ condition input other.
 
@@ -670,11 +680,14 @@ Definition reduce_axis_m1 {r A B} {s1 : Shape r} {s2} {keepdim : with_default "k
 
 Definition softmax_dim_m1 {r A B C} {addB : has_add B} {expA : has_exp_to A B} {zeroB : has_zero B} {divB : has_div_by B B C} {s0 : Shape r} {s'} (s:=(s0 ::' s')%shape) (t : tensor A s) : tensor C s
   := (let exp_t : tensor B s := map exp t in
-      let sum_exp_t : tensor B s := reduce_axis_m1 (keepdim:=true) Wf_Uint63.sum exp_t in
+      let sum_exp_t : tensor B s := reduce_axis_m1 (keepdim:=true) sum exp_t in
       exp_t / sum_exp_t)%core.
 
 Definition to_bool {A} {zero : has_zero A} {eqb : has_eqb A} {r} {s : Shape r} (xs : tensor A s) : tensor bool s
   := map (fun x => x ≠? 0)%core xs.
+
+Definition of_bool {A} {zero : has_zero A} {one : has_one A} {r} {s : Shape r} (xs : tensor bool s) : tensor A s
+  := map (fun x:bool => if x then 1 else 0)%core xs.
 
 (** Quoting https://pytorch.org/docs/stable/generated/torch.tril.html
 
