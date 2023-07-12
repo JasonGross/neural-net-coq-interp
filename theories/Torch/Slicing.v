@@ -228,3 +228,4 @@ Module FancyIndex.
 End SliceType.
 
 *)
+FIXME FANCY SLICING
