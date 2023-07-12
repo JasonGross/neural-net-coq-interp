@@ -37,10 +37,10 @@ Module IndexGen.
     Import (hints) IndexType.
     Notation IndexType := IndexType.t.
 
-    Fixpoint t (r : Rank) : Type
+    Fixpoint t@{u} (r : Rank) : Type@{u}
       := match r with
          | O => unit
-         | S r => t r * IndexType.t
+         | S r => t r * IndexType.t@{u}
          end.
     Notation Index := t.
 

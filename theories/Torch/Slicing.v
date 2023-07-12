@@ -15,11 +15,19 @@ Inductive SliceIndexType@{u} : Rank -> Rank -> Type@{u} :=
 | slice_index (s : Slice IndexType@{u}) : SliceIndexType 1 1
 | broadcast_one_index : SliceIndexType 0 1
 | single_index (i : IndexType@{u}) : SliceIndexType 1 0
+| condition_index (b : IndexType@{u} -> bool) : SliceIndexType 1 1
 .
 Inductive FancyIndexType {r} (s : Shape r) : Rank -> Rank -> Type :=
 | tensor_index (_ : @tensor r IndexType s) : FancyIndexType s 1 0
+| bool_tensor_index (_ : @tensor r bool s) : FancyIndexType s 1 0
 | normal_index {ri ro} (_ : SliceIndexType ri ro) : FancyIndexType s ri ro
 .
+Set Printing Universes.
+Print FancyIndexType.
+TODO BOOL indexing
+Print tensor_of_rank.
+Set Printing All.
+Print RawIndex.t.
 #[global] Arguments normal_index {r s ri ro} _.
 #[global] Arguments tensor_index {r s} _.
 #[export] Set Warnings Append "-uniform-inheritance".
@@ -56,6 +64,104 @@ Module SliceIndex.
   End SliceIndexType.
   Notation IndexType := SliceIndexType.t.
   Notation SliceIndexType := SliceIndexType.t.
+
+  Inductive t : Rank (* input *) -> Rank (* output *) -> Type :=
+  | nil : t 0 0
+  | elipsis {r} : t r r
+  | snoc {ris ros ri ro} : t ris ros -> SliceIndexType ri ro -> t (ris +' ri) (ros +' ro).
+  Notation SliceIndex := t.
+
+  Module Import SliceIndexNotations0.
+    Export FancySlicingNotations.
+    Declare Scope slice_index_scope.
+    Delimit Scope slice_index_scope with slice_index.
+    Bind Scope slice_index_scope with SliceIndex.
+    Notation "xs ::' x" := (snoc xs x) : slice_index_scope.
+    Notation "[ ]" := nil : slice_index_scope.
+    Notation "[ x ]" := (snoc nil x) : slice_index_scope.
+    Notation "[ x ; y ; .. ; z ]" := (snoc .. (snoc (snoc nil x) y) .. z) : slice_index_scope.
+    Notation "…" := elipsis : slice_index_scope.
+    Declare Custom Entry slice_index.
+    Notation "x" := (snoc nil x) (in custom slice_index at level 200, x custom fancy_slice at level 60).
+    Notation "x , .. , z" := (snoc .. (snoc nil x) .. z) (in custom slice at level 200, x custom fancy_slice at level 60, z custom fancy_slice at level 60).
+    Notation "… , x , .. , z" := (snoc .. (snoc elipsis x) .. z) (in custom slice at level 60, x custom fancy_slice at level 60, z custom fancy_slice at level 60).
+  End SliceIndexNotations0.
+  #[local] Open Scope slice_index_scope.
+
+  Import Slice.SlicingNotations.
+  Fixpoint transfer_shape {ri ro} (idxs : t ri ro) : Shape ri -> Shape ro
+    := match idxs with
+       | [] => fun tt => tt
+       | … => fun x => x
+       | @snoc ris ros ri ro idxs idx
+         => match idx in Slicing.SliceIndexType ri ro return Shape (ris +' ri) -> Shape (ros +' ro) with
+            | slice_index idx
+              => fun s
+                 => Shape.snoc
+                      (@transfer_shape ris ros idxs (Shape.hd s))
+                      match idx with
+                      | slice[:] => Shape.tl s
+                      | _ => Concrete.length (Slice.norm_concretize idx (Shape.tl s))
+                      end
+            | broadcast_one_index
+              => fun s => Shape.snoc (@transfer_shape ris ros idxs s) 1
+            | single_index idx
+              => fun s => @transfer_shape ris ros idxs (Shape.hd s)
+            end
+       end.
+
+  Fixpoint slice {A ri ro} (idxs : t ri ro) : forall {s : Shape ri}, tensor A s -> tensor A (transfer_shape idxs s)
+    := match idxs with
+       | [] => fun _s t idxs' => t tt
+       | … => fun _s t idxs' => t idxs'
+       | @snoc ris ros ri ro idxs idx
+         => match idx in Slicing.SliceIndexType ri ro return forall s : Shape (ris +' ri), tensor A s -> tensor A (transfer_shape (idxs ::' idx) s) with
+            | slice_index sl
+              => fun s t idxs' (* adjust slice at last index *)
+                 => let idx := RawIndex.tl idxs' in
+                    @slice A ris ros idxs (Shape.hd s) (fun idxs' => t (RawIndex.snoc idxs' (Slice.invert_index sl (Shape.tl s) idx))) (RawIndex.hd idxs')
+            | broadcast_one_index
+              => fun s t idxs' (* ignore final idxs', which is just 1 *)
+                 => @slice A ris ros idxs s t (RawIndex.hd idxs')
+            | single_index idx
+              => fun s t idxs' (* adjoin idx as final index *)
+                 => @slice A ris ros idxs (Shape.hd s) (fun idxs' => t (RawIndex.snoc idxs' (adjust_index_for (Shape.tl s) idx))) idxs'
+            end
+       end.
+
+  Module Import SliceIndexNotations.
+    Export SliceIndexNotations0.
+    Notation "t .[ x , .. , y ]"
+      := (SliceIndex.slice (snoc .. (snoc nil x) .. y) t%raw_tensor)
+           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ x ,  .. ,  y ]")
+        : raw_tensor_scope.
+    Notation "t .[ x , .. , y ]"
+      := (SliceIndex.slice (snoc .. (snoc nil x) .. y) t%tensor)
+           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ x ,  .. ,  y ]")
+        : tensor_scope.
+    Notation "t .[ … , x , .. , y ]"
+      := (SliceIndex.slice (snoc .. (snoc elipsis x) .. y) t%raw_tensor)
+           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ … ,  x ,  .. ,  y ]")
+        : raw_tensor_scope.
+    Notation "t .[ … , x , .. , y ]"
+      := (SliceIndex.slice (snoc .. (snoc elipsis x) .. y) t%tensor)
+           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ … ,  x ,  .. ,  y ]")
+        : tensor_scope.
+    Notation "t .[< i >]"
+      := (SliceIndex.slice (snoc nil i) t%tensor)
+           (at level 2, i custom fancy_slice at level 60, left associativity, format "t .[< i >]")
+        : tensor_scope.
+  End SliceIndexNotations.
+End SliceIndex.
+
+Module FancyIndex.
+  About FancyIndexType.
+  Module FancyIndexType.
+    Definition t {r} := @FancyIndexType r.
+    Notation IndexType := t.
+  End FancyIndexType.
+  Notation IndexType := FancyIndexType.t.
+  Notation FancyIndexType := FancyIndexType.t.
 
   Inductive t : Rank (* input *) -> Rank (* output *) -> Type :=
   | nil : t 0 0
@@ -228,4 +334,4 @@ Module FancyIndex.
 End SliceType.
 
 *)
-FIXME FANCY SLICING
+(*FIXME FANCY SLICING*)
