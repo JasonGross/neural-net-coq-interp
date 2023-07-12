@@ -82,7 +82,7 @@ Definition Qexp {expansion_terms : with_default "Taylor expansion terms" nat def
 
 Definition Qlog2_approx (x : Q) : Z
   := (Z.log2_round (Qnum x) - Z.log2_round (Zpos (Qden x)))%Z.
-
+(*
 Definition Qlog2_approx (x : Q) : Z
   := (Z.log2_round (Qnum x) - Z.log2_round (Zpos (Qden x)))%Z.
 
