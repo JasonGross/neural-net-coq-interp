@@ -333,7 +333,7 @@ Definition logits {r} {batch : Shape r} (tokens : tensor IndexType (batch ::' cf
       let residual : tensor Q resid_shape := PArray.checkpoint (ln_final residual) in
       let logits                          := PArray.checkpoint (unembed residual) in
       logits)%core.
-(*
+
 Goal True.
   pose (PArray.concretize (logits (tensor_of_list [0; 1]%uint63))) as v.
   cbv beta delta [logits PArray.checkpoint] in v.
@@ -365,6 +365,120 @@ Goal True.
               change V in (value of v); cbv beta in v
          end.
   set (k := PArray.concretize _) in (value of v) at 2.
+  lazymatch (eval cbv delta [k] in k) with
+  | PArray.concretize (block0 ?x)
+    => set (k0 := x) in (value of k); set (k1 := block0 k0) in (value of k)
+  end.
+  cbv beta delta [block0] in k1.
+  cbv beta zeta in k1.
+  cbv beta delta [transformer_block_attn_only_out] in k1.
+  cbv beta zeta in k1.
+  lazymatch (eval cbv delta [k1] in k1) with
+  | (_ + ?x)%core
+    => set (k2 := x) in (value of k1)
+  end.
+  clear -k2.
+  cbv beta delta [attn_out] in k2.
+  cbv beta zeta in k2.
+  lazymatch (eval cbv delta [k2] in k2) with
+  | (map' ?f ?x + ?y)%core
+    => set (k3 := x) in (value of k2);
+       set (k4 := y) in (value of k2)
+  end.
+  clear -k3.
+  cbv beta delta [z] in k3.
+  cbv beta zeta in k3.
+  let k := k3 in
+  lazymatch (eval cbv delta [k] in k) with
+  | (map2' ?f ?x ?y)%core
+    => let k1 := fresh "k" in
+       let k2 := fresh "k" in
+       set (k1 := x) in (value of k);
+       set (k2 := y) in (value of k)
+  end.
+  cbv beta delta [v] in *.
+  cbv beta zeta in k1.
+  cbv beta delta [value_input key_input query_input add_head_dimension] in *.
+  cbv beta zeta iota in k1, k2.
+  cbv beta delta [transformer_block_ln1] in *.
+  cbv beta zeta iota in k1, k2.
+  set (lnv := layernorm _ _ _ _) in *.
+  cbv beta delta [layernorm] in *.
+  clear -lnv.
+  set (lnlv := layernorm_linpart _) in *.
+  cbv beta delta [layernorm_linpart] in *.
+  set (mv := reduce_axis_m1 _ _) in *.
+  cbv beta delta [reduce_axis_m1] in *.
+  clear -mv.
+  cbv beta iota in mv.
+  set (mv' := reduce_axis_m1' _ _) in *.
+  clear -mv'.
+  cbv beta delta [reduce_axis_m1'] in *.
+  vm_compute Shape.tl in mv'.
+  set (k_tmp := reshape_snoc_split) in *.
+  cbv in k_tmp; subst k_tmp.
+  cbv beta iota in mv'.
+  cbv beta delta [map] in mv'.
+  pose (PArray.concretize mv') as mv'c.
+  cbv [PArray.concretize Shape.snoc init_default] in mv'c.
+  set (k_tmp := _ <=? max_length) in *.
+  vm_compute in k_tmp; subst k_tmp; cbv beta iota in mv'c.
+  vm_compute make in mv'c.
+  cbv -[mv'] in mv'c.
+  subst mv'.
+  cbv beta iota zeta in mv'c.
+  cbv [mean] in mv'c.
+  vm_compute inject_Z_coer in mv'c.
+  cbv [raw_get] in mv'c.
+  cbv [RawIndex.snoc RawIndex.nil] in mv'c.
+  cbv [sum] in mv'c.
+  cbv [map_reduce] in mv'c.
+  Timeout 5 cbv -[add Q_has_add k0 Qdiv] in mv'c.
+  set (k0v := k0 _) in (value of mv'c) at 1.
+  clear -k0v.
+  set (val := (_ + _)%core) in (value of k0) at 1.
+  cbv [ltb] in *.
+  vm_compute RawIndex.repeat in k0.
+  vm_compute Shape.snoc in k0.
+  vm_compute PArray.abstract in k0.
+  clearbody val.
+  vm_compute in val.
+  vm_compute RawIndex in *.
+
+  vm_compute in k0v.
+
+  generalize dependent (_ + _)
+  cbv in k0.
+  cbv [RawIndex
+  vm_compute in k0v.
+  cbv in k0v.
+  Timeout 5 vm_compute in k0v.
+  vm_compute in k0v.
+  subst k0.
+  Set Printing All.
+  cbv in mv'c.
+  vm_compute
+
+  cbv -
+  cbv [reshape_snoc_split] in mv'.
+  cbv [reshape_snoc_split] in mv'.
+
+  Timeout 5 Compute PArray.concretize mv'.
+  cbv beta delta [reduce_axis_m1'] in *.
+
+  Timeout 5 Compute PArray.concretize mv.
+  let k := k1 in
+  let k1 := fresh "k" in
+  let k2 := fresh "k" in
+  lazymatch (eval cbv delta [k] in k) with
+  | (map2' ?f ?x ?y)%core
+    => set (k1 := x) in (value of k);
+       set (k2 := y) in (value of k)
+  end.
+
+
+
+  set (k2 := attn_out _ _ _
   Time native_compute in k.
   Time vm_compute in k.
   subst k.

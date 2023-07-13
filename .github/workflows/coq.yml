@@ -12,7 +12,6 @@ jobs:
       matrix:
         include:
         - env: { COQ_VERSION: "master", DOCKER_COQ_VERSION: "dev", DOCKER_OCAML_VERSION: "default" }
-        - env: { COQ_VERSION: "8.17", DOCKER_COQ_VERSION: "8.17", DOCKER_OCAML_VERSION: "default" }
 
     runs-on: ubuntu-latest
     env: ${{ matrix.env }}
