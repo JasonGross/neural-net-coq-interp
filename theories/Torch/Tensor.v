@@ -445,7 +445,7 @@ Module PArray.
       reflexivity. }
   Qed.
 
-  Definition checkpoint {r : Rank} {A default s t} : @tensor r A s
+  Definition checkpoint {r : Rank} {A default s} t : @tensor r A s
     := let t_ := t in
        let t := @concretize r A default s t in
        let t := abstract t in
@@ -521,7 +521,7 @@ Module List.
       all: first [ reflexivity | lia ]. }
   Qed.
 
-  Definition checkpoint {r : Rank} {A default s t} : @tensor r A s
+  Definition checkpoint {r : Rank} {A default s} t : @tensor r A s
     := let t_ := t in
        let t := concretize t in
        let t := @abstract r A default s t in
@@ -586,6 +586,7 @@ Definition map_dep {r A B} {s : Shape r} (f : forall a : A, B a) (t : tensor A s
 Definition where_ {r A} {sA : Shape r} {sB : Shape r} {sC : Shape r} (condition : tensor bool sA) (input : tensor A sB) (other : tensor A sC) : tensor A (Shape.broadcast3 sA sB sC)
   := map3 Bool.where_ condition input other.
 
+(* TODO: autobroadcast initial *)
 #[export] Instance tensor_add {r} {sA sB : Shape r} {A B C} {addA : has_add_with A B C} : has_add_with (tensor A sA) (tensor B sB) (tensor C (Shape.broadcast2 sA sB)) := map2 add.
 #[export] Instance tensor_sub {r} {sA sB : Shape r} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor A sA) (tensor B sB) (tensor C (Shape.broadcast2 sA sB)) := map2 sub.
 #[export] Instance tensor_mul {r} {sA sB : Shape r} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor A sA) (tensor B sB) (tensor C (Shape.broadcast2 sA sB)) := map2 mul.

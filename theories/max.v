@@ -45,6 +45,8 @@ Definition L0_ln1_b : tensor _ _ := Eval cbv in tensor_of_list max_parameters.L0
 Definition L0_ln1_w : tensor _ _ := Eval cbv in tensor_of_list max_parameters.L0_ln1_w.
 Definition ln_final_b : tensor _ _ := Eval cbv in tensor_of_list max_parameters.ln_final_b.
 Definition ln_final_w : tensor _ _ := Eval cbv in tensor_of_list max_parameters.ln_final_w.
+Definition W_U : tensor _ _ := Eval cbv in tensor_of_list max_parameters.W_U.
+Definition b_U : tensor _ _ := Eval cbv in tensor_of_list max_parameters.b_U.
 
 Definition embed {r} {s : Shape r} (tokens : tensor IndexType s) : tensor Q (s ::' Shape.tl (shape_of W_E))
   := (W_E.[tokens, :])%fancy_raw_tensor.
@@ -172,9 +174,9 @@ Section Attention.
   Definition q : tensor A (batch ++' [pos; n_heads; d_head])
     := (einsum_input query_input W_Q + broadcast b_Q)%core.
   Definition k : tensor A (batch ++' [pos; n_heads; d_head])
-    := (einsum_input query_input W_K + broadcast b_K)%core.
+    := (einsum_input key_input W_K + broadcast b_K)%core.
   Definition v : tensor A (batch ++' [pos; n_heads; d_head])
-    := (einsum_input query_input W_V + broadcast b_V)%core.
+    := (einsum_input value_input W_V + broadcast b_V)%core.
 
   Definition attn_scores : tensor A (batch ::' n_heads ::' pos ::' pos)
     := (let qk : tensor A (batch ++' [n_heads; pos; pos])
@@ -217,7 +219,7 @@ Section Attention.
          v
          pattern.
 
-  Definition out : tensor A (batch ::' pos ::' d_model)
+  Definition attn_out : tensor A (batch ::' pos ::' d_model)
     := (let out
           := Tensor.map'
                (fun z : tensor A [pos; n_heads; d_head]
@@ -230,5 +232,151 @@ Section Attention.
                z in
         out + broadcast b_O)%core.
 End Attention.
-Eval cbv in embed (tensor_of_list [0; 1]%uint63).
-Eval cbv in pos_embed (tensor_of_list [[0; 1]]%uint63).
+
+Section Attention0.
+  Context {r} {batch : Shape r}
+    (IGNORE := -1e5)
+    (query_input key_input value_input : tensor Q (batch ++' [cfg.n_ctx; cfg.d_model])).
+
+  Definition L0_attn_out : tensor Q (batch ::' cfg.n_ctx ::' cfg.d_model)
+    := attn_out
+         (n_ctx:=cfg.n_ctx)
+         L0_attn_W_Q L0_attn_W_K L0_attn_W_V L0_attn_W_O
+         L0_attn_b_Q L0_attn_b_K L0_attn_b_V L0_attn_b_O
+         IGNORE
+         query_input key_input value_input.
+End Attention0.
+
+Section TransformerBlock.
+  Context {A r} {batch : Shape r}
+    {zeroA : has_zero A} {coerZ : has_coer Z A}
+    {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
+    {sqrtA : has_sqrt A} {expA : has_exp A}
+    {pos n_heads d_model d_head} {n_ctx:N}
+    {use_split_qkv_input : with_default "use_split_qkv_input" bool false}
+    (W_Q W_K W_V W_O : tensor A [n_heads; d_model; d_head])
+    (b_Q b_K b_V : tensor A [n_heads; d_head])
+    (b_O : tensor A [d_model])
+    (IGNORE : A)
+    (eps : A)
+    (ln1_w ln1_b ln2_w ln2_b : tensor A [d_model])
+    (resid_pre : tensor A ((batch ::' pos) ++' [d_model]))
+    (maybe_n_heads := fun b : bool => (if b return Shape (if b then _ else _) then [n_heads] else [])%shape).
+
+  Definition add_head_dimension
+    (resid_pre : tensor A ((batch ::' pos) ++' [d_model]))
+    : tensor A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model))
+    := if use_split_qkv_input return tensor A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model))
+       then Tensor.map'
+              (fun resid_pre : tensor A [d_model]
+               => Tensor.repeat resid_pre [n_heads]
+                 : tensor A [n_heads; d_model])
+              resid_pre
+       else resid_pre.
+  Definition query_input : tensor A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model))
+    := add_head_dimension resid_pre.
+  Definition key_input : tensor A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model))
+    := add_head_dimension resid_pre.
+  Definition value_input : tensor A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model))
+    := add_head_dimension resid_pre.
+
+  Definition transformer_block_ln1 {r} {s : Shape r} (t : tensor A (s ::' d_model)) : tensor A (s ::' d_model)
+    := layernorm eps ln1_w ln1_b t.
+  Definition transformer_block_ln2 {r} {s : Shape r} (t : tensor A (s ::' d_model)) : tensor A (s ::' d_model)
+    := layernorm eps ln2_w ln2_b t.
+
+  Definition transformer_block_attn_only_out : tensor A (batch ++ [pos; d_model])
+    := (let attn_out : tensor A (batch ++ [pos; d_model])
+          := attn_out
+               (n_ctx:=n_ctx)
+               W_Q W_K W_V W_O
+               b_Q b_K b_V b_O
+               IGNORE
+               (transformer_block_ln1 query_input)
+               (transformer_block_ln1 key_input)
+               (transformer_block_ln1 value_input) in
+        resid_pre + attn_out)%core.
+End TransformerBlock.
+
+Section L0.
+  Context {r} {batch : Shape r}
+    (IGNORE := -1e5)
+    (residual : tensor Q (batch ++' [cfg.n_ctx; cfg.d_model])).
+
+  Definition block0 : tensor Q (batch ::' cfg.n_ctx ::' cfg.d_model)
+    := transformer_block_attn_only_out
+         (n_ctx:=cfg.n_ctx)
+         L0_attn_W_Q L0_attn_W_K L0_attn_W_V L0_attn_W_O
+         L0_attn_b_Q L0_attn_b_K L0_attn_b_V L0_attn_b_O
+         IGNORE cfg.eps
+         L0_ln1_w L0_ln1_b
+         residual.
+End L0.
+
+Definition unembed {r} {s : Shape r} (residual : tensor Q (s ::' cfg.n_ctx ::' cfg.d_model)) : tensor Q (s ::' cfg.n_ctx ::' cfg.d_vocab_out)
+  := (Tensor.map'
+        (fun residual : tensor Q [cfg.n_ctx; cfg.d_model]
+         => weaksauce_einsum {{{ {{ pos d_model, d_model vocab -> pos vocab }}
+                    , residual
+                    , W_U }}}
+           : tensor Q [cfg.n_ctx; cfg.d_vocab_out])
+        residual
+      + broadcast b_U)%core.
+
+Definition logits {r} {batch : Shape r} (tokens : tensor IndexType (batch ::' cfg.n_ctx))
+  : tensor Q (batch ::' cfg.n_ctx ::' cfg.d_vocab_out)
+  := (let embed := embed tokens in
+      let pos_embed := pos_embed tokens in
+      let resid_shape := (batch ::' cfg.n_ctx ::' cfg.d_model)%shape in
+      let residual : tensor Q resid_shape := PArray.checkpoint (embed + pos_embed) in
+      let residual : tensor Q resid_shape := PArray.checkpoint (block0 residual) in
+      let residual : tensor Q resid_shape := PArray.checkpoint (ln_final residual) in
+      let logits                          := PArray.checkpoint (unembed residual) in
+      logits)%core.
+(*
+Goal True.
+  pose (PArray.concretize (logits (tensor_of_list [0; 1]%uint63))) as v.
+  cbv beta delta [logits PArray.checkpoint] in v.
+  set (k := PArray.concretize _) in (value of v) at 2.
+  Time vm_compute in k.
+  subst k.
+  set (k := PArray.concretize _) in (value of v) at 2.
+  Time vm_compute in k.
+  subst k.
+  repeat match (eval cbv delta [v] in v) with
+         | context V[let x := ?val in @?k x]
+           => lazymatch val with
+              | context[PArray.concretize ?val] => fail 1 val
+              | _ => idtac
+              end;
+              let V := context V[match val with x => k x end] in
+              change V in (value of v); cbv beta in v
+         end.
+  set (k := PArray.concretize _) in (value of v) at 2.
+  Time vm_compute in k.
+  subst k.
+  repeat match (eval cbv delta [v] in v) with
+         | context V[let x := ?val in @?k x]
+           => lazymatch val with
+              | context[PArray.concretize ?val] => fail 1 val
+              | _ => idtac
+              end;
+              let V := context V[match val with x => k x end] in
+              change V in (value of v); cbv beta in v
+         end.
+  set (k := PArray.concretize _) in (value of v) at 2.
+  Time native_compute in k.
+  Time vm_compute in k.
+  subst k.
+
+  cbv
+  set (k := PArray.concretize _) in (value of v) at 2.
+  Time vm_compute in k.
+  subst k.
+
+Time Timeout 5 Compute PArray.concretize (logits (tensor_of_list [0; 1]%uint63)).
+Compute PArray.concrete_tensor
+
+Compute PArray.concretize (embed (tensor_of_list [0; 1]%uint63)).
+Compute PArray.concretize (pos_embed (tensor_of_list [[0; 1]]%uint63) : tensor Q [1; cfg.n_ctx; cfg.d_model]).
+*)
