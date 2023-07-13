@@ -11,10 +11,10 @@ Set Decidable Equality Schemes.
 #[local] Coercion is_true : bool >-> Sortclass.
 
 (* no tensor *)
-Inductive SliceIndexType@{u} : Rank -> Rank -> Type@{u} :=
-| slice_index (s : Slice IndexType@{u}) : SliceIndexType 1 1
+Inductive SliceIndexType : Rank -> Rank -> Type :=
+| slice_index (s : Slice IndexType) : SliceIndexType 1 1
 | broadcast_one_index : SliceIndexType 0 1
-| single_index (i : IndexType@{u}) : SliceIndexType 1 0
+| single_index (i : IndexType) : SliceIndexType 1 0
 .
 Inductive FancyIndexType {r} (s : Shape r) : Rank -> Rank -> Type :=
 | tensor_index (_ : tensor IndexType s) : FancyIndexType s 1 0

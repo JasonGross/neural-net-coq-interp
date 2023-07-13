@@ -1,7 +1,7 @@
 From Coq Require Import Sint63 Uint63 Utf8.
 From Ltac2 Require Ltac2 Constr List Ident String Fresh Printf.
 From NeuralNetInterp.Torch Require Import Tensor.
-From NeuralNetInterp.Util Require Import Arrow.
+From NeuralNetInterp.Util Require Import Wf_Uint63 Arrow.
 From NeuralNetInterp.Util.Tactics2 Require Constr FixNotationsForPerformance Constr.Unsafe.MakeAbbreviations List Ident.
 From NeuralNetInterp.Util Require Export Arith.Classes.
 
@@ -56,7 +56,7 @@ Module Import Internals.
        let body := Constr.Unsafe.closenl einsum_ids_rev 1 body in
        let start := '(0%uint63) in
        let step := '(1%uint63) in
-       let sum := '(@Wf_Uint63.sum $ty try_tc try_tc) in
+       let sum := '(@Reduction.sum $ty try_tc try_tc) in
        let sum_to stop body := mkApp sum [start; stop; step; body] in
        make_einsum_noclose_nolift sum_to 'int einsum_ids body.
 

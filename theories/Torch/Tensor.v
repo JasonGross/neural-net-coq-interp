@@ -8,9 +8,6 @@ Import Util.Wf_Uint63.Reduction.
 Import Arith.Classes.
 Local Open Scope list_scope.
 Set Implicit Arguments.
-Set Universe Polymorphism.
-Unset Universe Minimization ToSet.
-Set Polymorphic Inductive Cumulativity.
 Import ListNotations.
 (*Import PrimitiveProd.Primitive.*)
 
@@ -38,10 +35,10 @@ Module IndexGen.
     Import (hints) IndexType.
     Notation IndexType := IndexType.t.
 
-    Fixpoint t@{u} (r : Rank) : Type@{u}
+    Fixpoint t (r : Rank) : Type
       := match r with
          | O => unit
-         | S r => t r * IndexType.t@{u}
+         | S r => t r * IndexType.t
          end.
     Notation Index := t.
 
@@ -345,13 +342,19 @@ Export Index.IndexNotations.
 Export (hints) Index.
 Bind Scope sint63_scope with Index.IndexType.
 
+(*
 Definition tensor_of_rank@{a r} (A : Type@{a}) (r : Rank)
   := RawIndex@{r} r -> A.
 (* we could have a separate universe for the shape, but since the shape argument is a phantom one anyway, we don't bother *)
 Definition tensor@{a r} {r : Rank} (A : Type@{a}) (s : Shape@{r} r)
   := tensor_of_rank@{a r} A r.
+*)
+Monomorphic Definition tensor_of_rank (A : Type) (r : Rank) : Type
+  := RawIndex r -> A.
+Monomorphic Definition tensor {r : Rank} (A : Type) (s : Shape r) : Type
+  := tensor_of_rank A r.
 
-Definition tensor_dep {r A s} (P : A -> Type) (x : @tensor r A s)
+Monomorphic Definition tensor_dep {r A s} (P : A -> Type) (x : @tensor r A s)
   := forall i : RawIndex r, P (x i).
 
 Definition tensor_undep {r A s P x} (t : @tensor_dep r A s (fun _ => P) x) : @tensor r P s
@@ -441,6 +444,27 @@ Module PArray.
       do 2 destruct PrimInt63.ltb; destruct in_bounds, in_max_bounds; try congruence; cbn.
       reflexivity. }
   Qed.
+
+  Definition checkpoint {r : Rank} {A default s t} : @tensor r A s
+    := let t_ := t in
+       let t := @concretize r A default s t in
+       let t := abstract t in
+       fun idxs
+       => if ((idxs <? s) && (idxs <? RawIndex.repeat PArray.max_length r))%core%bool
+          then t idxs
+          else t_ idxs.
+
+  Lemma checkpoint_correct {r A default} {s : Shape r} {t} {idxs : RawIndex r}
+    : @checkpoint r A default s t idxs = t idxs.
+  Proof.
+    cbv [checkpoint].
+    generalize (@abstract_concretize r A default s t idxs).
+    cbv [andb].
+    repeat match goal with |- context[match ?x with _ => _ end] => destruct x eqn:? end.
+    all: repeat match goal with H : context[match ?x with _ => _ end] |- _ => destruct x eqn:? end.
+    all: auto.
+    all: discriminate.
+  Qed.
 End PArray.
 
 Module List.
@@ -496,6 +520,24 @@ Module List.
       1: rewrite Nat.add_0_l, Z2Nat.id, of_to_Z by assumption.
       all: first [ reflexivity | lia ]. }
   Qed.
+
+  Definition checkpoint {r : Rank} {A default s t} : @tensor r A s
+    := let t_ := t in
+       let t := concretize t in
+       let t := @abstract r A default s t in
+       fun idxs
+       => if (idxs <? s)%core
+          then t idxs
+          else t_ idxs.
+
+  Lemma checkpoint_correct {r A default} {s : Shape r} {t} {idxs : RawIndex r}
+    : @checkpoint r A default s t idxs = t idxs.
+  Proof.
+    cbv [checkpoint].
+    generalize (@abstract_concretize r A default s t idxs).
+    repeat match goal with |- context[match ?x with _ => _ end] => destruct x eqn:? end.
+    all: auto.
+  Qed.
 End List.
 
 Definition adjust_index_for (s : ShapeType) : Index.IndexType -> RawIndex.IndexType
@@ -539,6 +581,7 @@ Definition map3 {r A B C D} {sA sB sC : Shape r} (f : A -> B -> C -> D) (tA : te
 
 Definition map_dep {r A B} {s : Shape r} (f : forall a : A, B a) (t : tensor A s) : tensor_dep B t
   := fun i => f (t i).
+
 
 Definition where_ {r A} {sA : Shape r} {sB : Shape r} {sC : Shape r} (condition : tensor bool sA) (input : tensor A sB) (other : tensor A sC) : tensor A (Shape.broadcast3 sA sB sC)
   := map3 Bool.where_ condition input other.
@@ -610,6 +653,12 @@ Definition uncurry {r A} {s : Shape r} : @RawIndex.curriedT r A -> tensor A s
   := RawIndex.uncurry.
 Definition curry {r A} {s : Shape r} : tensor A s -> @RawIndex.curriedT r A
   := RawIndex.curry.
+
+Definition map' {ra1 ra2 rb A B} {sa1 : Shape ra1} {sa2 : Shape ra2} {sb : Shape rb} (f : tensor A sa2 -> tensor B sb) (t : tensor A (sa1 ++' sa2)) : tensor B (sa1 ++' sb)
+  := reshape_app_combine (map f (reshape_app_split t)).
+Definition map2' {ri1 ri2 ro A B C} {sA1 sB1 : Shape ri1} {sA2 sB2 : Shape ri2} {so : Shape ro} (f : tensor A sA2 -> tensor B sB2 -> tensor C so) (tA : tensor A (sA1 ++' sA2)) (tB : tensor B (sB1 ++' sB2)) : tensor C (Shape.broadcast2 sA1 sB1 ++' so)
+  := reshape_app_combine (map2 f (reshape_app_split tA) (reshape_app_split tB)).
+
 (*
 Definition reshape_S_fun_combine {I A} {r : Rank} : (I -> tensor_fun_of_rank I A r) -> tensor_fun_of_rank I A (1 +' r)
   := match reshape_app_combine_gen (r1:=1) (r2:=r) with x => x end.
