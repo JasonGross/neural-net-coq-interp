@@ -89,6 +89,7 @@ Import RawIndex.UncurryNotation.
 (* TODO: fix naming *)
 #[export] Hint Extern 1 => progress subst_type_lets_in_goal () : typeclass_instances.
 Declare Custom Entry einsum_args.
+TODO: use Ltac/Ltac2 just to strip off the unused einsums, and to push the einsums under the Tensor.uncurry.  Use Gallina to introduce einsums for all shapes.
 Notation "{{{ {{ i1 .. i_ , j1 .. j_ -> k1 .. k_ }} , t1 , t2 }}}"
   := (match t1%tensor, t2%tensor, _ as A, _ as B, _ as C, _ as r1, _ as r2, _ as r3, _ as s1, _ as s2, _ as s3 return @tensor _ C s3 with
       | t1', t2', A, B, C, r1, r2, r3, s1, s2, s3
