@@ -50,14 +50,15 @@ Module Import Internals.
             | _ => acc
             end in
        List.sort_uniq Int.compare (aux [] c).
-
-  Ltac2 rec insert_einsums_helper (rawindexT : constr) (sum_to : (* stop : *) constr -> (* body : *) constr -> constr) (names : ident option list) (c : constr) : (* used_rels : *) int list * (* cur_rel : *) int * (* new_body : *) constr
+FIXME REWORK
+  Ltac2 rec insert_einsums_helper (rawindexT : constr) (sum_to : (* stop : *) constr -> (* body : *) constr -> constr) (shapes : constr list) (lift_rel_by : int) (c : constr) : (* used_rels : *) int list * (* cur_rel : *) int * (* new_body : *) constr
     := match Constr.Unsafe.kind_nocast c with
        | Constr.Unsafe.Lambda b body
-         => let (name, names) := match names with
-                                 | name :: names => (name, names)
-                                 | [] => (Constr.Binder.name b, names)
-                                 end in
+         => let (name, shape, shapes)
+              := match shapes with
+                 | shape :: shapes => (ident_of_constr shape, shapes, names)
+                 | [] => (Constr.Binder.name b, names)
+                 end in
             let (used_rels, cur_rel, body) := insert_einsums_helper rawindexT sum_to names body in
             let (cur_rel_used, used_rels)
               := match used_rels with
@@ -67,10 +68,10 @@ Module Import Internals.
                       else (false, used_rels)
                  | [] => (false, used_rels)
                  end in
-            let b_as_rawindex := Constr.Binder.make name rawindexT in
+            let b := Constr.Binder.make name rawindexT in
             (used_rels, Int.add cur_rel 1,
               if cur_rel_used
-              then mkLambda b (sum_to (mkRel 1) (Constr.Unsafe.liftn 1 1 (mkLambda b_as_rawindex body)))
+              then mkLambda b (sum_to (Constr.Unsafe.liftn lift_rel_by 1 shape) (Constr.Unsafe.liftn 1 1 (mkLambda b body)))
               else mkLambda b body)
        | _ => (toplevel_rels c, 1, c)
        end.
@@ -91,7 +92,9 @@ Module Import Internals.
        | Constr.Unsafe.App f shape_args
          => let (_, _, f) := insert_einsums_helper rawindexT sum_to names f in
             let f := Constr.Unsafe.make (Constr.Unsafe.App f shape_args) in
+            printf "before: %t" f;
             let f := (eval cbv beta in f) in
+            printf "after: %t" f;
             f
        | k
          => Control.throw (InternalEinsumBadKind k)
