@@ -1,5 +1,6 @@
 -R theories NeuralNetInterp
 -arg -w -arg +implicit-core-hint-db,+implicits-in-term,+non-reversible-notation,+deprecated-intros-until-0,+deprecated-focus,+unused-intro-pattern,+variable-collision,+unexpected-implicit-declaration,+omega-is-deprecated,+deprecated-instantiate-syntax,+non-recursive,+undeclared-scope,+deprecated-hint-rewrite-without-locality,+deprecated-hint-without-locality,+deprecated-instance-without-locality,+deprecated-typeclasses-transparency-without-locality,unsupported-attributes
+theories/bug_anom_opt_01.v
 theories/max.v
 theories/max_parameters.v
 theories/Einops/Parsing.v
