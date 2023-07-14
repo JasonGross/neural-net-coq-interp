@@ -146,40 +146,84 @@ void my_logf_ext (float a, float *loghi, float *loglo)
     *loghi = p = t + s;    // normalize double-float result
     *loglo = (t - p) + s;
 }
+   *)
+  #[local] Notation fmaf x y z := (x * y + z) (only parsing).
+  (* Compute log(a) with extended precision, returned as a double-float value
+     loghi:loglo. Maximum relative error: 8.5626e-10.
+   *)
+  Definition ln_ext (a : float) : float * float
+    := let LOG2_HI   :=  0x1.62e430p-1 (* 6.93147182e-1f*) in
+       let LOG2_LO   := -0x1.05c610p-29 (* -1.90465421e-9f *) in
+       let SQRT_HALF :=  0x1.6a09e65dc27dfp-1 (* 0.70710678f *) in
+       (* Reduce argument to m in [sqrt(0.5), sqrt(2.0)] *)
+       let '(m, e) := Z.frexp a in
+       let '(m, e) := if m <? SQRT_HALF
+                      then (m + m, (e - 1)%Z)
+                      else (m, e) in
+       let i := of_Z e in
+       (* Compute q = (m-1)/(m+1) as a double-float qhi:qlo *)
+       let p := m + 1.0 in
+       let m := m - 1.0 in
+       let r := 1.0 / p in
+       let qhi := r * m in
+       let qlo := r * fmaf qhi (-m) (fmaf qhi (-2.0) m) in
+       (* Approximate atanh(q), q in [sqrt(0.5)-1, sqrt(2)-1] *)
+       let s := qhi * qhi in
+       let r :=          0x1.08c000p-3 in (* 0.1293334961f *)
+       let r := fmaf r s 0x1.22cd9cp-3 in (* 0.1419928074f *)
+       let r := fmaf r s 0x1.99a162p-3 in (* 0.2000148296f *)
+       let r := fmaf r s 0x1.555550p-2 in (* 0.3333332539f *)
+       let t := fmaf qhi (qlo + qlo) (fmaf qhi qhi (-s)) in (* s:t = (qhi:qlo)**2 *)
+       let p := s * qhi in
+       let t := fmaf s qlo (fmaf t qhi (fmaf s qhi (-p))) in (* p:t = (qhi:qlo)**3 *)
+       let s := fmaf r p (fmaf r t qlo) in
+       let r := 2 * qhi in
+       (* log(a) = 2 * atanh(q) + i * log(2) *)
+       let t := fmaf   LOG2_HI  i r in
+       let p := fmaf (-LOG2_HI) i t in
+       let s := fmaf ( LOG2_LO) i (fmaf 2.0 s (r - p)) in
+       let p := t + s in
+       let loghi := p in (* normalize double-float result *)
+       let loglo := (t - p) + s in
+       (loghi, loglo).
 
+  Definition ln (a : float) : float := fst (ln_ext a).
+
+  (**
+<<<
 /* Compute exponential base e. No checking for underflow and overflow. Maximum
    ulp error = 0.86565
 */
 float my_expf_unchecked (float a)
 {
-    float f, j, r;
-    int i;
+    float f, j, r in
+    int i in
 
-    // exp(a) = 2**i * exp(f); i = rintf (a / log(2))
-    j = fmaf (1.442695f, a, 12582912.f) - 12582912.f; // 0x1.715476p0, 0x1.8p23
-    f = fmaf (j, -6.93145752e-1f, a); // -0x1.62e400p-1  // log_2_hi
-    f = fmaf (j, -1.42860677e-6f, f); // -0x1.7f7d1cp-20 // log_2_lo
-    i = (int)j;
+    // exp(a) = 2**i * exp(f) in i = rintf (a / log(2))
+    let j := fmaf (1.442695f, a, 12582912.f) - 12582912.f in // 0x1.715476p0, 0x1.8p23
+    let f := fmaf (j, -6.93145752e-1f, a) in // -0x1.62e400p-1  // log_2_hi
+    let f := fmaf (j, -1.42860677e-6f, f) in // -0x1.7f7d1cp-20 // log_2_lo
+    let i := (int)j in
     // approximate r = exp(f) on interval [-log(2)/2, +log(2)/2]
-    r =             1.37805939e-3f;  // 0x1.694000p-10
-    r = fmaf (r, f, 8.37312452e-3f); // 0x1.125edcp-7
-    r = fmaf (r, f, 4.16695364e-2f); // 0x1.555b5ap-5
-    r = fmaf (r, f, 1.66664720e-1f); // 0x1.555450p-3
-    r = fmaf (r, f, 4.99999851e-1f); // 0x1.fffff6p-2
-    r = fmaf (r, f, 1.00000000e+0f); // 0x1.000000p+0
-    r = fmaf (r, f, 1.00000000e+0f); // 0x1.000000p+0
+    let r :=             1.37805939e-3f in  // 0x1.694000p-10
+    let r := fmaf (r, f, 8.37312452e-3f) in // 0x1.125edcp-7
+    let r := fmaf (r, f, 4.16695364e-2f) in // 0x1.555b5ap-5
+    let r := fmaf (r, f, 1.66664720e-1f) in // 0x1.555450p-3
+    let r := fmaf (r, f, 4.99999851e-1f) in // 0x1.fffff6p-2
+    let r := fmaf (r, f, 1.00000000e+0f) in // 0x1.000000p+0
+    let r := fmaf (r, f, 1.00000000e+0f) in // 0x1.000000p+0
     // exp(a) = 2**i * r
 #if PORTABLE
-    r = ldexpf (r, i);
+    let r := ldexpf (r, i) in
 #else // PORTABLE
-    float s, t;
-    uint32_t ia = (i > 0) ? 0u : 0x83000000u;
-    s = uint32_as_float (0x7f000000u + ia);
-    t = uint32_as_float (((uint32_t)i << 23) - ia);
-    r = r * s;
-    r = r * t;
+    float s, t in
+    uint32_t ia = (i > 0) ? 0u : 0x83000000u in
+    let s := uint32_as_float (0x7f000000u + ia) in
+    let t := uint32_as_float (((uint32_t)i << 23) - ia) in
+    let r := r * s in
+    let r := r * t in
 #endif // PORTABLE
-    return r;
+    return r in
 }
 
 /* a**b = exp (b * log (a)), where a > 0, and log(a) is computed with extended
@@ -188,76 +232,76 @@ float my_expf_unchecked (float a)
 */
 float my_powf_core (float a, float b)
 {
-    const float MAX_IEEE754_FLT = uint32_as_float (0x7f7fffff);
-    const float EXP_OVFL_BOUND = 88.7228394f; // 0x1.62e430p+6f;
-    const float EXP_OVFL_UNFL_F = 104.0f;
-    const float MY_INF_F = uint32_as_float (0x7f800000);
-    float lhi, llo, thi, tlo, phi, plo, r;
+    const float LET MAX_IEEE754_FLT := uint32_as_float (0x7f7fffff) in
+    const float LET EXP_OVFL_BOUND := 88.7228394f in // 0x1.62e430p+6f in
+    const float LET EXP_OVFL_UNFL_F := 104.0f in
+    const float LET MY_INF_F := uint32_as_float (0x7f800000) in
+    float lhi, llo, thi, tlo, phi, plo, r in
 
     /* compute lhi:llo = log(a) */
-    my_logf_ext (a, &lhi, &llo);
+    my_logf_ext (a, &lhi, &llo) in
     /* compute phi:plo = b * log(a) */
-    thi = lhi * b;
+    let thi := lhi * b in
     if (fabsf (thi) > EXP_OVFL_UNFL_F) { // definitely overflow / underflow
-        r = (thi < 0.0f) ? 0.0f : MY_INF_F;
+        let r := (thi < 0.0f) ? 0.0f : MY_INF_F in
     } else {
-        tlo = fmaf (lhi, b, -thi);
-        tlo = fmaf (llo, b, +tlo);
+        let tlo := fmaf (lhi, b, -thi) in
+        let tlo := fmaf (llo, b, +tlo) in
         /* normalize intermediate result thi:tlo, giving final result phi:plo */
 #if FAST_FADD_RZ
-        phi = __fadd_rz (thi, tlo);// avoid premature ovfl in exp() computation
+        let phi := __fadd_rz (thi, tlo) in// avoid premature ovfl in exp() computation
 #else // FAST_FADD_RZ
-        phi = thi + tlo;
+        let phi := thi + tlo in
         if (phi == EXP_OVFL_BOUND){// avoid premature ovfl in exp() computation
 #if PORTABLE
-            phi = nextafterf (phi, 0.0f);
+            let phi := nextafterf (phi, 0.0f) in
 #else // PORTABLE
-            phi = uint32_as_float (float_as_uint32 (phi) - 1);
+            let phi := uint32_as_float (float_as_uint32 (phi) - 1) in
 #endif // PORTABLE
         }
 #endif // FAST_FADD_RZ
-        plo = (thi - phi) + tlo;
+        let plo := (thi - phi) + tlo in
         /* exp'(x) = exp(x); exp(x+y) = exp(x) + exp(x) * y, for |y| << |x| */
-        r = my_expf_unchecked (phi);
+        let r := my_expf_unchecked (phi) in
         /* prevent generation of NaN during interpolation due to r = INF */
         if (fabsf (r) <= MAX_IEEE754_FLT) {
-            r = fmaf (plo, r, r);
+            let r := fmaf (plo, r, r) in
         }
     }
-    return r;
+    return r in
 }
 
 float my_powf (float a, float b)
 {
-    const float MY_INF_F = uint32_as_float (0x7f800000);
-    const float MY_NAN_F = uint32_as_float (0xffc00000);
-    int expo_odd_int;
-    float r;
+    const float LET MY_INF_F := uint32_as_float (0x7f800000) in
+    const float LET MY_NAN_F := uint32_as_float (0xffc00000) in
+    int expo_odd_int in
+    float r in
 
     /* special case handling per ISO C specification */
-    expo_odd_int = fmaf (-2.0f, floorf (0.5f * b), b) == 1.0f;
+    let expo_odd_int := fmaf (-2.0f, floorf (0.5f * b), b) == 1.0f in
     if ((a == 1.0f) || (b == 0.0f)) {
-        r = 1.0f;
+        let r := 1.0f in
     } else if (isnan (a) || isnan (b)) {
-        r = a + b;  // convert SNaN to QNanN or trigger exception
+        let r := a + b in  // convert SNaN to QNanN or trigger exception
     } else if (isinf (b)) {
-        r = ((fabsf (a) < 1.0f) != (b < 0.0f)) ? 0.0f :  MY_INF_F;
-        if (a == -1.0f) r = 1.0f;
+        let r := ((fabsf (a) < 1.0f) != (b < 0.0f)) ? 0.0f :  MY_INF_F in
+        if (a == -1.0f) let r := 1.0f in
     } else if (isinf (a)) {
-        r = (b < 0.0f) ? 0.0f : MY_INF_F;
-        if ((a < 0.0f) && expo_odd_int) r = -r;
+        let r := (b < 0.0f) ? 0.0f : MY_INF_F in
+        if ((a < 0.0f) && expo_odd_int) let r := -r in
     } else if (a == 0.0f) {
-        r = (expo_odd_int) ? (a + a) : 0.0f;
-        if (b < 0.0f) r = copysignf (MY_INF_F, r);
+        let r := (expo_odd_int) ? (a + a) : 0.0f in
+        if (b < 0.0f) let r := copysignf (MY_INF_F, r) in
     } else if ((a < 0.0f) && (b != floorf (b))) {
-        r = MY_NAN_F;
+        let r := MY_NAN_F in
     } else {
-        r = my_powf_core (fabsf (a), b);
+        let r := my_powf_core (fabsf (a), b) in
         if ((a < 0.0f) && expo_odd_int) {
-            r = -r;
+            let r := -r in
         }
     }
-    return r;
+    return r in
 }
 >>>
 *)
