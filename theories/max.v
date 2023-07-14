@@ -63,7 +63,7 @@ Definition pos_embed {r} {s : Shape (S r)} (tokens : tensor int s)
 
 Section layernorm.
   Context {r A} {s : Shape r} {d_model}
-    {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A} {sqrtA : has_sqrt A} {zeroA : has_zero A} {coerZ : has_coer Z A}
+    {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A} {sqrtA : has_sqrt A} {zeroA : has_zero A} {coerZ : has_coer Z A} {default : pointed A}
     (eps : A) (w b : tensor A [d_model]).
 
   Definition layernorm_linpart (x : tensor A (s ::' d_model))
@@ -88,7 +88,7 @@ Section layernorm.
     := let x := layernorm_linpart x in
        let scale := layernorm_scale x in
        let x := layernorm_rescale x scale in
-       layernorm_postrescale x.
+       PArray.checkpoint (layernorm_postrescale x).
 End layernorm.
 
 Section ln.
@@ -255,6 +255,7 @@ Section TransformerBlock.
     {zeroA : has_zero A} {coerZ : has_coer Z A}
     {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
     {sqrtA : has_sqrt A} {expA : has_exp A}
+    {default : pointed A}
     {pos n_heads d_model d_head} {n_ctx:N}
     {use_split_qkv_input : with_default "use_split_qkv_input" bool false}
     (W_Q W_K W_V W_O : tensor A [n_heads; d_model; d_head])
@@ -407,6 +408,27 @@ Goal True.
   cbv beta zeta iota in k1, k2.
   set (lnv := layernorm _ _ _ _) in *.
   cbv beta delta [layernorm] in *.
+  cbv beta iota zeta in lnv.
+  cbv beta delta [PArray.checkpoint] in lnv.
+  set (k_tmp := PArray.concretize _) in (value of lnv).
+  Time vm_compute in k_tmp.
+  subst k_tmp.
+  cbv [einsum_input] in k1.
+  FIXME EINSUM WRONG
+               (*
+  cbv beta delta [Shape.hd Shape.nil Shape.tl Shape.snoc fst snd Shape.cons Shape.app Nat.radd Tensor.raw_get] in k1.
+
+  cbv beta iota zeta in k1.
+  Set Printing All.
+
+  cbn [fst snd] in k1.
+
+
+  pose
+  Timeout 5 Compute PArray.concretize lnv.
+  pose (lnvc := PArray.concretize lnv).
+  vm_compute in lnvc.
+  vm_compute in lnv.
   clear -lnv.
   set (lnlv := layernorm_linpart _) in *.
   cbv beta delta [layernorm_linpart] in *.
@@ -423,6 +445,7 @@ Goal True.
   cbv beta iota in mv'.
   cbv beta delta [map] in mv'.
   pose (PArray.concretize mv') as mv'c.
+  vm_compute in mv'c.
   cbv [PArray.concretize Shape.snoc init_default] in mv'c.
   set (k_tmp := _ <=? max_length) in *.
   vm_compute in k_tmp; subst k_tmp; cbv beta iota in mv'c.

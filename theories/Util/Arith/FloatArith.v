@@ -1,8 +1,13 @@
 From Coq Require Import Qround Sint63 Uint63 NArith PArith ZArith QArith Floats.
+From NeuralNetInterp.Util Require Import Default.
 Local Open Scope float_scope.
 Notation "'∞'" := infinity : float_scope.
 #[local] Coercion Z.of_N : N >-> Z.
 #[local] Coercion inject_Z : Z >-> Q.
+#[local] Coercion Z.pos : positive >-> Z.
+Local Open Scope float_scope.
+Notation "'∞'" := infinity : float_scope.
+
 Module PrimFloat.
   Definition of_sint63 (x : int) : float
     := if Sint63.ltb x 0
@@ -66,6 +71,51 @@ Module PrimFloat.
        else if Qle_bool q 0
             then -of_Q_pos (-q)
             else of_Q_pos q.
+
+  Definition to_Z_cps (x : float) {T} (on_nan : T) (on_pinf : T) (on_ninf : T) (on_Z : Z -> T) : T
+    := match Prim2SF x with
+       | S754_nan => on_nan
+       | S754_zero _ => on_Z 0%Z
+       | S754_infinity false => on_pinf
+       | S754_infinity true => on_ninf
+       | S754_finite is_neg m e
+         => let z := (if (e <? 0)
+                      then m / 2^(-e)
+                      else m * 2^e)%Z in
+            on_Z (if is_neg then -z else z)%Z
+       end.
+
+  (* float64 stores numbers 2.2E-308 to 1.7E+308, aka around 2^1024, so let's pick 2^2048 as inf *)
+  Definition to_Z
+    {nan : with_default "nan" Z 0%Z}
+    {pinf : with_default "+∞" Z (2^2048)%Z}
+    {ninf : with_default "-∞" Z (-(2^2048))%Z}
+    (x : float)
+    : Z
+    := to_Z_cps x nan pinf ninf (fun x => x).
+
+  Definition to_Q_cps (x : float) {T} (on_nan : T) (on_pinf : T) (on_ninf : T) (on_Q : Q -> T) : T
+    := match Prim2SF x with
+       | S754_nan => on_nan
+       | S754_zero _ => on_Q 0%Q
+       | S754_infinity false => on_pinf
+       | S754_infinity true => on_ninf
+       | S754_finite is_neg m e
+         => let z := (if (e <? 0)%Z
+                      then m / (2^(-e))%Z
+                      else m * (2^e)%Z)%Q in
+            on_Q (if is_neg then -z else z)%Q
+       end.
+
+  Definition to_Q
+    {nan : with_default "nan" Q 0%Q}
+    {pinf : with_default "+∞" Q (2^2048)%Z}
+    {ninf : with_default "-∞" Q (-(2^2048))%Z}
+    (x : float)
+    : Q
+    := to_Q_cps x nan pinf ninf (fun x => x).
+
+  #[local] Notation fmaf x y z := (x * y + z) (only parsing).
 
   (** Translating from https://stackoverflow.com/a/40519989/377022 with GPT-4
 <<<
@@ -147,9 +197,8 @@ void my_logf_ext (float a, float *loghi, float *loglo)
     *loglo = (t - p) + s;
 }
    *)
-  #[local] Notation fmaf x y z := (x * y + z) (only parsing).
-  (* Compute log(a) with extended precision, returned as a double-float value
-     loghi:loglo. Maximum relative error: 8.5626e-10.
+  (** Compute log(a) with extended precision, returned as a double-float value
+      loghi:loglo. Maximum relative error: 8.5626e-10.
    *)
   Definition ln_ext (a : float) : float * float
     := let LOG2_HI   :=  0x1.62e430p-1 (* 6.93147182e-1f*) in
@@ -196,36 +245,63 @@ void my_logf_ext (float a, float *loghi, float *loglo)
 */
 float my_expf_unchecked (float a)
 {
-    float f, j, r in
-    int i in
+    float f, j, r;
+    int i;
 
-    // exp(a) = 2**i * exp(f) in i = rintf (a / log(2))
-    let j := fmaf (1.442695f, a, 12582912.f) - 12582912.f in // 0x1.715476p0, 0x1.8p23
-    let f := fmaf (j, -6.93145752e-1f, a) in // -0x1.62e400p-1  // log_2_hi
-    let f := fmaf (j, -1.42860677e-6f, f) in // -0x1.7f7d1cp-20 // log_2_lo
-    let i := (int)j in
+    // exp(a) = 2**i * exp(f); i = rintf (a / log(2))
+    j = fmaf (1.442695f, a, 12582912.f) - 12582912.f; // 0x1.715476p0, 0x1.8p23
+    f = fmaf (j, -6.93145752e-1f, a); // -0x1.62e400p-1  // log_2_hi
+    f = fmaf (j, -1.42860677e-6f, f); // -0x1.7f7d1cp-20 // log_2_lo
+    i = (int)j;
     // approximate r = exp(f) on interval [-log(2)/2, +log(2)/2]
-    let r :=             1.37805939e-3f in  // 0x1.694000p-10
-    let r := fmaf (r, f, 8.37312452e-3f) in // 0x1.125edcp-7
-    let r := fmaf (r, f, 4.16695364e-2f) in // 0x1.555b5ap-5
-    let r := fmaf (r, f, 1.66664720e-1f) in // 0x1.555450p-3
-    let r := fmaf (r, f, 4.99999851e-1f) in // 0x1.fffff6p-2
-    let r := fmaf (r, f, 1.00000000e+0f) in // 0x1.000000p+0
-    let r := fmaf (r, f, 1.00000000e+0f) in // 0x1.000000p+0
+    r =             1.37805939e-3f;  // 0x1.694000p-10
+    r = fmaf (r, f, 8.37312452e-3f); // 0x1.125edcp-7
+    r = fmaf (r, f, 4.16695364e-2f); // 0x1.555b5ap-5
+    r = fmaf (r, f, 1.66664720e-1f); // 0x1.555450p-3
+    r = fmaf (r, f, 4.99999851e-1f); // 0x1.fffff6p-2
+    r = fmaf (r, f, 1.00000000e+0f); // 0x1.000000p+0
+    r = fmaf (r, f, 1.00000000e+0f); // 0x1.000000p+0
     // exp(a) = 2**i * r
 #if PORTABLE
-    let r := ldexpf (r, i) in
+    r = ldexpf (r, i);
 #else // PORTABLE
-    float s, t in
-    uint32_t ia = (i > 0) ? 0u : 0x83000000u in
-    let s := uint32_as_float (0x7f000000u + ia) in
-    let t := uint32_as_float (((uint32_t)i << 23) - ia) in
-    let r := r * s in
-    let r := r * t in
+    float s, t;
+    uint32_t ia = (i > 0) ? 0u : 0x83000000u;
+    s = uint32_as_float (0x7f000000u + ia);
+    t = uint32_as_float (((uint32_t)i << 23) - ia);
+    r = r * s;
+    r = r * t;
 #endif // PORTABLE
-    return r in
+    return r;
 }
+   *)
+  (** Compute exponential base e. No checking for underflow and overflow. Maximum
+      ulp error = 0.86565
+   *)
+  Definition exp (a : float) : float :=
+    (* exp(a) = 2**i * exp(f); i = rintf (a / log(2)) *)
+    let big := 0x1.8p0 * of_Z (2^prec) in
+    let j := fmaf 0x1.715476p0 a big - big in (* 1.442695f, 12582912f *)
+    let f := fmaf j (-0x1.62e400p-1)  a in (* -6.93145752e-1f *) (* log_2_hi *)
+    let f := fmaf j (-0x1.7f7d1cp-20) f in (* -1.42860677e-6f *) (* log_2_lo *)
+    match to_Z_cps j (inr nan) (inr ∞) (inr (-∞)) (@inl _ _) with (* inl i or inr return *)
+    | inr out_of_bounds => out_of_bounds
+    | inl i =>
+        (* approximate r = exp(f) on interval [-log(2)/2, +log(2)/2] *)
+        let r :=          0x1.694000p-10 in (* 1.37805939e-3f *)
+        let r := fmaf r f 0x1.125edcp-7  in (* 8.37312452e-3f *)
+        let r := fmaf r f 0x1.555b5ap-5  in (* 4.16695364e-2f *)
+        let r := fmaf r f 0x1.555450p-3  in (* 1.66664720e-1f *)
+        let r := fmaf r f 0x1.fffff6p-2  in (* 4.99999851e-1f *)
+        let r := fmaf r f 0x1.000000p+0  in (* 1.00000000e+0f *)
+        let r := fmaf r f 0x1.000000p+0  in (* 1.00000000e+0f *)
+        (* exp(a) = 2**i * r *)
+        let r := Z.ldexp r i in
+        r
+    end.
 
+(**
+<<<
 /* a**b = exp (b * log (a)), where a > 0, and log(a) is computed with extended
    precision as a double-float. Maxiumum error found across 2**42 test cases:
    1.97302 ulp @ (0.71162397, -256.672424).
@@ -233,7 +309,7 @@ float my_expf_unchecked (float a)
 float my_powf_core (float a, float b)
 {
     const float LET MAX_IEEE754_FLT := uint32_as_float (0x7f7fffff) in
-    const float LET EXP_OVFL_BOUND := 88.7228394f in // 0x1.62e430p+6f in
+    const float LET EXP_OVFL_BOUND := 88.7228394f in (* 0x1.62e430p+6f in *)
     const float LET EXP_OVFL_UNFL_F := 104.0f in
     const float LET MY_INF_F := uint32_as_float (0x7f800000) in
     float lhi, llo, thi, tlo, phi, plo, r in
@@ -242,24 +318,24 @@ float my_powf_core (float a, float b)
     my_logf_ext (a, &lhi, &llo) in
     /* compute phi:plo = b * log(a) */
     let thi := lhi * b in
-    if (fabsf (thi) > EXP_OVFL_UNFL_F) { // definitely overflow / underflow
+    if (fabsf (thi) > EXP_OVFL_UNFL_F) { (* definitely overflow / underflow *)
         let r := (thi < 0.0f) ? 0.0f : MY_INF_F in
     } else {
         let tlo := fmaf (lhi, b, -thi) in
         let tlo := fmaf (llo, b, +tlo) in
         /* normalize intermediate result thi:tlo, giving final result phi:plo */
 #if FAST_FADD_RZ
-        let phi := __fadd_rz (thi, tlo) in// avoid premature ovfl in exp() computation
-#else // FAST_FADD_RZ
+        let phi := __fadd_rz (thi, tlo) in(* avoid premature ovfl in exp() computation *)
+#else (* FAST_FADD_RZ *)
         let phi := thi + tlo in
-        if (phi == EXP_OVFL_BOUND){// avoid premature ovfl in exp() computation
+        if (phi == EXP_OVFL_BOUND){(* avoid premature ovfl in exp() computation *)
 #if PORTABLE
             let phi := nextafterf (phi, 0.0f) in
-#else // PORTABLE
+#else (* PORTABLE *)
             let phi := uint32_as_float (float_as_uint32 (phi) - 1) in
-#endif // PORTABLE
+#endif (* PORTABLE *)
         }
-#endif // FAST_FADD_RZ
+#endif (* FAST_FADD_RZ *)
         let plo := (thi - phi) + tlo in
         /* exp'(x) = exp(x); exp(x+y) = exp(x) + exp(x) * y, for |y| << |x| */
         let r := my_expf_unchecked (phi) in
@@ -283,7 +359,7 @@ float my_powf (float a, float b)
     if ((a == 1.0f) || (b == 0.0f)) {
         let r := 1.0f in
     } else if (isnan (a) || isnan (b)) {
-        let r := a + b in  // convert SNaN to QNanN or trigger exception
+        let r := a + b in  (* convert SNaN to QNanN or trigger exception *)
     } else if (isinf (b)) {
         let r := ((fabsf (a) < 1.0f) != (b < 0.0f)) ? 0.0f :  MY_INF_F in
         if (a == -1.0f) let r := 1.0f in

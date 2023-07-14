@@ -182,17 +182,7 @@ Local Open Scope float_scope.
 #[export] Instance float_has_div : has_div float := eta2 PrimFloat.div.
 #[export] Instance float_has_zero : has_zero float := 0.
 #[export] Instance float_has_one : has_one float := 1.
-
-(*HERE
-#[export] Instance float_has_pow_Z : has_pow_by float Z float := floatpower.
-#[export] Instance float_has_exp : has_exp float := floatexp.
- *)
-(*
-#[global] Coercion inject_Z : Z >-> Q.
-#[export] Instance inject_Z_coer : has_coer Z Q := fun x => x.
-#[export] Hint Extern 10 (has_coer_from Z ?B) => check_unify_has_coer_from Q : typeclass_instances.
-#[export] Hint Extern 10 (has_coer_to ?A Q) => check_unify_has_coer_to Z : typeclass_instances.
- *)
+#[export] Instance float_has_exp : has_exp float := eta1 PrimFloat.exp.
 
 Module Truncating.
   #[export] Instance coer_Z_int : has_coer Z int := Uint63.of_Z.
