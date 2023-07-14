@@ -29,6 +29,7 @@ theories/Util/Slice.v
 theories/Util/Uint63.v
 theories/Util/Wf_Uint63.v
 theories/Util/Arith/Classes.v
+theories/Util/Arith/FloatArith.v
 theories/Util/Arith/Instances.v
 theories/Util/Arith/QArith.v
 theories/Util/Arith/ZArith.v

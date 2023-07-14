@@ -1,10 +1,11 @@
-From Coq Require Import String NArith QArith Lia List.
-Local Open Scope Q_scope.
+From Coq Require Import String Floats NArith QArith Lia List.
+Local Open Scope float_scope.
 Local Open Scope string_scope.
 Local Open Scope list_scope.
 Import ListNotations.
-(* Should use IEEE 754 floats from flocq, but let's use rationals for now for ease of linearity, proving, etc *)
 (* Based on https://colab.research.google.com/drive/1N4iPEyBVuctveCA0Zre92SpfgH6nmHXY#scrollTo=Q1h45HnKi-43, Taking the minimum or maximum of two ints *)
+
+#[local] Set Warnings Append "-inexact-float".
 
 Module cfg.
   Definition n_layers := 1%N.
@@ -89,6 +90,7 @@ for name in (#'OV',
  print(strify(getattr(model, name)))
  print('.')
  *)
+
 Definition W_E :=
 [[0.08259996;-0.103035696;-0.09290537;-0.2697793;-0.116053924;-0.056287035;-0.14258036;-0.10651243;0.18145129;0.015795145;0.063153595;0.04837111;0.025047297;0.21419796;0.23128724;-0.08307091;-0.007658955;-0.03564377;-0.05079817;0.1706508;0.12282732;0.21353826;0.041205965;-0.031283733;0.019155435;-0.07647628;0.042479437;-0.04414615;-0.036890335;0.01796673;-0.21359958;-0.23541278]
 ;[0.07901057;0.05048548;-0.22849436;-0.06686164;-0.2577674;-0.07858514;0.053111024;-0.12933882;0.24213913;0.06598642;0.056828417;0.05649841;-0.10509687;0.16786443;0.2204125;-0.09172081;0.1977572;0.124763705;-0.022134088;0.21976756;-0.024028888;0.3163545;-0.0065248525;-0.15282348;0.25781232;-0.022697276;-0.010818805;-0.07061167;-0.111270845;-0.12803394;-0.18702763;0.091925055]

@@ -259,8 +259,9 @@ Module Shape.
     #[global] Bind Scope uint63_scope with t.
     Definition one : has_one t := _.
     Definition eqb : has_eqb t := _.
-    Definition leb : has_leb t := Uint63.leb.
-    Definition ltb : has_ltb t := Uint63.ltb.
+    (* eta expand to get around COQBUG(https://github.com/coq/coq/issues/17663) *)
+    Definition leb : has_leb t := fun x y => Uint63.leb x y.
+    Definition ltb : has_ltb t := fun x y => Uint63.ltb x y.
   End ShapeType.
 
   Include IndexGen.ExtendedMake ShapeType.
@@ -296,8 +297,9 @@ Module RawIndex.
     #[global] Bind Scope uint63_scope with t.
     Definition one : has_one t := _.
     Definition eqb : has_eqb t := _.
-    Definition leb : has_leb t := Uint63.leb.
-    Definition ltb : has_ltb t := Uint63.ltb.
+    (* eta expand to get around COQBUG(https://github.com/coq/coq/issues/17663) *)
+    Definition leb : has_leb t := fun x y => Uint63.leb x y.
+    Definition ltb : has_ltb t := fun x y => Uint63.ltb x y.
   End RawIndexType.
 
   Include IndexGen.ExtendedMake RawIndexType.
@@ -328,8 +330,9 @@ Module Index.
     #[global] Bind Scope sint63_scope with t.
     Definition one : has_one t := _.
     Definition eqb : has_eqb t := _.
-    Definition leb : has_leb t := Sint63.leb.
-    Definition ltb : has_ltb t := Sint63.ltb.
+    (* eta expand to get around COQBUG(https://github.com/coq/coq/issues/17663) *)
+    Definition leb : has_leb t := fun x y => Sint63.leb x y.
+    Definition ltb : has_ltb t := fun x y => Sint63.ltb x y.
   End IndexType.
 
   Include IndexGen.ExtendedMake IndexType.

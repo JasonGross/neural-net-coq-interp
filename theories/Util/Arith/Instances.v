@@ -1,5 +1,5 @@
-From Coq Require Import List PArray Sint63 Uint63 Arith PArith NArith ZArith QArith.
-From NeuralNetInterp.Util.Arith Require Import Classes QArith ZArith.
+From Coq Require Import List Floats PArray Sint63 Uint63 Arith PArith NArith ZArith QArith.
+From NeuralNetInterp.Util.Arith Require Import Classes FloatArith QArith ZArith.
 Import ListNotations.
 Set Implicit Arguments.
 #[global] Set Warnings Append "-ambiguous-paths".
@@ -128,32 +128,82 @@ Local Open Scope Q_scope.
 #[export] Instance Q_has_exp : has_exp Q := Qexp.
 
 Local Open Scope int63_scope.
-#[export] Instance int_has_eqb : has_eqb int := Uint63.eqb.
-#[export] Instance int_has_opp : has_opp int := Uint63.opp.
-#[export] Instance int_has_add : has_add int := Uint63.add.
-#[export] Instance int_has_sub : has_sub int := Uint63.sub.
-#[export] Instance int_has_mul : has_mul int := Uint63.mul.
+(* eta expand to get around COQBUG(https://github.com/coq/coq/issues/17663) *)
+#[local] Notation eta1 f := (fun x => f x) (only parsing).
+#[local] Notation eta2 f := (fun x y => f x y) (only parsing).
+#[export] Instance int_has_eqb : has_eqb int := eta2 Uint63.eqb.
+#[export] Instance int_has_opp : has_opp int := eta1 Uint63.opp.
+#[export] Instance int_has_add : has_add int := eta2 Uint63.add.
+#[export] Instance int_has_sub : has_sub int := eta2 Uint63.sub.
+#[export] Instance int_has_mul : has_mul int := eta2 Uint63.mul.
 #[export] Instance int_has_zero : has_zero int := 0.
 #[export] Instance int_has_one : has_one int := 1.
-#[export] Instance int_has_sqrt : has_sqrt int := Uint63.sqrt.
+#[export] Instance int_has_sqrt : has_sqrt int := eta1 Uint63.sqrt.
+
+#[export] Hint Extern 10 (has_coer_from int ?B) => check_unify_has_coer_from Z : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_to ?A Z) => check_unify_has_coer_to int : typeclass_instances.
+
+#[export] Hint Extern 10 (has_coer_from int ?B) => check_unify_has_coer_from float : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_to ?A float) => check_unify_has_coer_to int : typeclass_instances.
 
 Module Sint63.
-  #[export] Instance int_div : has_int_div int := Sint63.div.
-  #[export] Instance modulo : has_mod int := Sint63.rem.
-  #[export] Instance ltb : has_ltb int := Sint63.ltb.
-  #[export] Instance leb : has_leb int := Sint63.leb.
+  #[export] Instance coer_int_Z : has_coer int Z := eta1 Sint63.to_Z.
+  #[export] Instance int_div : has_int_div int := eta2 Sint63.div.
+  #[export] Instance modulo : has_mod int := eta2 Sint63.rem.
+  #[export] Instance ltb : has_ltb int := eta2 Sint63.ltb.
+  #[export] Instance leb : has_leb int := eta2 Sint63.leb.
   #[export] Instance min : has_min int := _.
   #[export] Instance max : has_max int := _.
+
+  #[export] Instance coer_int_float : has_coer int float := PrimFloat.of_sint63.
 End Sint63.
 
 Module Export Uint63.
-  #[export] Instance int_div : has_int_div int := Uint63.div.
-  #[export] Instance modulo : has_mod int := Uint63.mod.
-  #[export] Instance ltb : has_ltb int := Uint63.ltb.
-  #[export] Instance leb : has_leb int := Uint63.leb.
+  #[export] Instance coer_int_Z : has_coer int Z := eta1 Uint63.to_Z.
+  #[export] Instance int_div : has_int_div int := eta2 Uint63.div.
+  #[export] Instance modulo : has_mod int := eta2 Uint63.mod.
+  #[export] Instance ltb : has_ltb int := eta2 Uint63.ltb.
+  #[export] Instance leb : has_leb int := eta2 Uint63.leb.
   #[export] Instance min : has_min int := _.
   #[export] Instance max : has_max int := _.
+
+  #[export] Instance coer_int_float : has_coer int float := PrimFloat.of_uint63.
 End Uint63.
+
+Local Open Scope float_scope.
+#[export] Instance float_has_leb : has_leb float := eta2 PrimFloat.leb.
+#[export] Instance float_has_eqb : has_eqb float := eta2 PrimFloat.Leibniz.eqb.
+#[export] Instance float_has_opp : has_opp float := eta1 PrimFloat.opp.
+#[export] Instance float_has_abs : has_abs float := eta1 PrimFloat.abs.
+#[export] Instance float_has_sqrt : has_sqrt float := eta1 PrimFloat.sqrt.
+#[export] Instance float_has_add : has_add float := eta2 PrimFloat.add.
+#[export] Instance float_has_sub : has_sub float := eta2 PrimFloat.sub.
+#[export] Instance float_has_mul : has_mul float := eta2 PrimFloat.mul.
+#[export] Instance float_has_div : has_div float := eta2 PrimFloat.div.
+#[export] Instance float_has_zero : has_zero float := 0.
+#[export] Instance float_has_one : has_one float := 1.
+
+(*HERE
+#[export] Instance float_has_pow_Z : has_pow_by float Z float := floatpower.
+#[export] Instance float_has_exp : has_exp float := floatexp.
+ *)
+(*
+#[global] Coercion inject_Z : Z >-> Q.
+#[export] Instance inject_Z_coer : has_coer Z Q := fun x => x.
+#[export] Hint Extern 10 (has_coer_from Z ?B) => check_unify_has_coer_from Q : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_to ?A Q) => check_unify_has_coer_to Z : typeclass_instances.
+ *)
+
+Module Truncating.
+  #[export] Instance coer_Z_int : has_coer Z int := Uint63.of_Z.
+  #[export] Hint Extern 10 (has_coer_from Z ?B) => check_unify_has_coer_from int : typeclass_instances.
+  #[export] Hint Extern 10 (has_coer_to ?A int) => check_unify_has_coer_to Z : typeclass_instances.
+
+  #[export] Instance coer_Z_float : has_coer Z float := PrimFloat.of_Z.
+  #[export] Hint Extern 10 (has_coer_from Z ?B) => check_unify_has_coer_from float : typeclass_instances.
+  #[export] Hint Extern 10 (has_coer_to ?A float) => check_unify_has_coer_to Z : typeclass_instances.
+End Truncating.
+
 
 Local Open Scope list_scope.
 Scheme Equality for list.

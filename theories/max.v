@@ -1,4 +1,4 @@
-From Coq Require Import Sint63 Uint63 QArith Lia List PArray.
+From Coq Require Import Floats Sint63 Uint63 QArith Lia List PArray.
 From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool.
 From NeuralNetInterp.Util Require Nat Wf_Uint63.
 From NeuralNetInterp Require Import max_parameters.
@@ -7,7 +7,8 @@ Import Util.Nat.Notations.
 Import Util.Wf_Uint63.LoopNotation.
 Import Util.Wf_Uint63.
 Import Util.Wf_Uint63.Reduction.
-Local Open Scope Q_scope.
+Import Arith.Instances.Truncating.
+Local Open Scope float_scope.
 Local Open Scope list_scope.
 Set Implicit Arguments.
 Set Universe Polymorphism.
@@ -15,7 +16,7 @@ Unset Universe Minimization ToSet.
 Set Polymorphic Inductive Cumulativity.
 Import ListNotations.
 Local Open Scope raw_tensor_scope.
-(* Should use IEEE 754 floats from flocq, but let's use rationals for now for ease of linearity, proving, etc *)
+
 (* Based on https://colab.research.google.com/drive/1N4iPEyBVuctveCA0Zre92SpfgH6nmHXY#scrollTo=Q1h45HnKi-43, Taking the minimum or maximum of two ints *)
 
 (** Coq infra *)
@@ -48,14 +49,16 @@ Definition ln_final_w : tensor _ _ := Eval cbv in tensor_of_list max_parameters.
 Definition W_U : tensor _ _ := Eval cbv in tensor_of_list max_parameters.W_U.
 Definition b_U : tensor _ _ := Eval cbv in tensor_of_list max_parameters.b_U.
 
-Definition embed {r} {s : Shape r} (tokens : tensor IndexType s) : tensor Q (s ::' Shape.tl (shape_of W_E))
+#[local] Notation FLOAT := float (only parsing). (* or Q *)
+
+Definition embed {r} {s : Shape r} (tokens : tensor IndexType s) : tensor FLOAT (s ::' Shape.tl (shape_of W_E))
   := (W_E.[tokens, :])%fancy_raw_tensor.
 
 Definition pos_embed {r} {s : Shape (S r)} (tokens : tensor int s)
   (tokens_length := Shape.tl s) (* s[-1] *)
   (batch := Shape.droplastn 1 s) (* s[:-1] *)
   (d_model := Shape.tl (shape_of W_pos)) (* s[-1] *)
-  : tensor Q (batch ++' [tokens_length] ::' d_model)
+  : tensor FLOAT (batch ++' [tokens_length] ::' d_model)
   := repeat (W_pos.[:tokens_length, :]) batch.
 
 Section layernorm.
@@ -96,30 +99,30 @@ Section ln.
   Section ln1.
     Context (w := L0_ln1_w) (b := L0_ln1_b).
 
-    Definition ln1_linpart (x : tensor Q (s ::' d_model)) : tensor Q (s ::' d_model)
+    Definition ln1_linpart (x : tensor FLOAT (s ::' d_model)) : tensor FLOAT (s ::' d_model)
       := layernorm_linpart x.
-    Definition ln1_scale (x : tensor Q (s ::' d_model)) : tensor Q (s ::' d_model)
+    Definition ln1_scale (x : tensor FLOAT (s ::' d_model)) : tensor FLOAT (s ::' d_model)
       := layernorm_scale eps x.
-    Definition ln1_rescale (x : tensor Q (s ::' d_model)) (scale : tensor Q (s ::' 1)) : tensor Q (s ::' d_model)
+    Definition ln1_rescale (x : tensor FLOAT (s ::' d_model)) (scale : tensor FLOAT (s ::' 1)) : tensor FLOAT (s ::' d_model)
       := layernorm_rescale x scale.
-    Definition ln1_postrescale (x : tensor Q (s ::' d_model)) : tensor Q (s ::' d_model)
+    Definition ln1_postrescale (x : tensor FLOAT (s ::' d_model)) : tensor FLOAT (s ::' d_model)
       := layernorm_postrescale w b x.
-    Definition ln1 (x : tensor Q (s ::' d_model)) : tensor Q (s ::' d_model)
+    Definition ln1 (x : tensor FLOAT (s ::' d_model)) : tensor FLOAT (s ::' d_model)
       := layernorm eps w b x.
   End ln1.
 
   Section ln_final.
     Context (w := ln_final_w) (b := ln_final_b).
 
-    Definition ln_final_linpart (x : tensor Q (s ::' d_model)) : tensor Q (s ::' d_model)
+    Definition ln_final_linpart (x : tensor FLOAT (s ::' d_model)) : tensor FLOAT (s ::' d_model)
       := layernorm_linpart x.
-    Definition ln_final_scale (x : tensor Q (s ::' d_model)) : tensor Q (s ::' d_model)
+    Definition ln_final_scale (x : tensor FLOAT (s ::' d_model)) : tensor FLOAT (s ::' d_model)
       := layernorm_scale eps x.
-    Definition ln_final_rescale (x : tensor Q (s ::' d_model)) (scale : tensor Q (s ::' 1)) : tensor Q (s ::' d_model)
+    Definition ln_final_rescale (x : tensor FLOAT (s ::' d_model)) (scale : tensor FLOAT (s ::' 1)) : tensor FLOAT (s ::' d_model)
       := layernorm_rescale x scale.
-    Definition ln_final_postrescale (x : tensor Q (s ::' d_model)) : tensor Q (s ::' d_model)
+    Definition ln_final_postrescale (x : tensor FLOAT (s ::' d_model)) : tensor FLOAT (s ::' d_model)
       := layernorm_postrescale w b x.
-    Definition ln_final (x : tensor Q (s ::' d_model)) : tensor Q (s ::' d_model)
+    Definition ln_final (x : tensor FLOAT (s ::' d_model)) : tensor FLOAT (s ::' d_model)
       := layernorm eps w b x.
   End ln_final.
 End ln.
@@ -236,9 +239,9 @@ End Attention.
 Section Attention0.
   Context {r} {batch : Shape r}
     (IGNORE := -1e5)
-    (query_input key_input value_input : tensor Q (batch ++' [cfg.n_ctx; cfg.d_model])).
+    (query_input key_input value_input : tensor FLOAT (batch ++' [cfg.n_ctx; cfg.d_model])).
 
-  Definition L0_attn_out : tensor Q (batch ::' cfg.n_ctx ::' cfg.d_model)
+  Definition L0_attn_out : tensor FLOAT (batch ::' cfg.n_ctx ::' cfg.d_model)
     := attn_out
          (n_ctx:=cfg.n_ctx)
          L0_attn_W_Q L0_attn_W_K L0_attn_W_V L0_attn_W_O
@@ -301,9 +304,9 @@ End TransformerBlock.
 Section L0.
   Context {r} {batch : Shape r}
     (IGNORE := -1e5)
-    (residual : tensor Q (batch ++' [cfg.n_ctx; cfg.d_model])).
+    (residual : tensor FLOAT (batch ++' [cfg.n_ctx; cfg.d_model])).
 
-  Definition block0 : tensor Q (batch ::' cfg.n_ctx ::' cfg.d_model)
+  Definition block0 : tensor FLOAT (batch ::' cfg.n_ctx ::' cfg.d_model)
     := transformer_block_attn_only_out
          (n_ctx:=cfg.n_ctx)
          L0_attn_W_Q L0_attn_W_K L0_attn_W_V L0_attn_W_O
@@ -313,24 +316,24 @@ Section L0.
          residual.
 End L0.
 
-Definition unembed {r} {s : Shape r} (residual : tensor Q (s ::' cfg.n_ctx ::' cfg.d_model)) : tensor Q (s ::' cfg.n_ctx ::' cfg.d_vocab_out)
+Definition unembed {r} {s : Shape r} (residual : tensor FLOAT (s ::' cfg.n_ctx ::' cfg.d_model)) : tensor FLOAT (s ::' cfg.n_ctx ::' cfg.d_vocab_out)
   := (Tensor.map'
-        (fun residual : tensor Q [cfg.n_ctx; cfg.d_model]
+        (fun residual : tensor FLOAT [cfg.n_ctx; cfg.d_model]
          => weaksauce_einsum {{{ {{ pos d_model, d_model vocab -> pos vocab }}
                     , residual
                     , W_U }}}
-           : tensor Q [cfg.n_ctx; cfg.d_vocab_out])
+           : tensor FLOAT [cfg.n_ctx; cfg.d_vocab_out])
         residual
       + broadcast b_U)%core.
 
 Definition logits {r} {batch : Shape r} (tokens : tensor IndexType (batch ::' cfg.n_ctx))
-  : tensor Q (batch ::' cfg.n_ctx ::' cfg.d_vocab_out)
+  : tensor FLOAT (batch ::' cfg.n_ctx ::' cfg.d_vocab_out)
   := (let embed := embed tokens in
       let pos_embed := pos_embed tokens in
       let resid_shape := (batch ::' cfg.n_ctx ::' cfg.d_model)%shape in
-      let residual : tensor Q resid_shape := PArray.checkpoint (embed + pos_embed) in
-      let residual : tensor Q resid_shape := PArray.checkpoint (block0 residual) in
-      let residual : tensor Q resid_shape := PArray.checkpoint (ln_final residual) in
+      let residual : tensor FLOAT resid_shape := PArray.checkpoint (embed + pos_embed) in
+      let residual : tensor FLOAT resid_shape := PArray.checkpoint (block0 residual) in
+      let residual : tensor FLOAT resid_shape := PArray.checkpoint (ln_final residual) in
       let logits                          := PArray.checkpoint (unembed residual) in
       logits)%core.
 
@@ -434,7 +437,24 @@ Goal True.
   cbv [sum] in mv'c.
   cbv [map_reduce] in mv'c.
   Timeout 5 cbv -[add Q_has_add k0 Qdiv] in mv'c.
+  Time repeat (time (set (k0v := k0 _) in (value of mv'c) at 1;
+                     timeout 5 vm_compute in k0v; subst k0v)).
+  Time vm_compute in mv'c.
+.
   set (k0v := k0 _) in (value of mv'c) at 1.
+  timeout 5 vm_compute in k0v; subst k0v.
+  set (k0v := k0 _) in (value of mv'c) at 1.
+  timeout 5 vm_compute in k0v; subst k0v.
+  set (k0v := k0 _) in (value of mv'c) at 1.
+  timeout 5 vm_compute in k0v; subst k0v.
+  set (k0v := k0 _) in (value of mv'c) at 1.
+  timeout 5 vm_compute in k0v; subst k0v.
+  do 10 (set (k0v := k0 _) in (value of mv'c) at 1;
+          timeout 5 vm_compute in k0v; subst k0v).
+  do 10 (set (k0v := k0 _) in (value of mv'c) at 1;
+          timeout 5 vm_compute in k0v; subst k0v).
+  do 10 (set (k0v := k0 _) in (value of mv'c) at 1;
+          timeout 5 vm_compute in k0v; subst k0v).
   clear -k0v.
   set (val := (_ + _)%core) in (value of k0) at 1.
   cbv [ltb] in *.
@@ -492,5 +512,5 @@ Time Timeout 5 Compute PArray.concretize (logits (tensor_of_list [0; 1]%uint63))
 Compute PArray.concrete_tensor
 
 Compute PArray.concretize (embed (tensor_of_list [0; 1]%uint63)).
-Compute PArray.concretize (pos_embed (tensor_of_list [[0; 1]]%uint63) : tensor Q [1; cfg.n_ctx; cfg.d_model]).
+Compute PArray.concretize (pos_embed (tensor_of_list [[0; 1]]%uint63) : tensor FLOAT [1; cfg.n_ctx; cfg.d_model]).
 *)
