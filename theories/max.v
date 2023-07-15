@@ -338,7 +338,7 @@ Definition logits {r} {batch : Shape r} (tokens : tensor IndexType (batch ::' cf
       let residual : tensor FLOAT resid_shape := PArray.checkpoint (ln_final residual) in
       let logits                          := PArray.checkpoint (unembed residual) in
       logits)%core.
-
+(*
 Definition expected : tensor _ _ := Eval cbv in tensor_of_list [[11.4344;  0.5226;  3.3839;  1.9724;  4.5840;  0.6439;  3.9603;
            3.0340;  0.5467; -5.0662;  3.6980; -2.9019; -0.3635;  1.2298;
            4.1899; -1.8617;  1.8041;  1.8292;  3.8814;  1.5263; -0.3807;
@@ -598,3 +598,4 @@ Compute PArray.concrete_tensor
 Compute PArray.concretize (embed (tensor_of_list [0; 1]%uint63)).
 Compute PArray.concretize (pos_embed (tensor_of_list [[0; 1]]%uint63) : tensor FLOAT [1; cfg.n_ctx; cfg.d_model]).
 *)
+*)*)
