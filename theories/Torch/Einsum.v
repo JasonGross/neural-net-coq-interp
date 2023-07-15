@@ -8,7 +8,13 @@ From NeuralNetInterp.Util Require Export Arith.Classes.
 Import Ltac2.
 Import FixNotationsForPerformance MakeAbbreviations Printf.
 
+Ltac2 mutable debug () := false.
+
 Module Import Internals.
+  Ltac2 debug_printf fmt := if debug () then Printf.printf fmt else Message.Format.kfprintf (fun x => ()) fmt.
+
+  Ltac2 Notation "debug_printf" fmt(format) := debug_printf fmt.
+
   Ltac2 rec get_body (at_head : bool) (c : constr) :=
     match Constr.Unsafe.kind_nocast c with
     | Constr.Unsafe.Var v
@@ -72,9 +78,9 @@ Module Import Internals.
   Ltac2 constr_dropn (n : int) (k : int) (c : constr) : constr
     := let k := Int.sub k 1 in
        let invalid := mkVar (ident:(__CONSTR_DROPN_INVALID)) in
-       (*printf "dropping %i %i %t" n k c;*)
+       debug_printf "dropping %i %i %t" n k c;
        let res := Constr.Unsafe.substnl (List.repeat invalid n) k c in
-       (*printf "dropped %i %i %t" n k res;*)
+       debug_printf "dropped %i %i %t" n k res;
        res.
 
   Ltac2 Type exn ::= [ InternalEinsumNotEqual (constr, constr) ].
@@ -111,9 +117,9 @@ Module Import Internals.
                         used_rels,
                         if cur_rel_used
                         then
-                          let lam_body := mkLambda b body in
                           (* drop down rels that we dropped *)
-                          let lam_body := constr_dropn (Int.neg accumulated_shift) 1 lam_body in
+                          let body := constr_dropn (Int.neg accumulated_shift) 1 body in
+                          let lam_body := mkLambda b body in
                           Array.set args lam_body_pos lam_body;
                           (0, Constr.Unsafe.make (Constr.Unsafe.App f args))
                         else
@@ -126,7 +132,7 @@ Module Import Internals.
        end.
 
   Ltac2 remove_dead_einsum (hd_c : constr) (nargs : int) (names : 'a list) (body : constr) : constr
-    := (*printf "remove dead from %t" body;*)
+    := debug_printf "remove dead from %t" body;
        let (_cur_rel, _used_rels, (accumulated_shift, body)) := remove_dead_einsum_helper hd_c nargs names body in
        (* drop down rels that we dropped *)
        constr_dropn (Int.neg accumulated_shift) 1 body.

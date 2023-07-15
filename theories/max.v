@@ -129,7 +129,7 @@ End ln.
 
 Section Attention.
   Context {A r} {batch : Shape r}
-    {sqrtA : has_sqrt A} {coerZ : has_coer Z A} {addA : has_add A} {zeroA : has_zero A} {mulA : has_mul A} {divA : has_div A} {expA : has_exp A}
+    {sqrtA : has_sqrt A} {coerZ : has_coer Z A} {addA : has_add A} {zeroA : has_zero A} {mulA : has_mul A} {divA : has_div A} {expA : has_exp A} {defaultA : pointed A}
     {pos n_heads d_model d_head} {n_ctx:N}
     {use_split_qkv_input : with_default "use_split_qkv_input" bool false}
     (W_Q W_K W_V W_O : tensor A [n_heads; d_model; d_head])
@@ -175,11 +175,11 @@ Section Attention.
          input.
 
   Definition q : tensor A (batch ++' [pos; n_heads; d_head])
-    := (einsum_input query_input W_Q + broadcast b_Q)%core.
+    := PArray.checkpoint (einsum_input query_input W_Q + broadcast b_Q)%core.
   Definition k : tensor A (batch ++' [pos; n_heads; d_head])
-    := (einsum_input key_input W_K + broadcast b_K)%core.
+    := PArray.checkpoint (einsum_input key_input W_K + broadcast b_K)%core.
   Definition v : tensor A (batch ++' [pos; n_heads; d_head])
-    := (einsum_input value_input W_V + broadcast b_V)%core.
+    := PArray.checkpoint (einsum_input value_input W_V + broadcast b_V)%core.
 
   Definition attn_scores : tensor A (batch ::' n_heads ::' pos ::' pos)
     := (let qk : tensor A (batch ++' [n_heads; pos; pos])
@@ -194,7 +194,7 @@ Section Attention.
                   : tensor A [n_heads; pos; pos])
                q
                k in
-        qk / broadcast' attn_scale)%core.
+        PArray.checkpoint (qk / broadcast' attn_scale))%core.
 
   Definition apply_causal_mask (attn_scores : tensor A (batch ::' n_heads ::' pos ::' pos))
     : tensor A (batch ::' n_heads ::' pos ::' pos)
@@ -207,20 +207,21 @@ Section Attention.
     := apply_causal_mask attn_scores.
 
   Definition pattern : tensor A (batch ::' n_heads ::' pos ::' pos)
-    := softmax_dim_m1 masked_attn_scores.
+    := PArray.checkpoint (softmax_dim_m1 masked_attn_scores).
 
   Definition z : tensor A (batch ::' pos ::' n_heads ::' d_head)
-    := Tensor.map2'
-         (fun (v : tensor A [pos; n_heads; d_head])
-              (pattern : tensor A [n_heads; pos; pos])
-          => weaksauce_einsum {{{ {{  key_pos head_index d_head,
-                         head_index query_pos key_pos ->
-                         query_pos head_index d_head }}
-                     , v
-                     , pattern }}}
-            : tensor A [pos; n_heads; d_head])
-         v
-         pattern.
+    := PArray.checkpoint
+         (Tensor.map2'
+            (fun (v : tensor A [pos; n_heads; d_head])
+                 (pattern : tensor A [n_heads; pos; pos])
+             => weaksauce_einsum {{{ {{  key_pos head_index d_head,
+                            head_index query_pos key_pos ->
+                            query_pos head_index d_head }}
+                        , v
+                        , pattern }}}
+               : tensor A [pos; n_heads; d_head])
+            v
+            pattern).
 
   Definition attn_out : tensor A (batch ::' pos ::' d_model)
     := (let out
@@ -233,7 +234,7 @@ Section Attention.
                            , W_O }}}
                   : tensor A [pos; d_model])
                z in
-        out + broadcast b_O)%core.
+        PArray.checkpoint (out + broadcast b_O))%core.
 End Attention.
 
 Section Attention0.
@@ -385,16 +386,21 @@ Goal True.
   cbv beta delta [attn_out] in k2.
   cbv beta zeta in k2.
   lazymatch (eval cbv delta [k2] in k2) with
-  | (map' ?f ?x + ?y)%core
+  | PArray.checkpoint (map' ?f ?x + ?y)%core
     => set (k3 := x) in (value of k2);
        set (k4 := y) in (value of k2)
   end.
-  clear -k3.
+  cbv [z] in k3.
+  cbv beta delta [PArray.checkpoint] in k3.
+  set (k_tmp := PArray.concretize _) in (value of k3).
+  Time vm_compute in k_tmp.
+  subst k_tmp.
+  HERE
   cbv beta delta [z] in k3.
   cbv beta zeta in k3.
   let k := k3 in
   lazymatch (eval cbv delta [k] in k) with
-  | (map2' ?f ?x ?y)%core
+  | PArray.checkpoint (map2' ?f ?x ?y)%core
     => let k1 := fresh "k" in
        let k2 := fresh "k" in
        set (k1 := x) in (value of k);
@@ -407,14 +413,29 @@ Goal True.
   cbv beta delta [transformer_block_ln1] in *.
   cbv beta zeta iota in k1, k2.
   set (lnv := layernorm _ _ _ _) in *.
-  cbv beta delta [layernorm] in *.
+  cbv beta delta [layernorm pattern] in *.
   cbv beta iota zeta in lnv.
   cbv beta delta [PArray.checkpoint] in lnv.
   set (k_tmp := PArray.concretize _) in (value of lnv).
   Time vm_compute in k_tmp.
   subst k_tmp.
+  cbv beta delta [PArray.checkpoint] in k3.
+  set (k_tmp := PArray.concretize _) in (value of k3).
+  Time vm_compute in k_tmp.
+  subst k_tmp.
+  cbv beta delta [PArray.checkpoint] in k1.
+  set (k_tmp := PArray.concretize _) in (value of k1).
+  Time vm_compute in k_tmp.
+  subst k_tmp.
+  cbv beta zeta in k2.
+  cbv beta delta [PArray.checkpoint] in k2.
+  set (k_tmp := PArray.concretize _) in (value of k2).
+  Time vm_compute in k_tmp.
+  subst k_tmp.
+
+  set (
   cbv [einsum_input] in k1.
-  FIXME EINSUM WRONG
+  Timeout 5 Compute PArray.concretize k3.
                (*
   cbv beta delta [Shape.hd Shape.nil Shape.tl Shape.snoc fst snd Shape.cons Shape.app Nat.radd Tensor.raw_get] in k1.
 
