@@ -85,7 +85,7 @@ Section layernorm.
 
   Definition layernorm (x : tensor A (s ::' d_model))
     : tensor A (s ::' d_model)
-    := let x := layernorm_linpart x in
+    := let x := PArray.checkpoint (layernorm_linpart x) in
        let scale := layernorm_scale x in
        let x := layernorm_rescale x scale in
        PArray.checkpoint (layernorm_postrescale x).
@@ -339,6 +339,8 @@ Definition logits {r} {batch : Shape r} (tokens : tensor IndexType (batch ::' cf
       let logits                          := PArray.checkpoint (unembed residual) in
       logits)%core.
 
+Timeout 10 Time Compute PArray.concretize (logits (tensor_of_list [0; 1]%uint63)).
+
 Goal True.
   pose (PArray.concretize (logits (tensor_of_list [0; 1]%uint63))) as v.
   cbv beta delta [logits PArray.checkpoint] in v.
@@ -378,6 +380,11 @@ Goal True.
   cbv beta zeta in k1.
   cbv beta delta [transformer_block_attn_only_out] in k1.
   cbv beta zeta in k1.
+  Timeout 10 Time vm_compute in k.
+  cbv beta delta [PArray.checkpoint] in k3.
+  set (k_tmp := PArray.concretize _) in (value of k3).
+  Time vm_compute in k_tmp.
+  subst k_tmp.
   lazymatch (eval cbv delta [k1] in k1) with
   | (_ + ?x)%core
     => set (k2 := x) in (value of k1)
@@ -385,6 +392,12 @@ Goal True.
   clear -k2.
   cbv beta delta [attn_out] in k2.
   cbv beta zeta in k2.
+  cbv beta delta [PArray.checkpoint] in k2.
+  set (k_tmp := PArray.concretize _) in (value of k2).
+  (*Set NativeCompute Profiling.
+  Set NativeCompute Timing.*)
+  Time vm_compute in k_tmp.
+  subst k_tmp.
   lazymatch (eval cbv delta [k2] in k2) with
   | PArray.checkpoint (map' ?f ?x + ?y)%core
     => set (k3 := x) in (value of k2);
