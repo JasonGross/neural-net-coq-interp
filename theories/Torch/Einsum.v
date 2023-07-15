@@ -68,6 +68,15 @@ Module Import Internals.
        let (_, body) := aux names 0 body in
        body.
 
+  (* like Constr.Unsafe.liftn (-n) k c, except without anomalies *)
+  Ltac2 constr_dropn (n : int) (k : int) (c : constr) : constr
+    := let k := Int.sub k 1 in
+       let invalid := mkVar (ident:(__CONSTR_DROPN_INVALID)) in
+       (*printf "dropping %i %i %t" n k c;*)
+       let res := Constr.Unsafe.substnl (List.repeat invalid n) k c in
+       (*printf "dropped %i %i %t" n k res;*)
+       res.
+
   Ltac2 Type exn ::= [ InternalEinsumNotEqual (constr, constr) ].
   Ltac2 Type exn ::= [ InternalEinsumNotEnoughArgs (int, constr, constr array) ].
   Ltac2 Type exn ::= [ InternalEinsumBadKind (Constr.Unsafe.kind) ].
@@ -104,7 +113,7 @@ Module Import Internals.
                         then
                           let lam_body := mkLambda b body in
                           (* drop down rels that we dropped *)
-                          let lam_body := Constr.Unsafe.liftn accumulated_shift 1 lam_body in
+                          let lam_body := constr_dropn (Int.neg accumulated_shift) 1 lam_body in
                           Array.set args lam_body_pos lam_body;
                           (0, Constr.Unsafe.make (Constr.Unsafe.App f args))
                         else
@@ -117,9 +126,10 @@ Module Import Internals.
        end.
 
   Ltac2 remove_dead_einsum (hd_c : constr) (nargs : int) (names : 'a list) (body : constr) : constr
-    := let (_cur_rel, _used_rels, (accumulated_shift, body)) := remove_dead_einsum_helper hd_c nargs names body in
+    := (*printf "remove dead from %t" body;*)
+       let (_cur_rel, _used_rels, (accumulated_shift, body)) := remove_dead_einsum_helper hd_c nargs names body in
        (* drop down rels that we dropped *)
-       Constr.Unsafe.liftn accumulated_shift 1 body.
+       constr_dropn (Int.neg accumulated_shift) 1 body.
 
   (* inserts einsum for used binders *)
   Ltac2 insert_einsums (ty : constr) (names : ident option list) (body : constr) : constr
@@ -159,9 +169,9 @@ Module Import Internals.
        | Constr.Unsafe.App f shape_args
          => let f := insert_all_einsums_below ty names f in
             let f := Constr.Unsafe.make (Constr.Unsafe.App f shape_args) in
-            printf "before: %t" f;
+            (*printf "before: %t" f;*)
             let f := (eval cbv beta in f) in
-            printf "after: %t" f;
+            (*printf "after: %t" f;*)
             f
        | k
          => Control.throw (InternalEinsumBadKind k)
@@ -250,7 +260,7 @@ Notation "'weaksauce_einsum' x"
                     exact $z)
       end)
        (x custom einsum_args at level 10, at level 10, only parsing).
-
+(*
 Set Printing Implicit.
 Check (weaksauce_einsum {{{ {{ query_pos head_index d_head,
                    key_pos head_index d_head
