@@ -338,6 +338,47 @@ Definition logits {r} {batch : Shape r} (tokens : tensor IndexType (batch ::' cf
       let residual : tensor FLOAT resid_shape := PArray.checkpoint (ln_final residual) in
       let logits                          := PArray.checkpoint (unembed residual) in
       logits)%core.
+
+Definition model {r} {batch : Shape r} (tokens : tensor IndexType (batch ::' cfg.n_ctx))
+  : tensor FLOAT (batch ::' cfg.n_ctx ::' cfg.d_vocab_out)
+  := logits tokens.
+
+Definition loss_fn {r} {batch : Shape r} {return_per_token : with_default "return_per_token" bool false}
+  (logits : tensor FLOAT (batch ::' cfg.n_ctx ::' cfg.d_vocab_out))
+  (tokens : tensor IndexType (batch ::' cfg.n_ctx))
+  : tensor FLOAT (if return_per_token return Shape (if return_per_token then _ else _) then Shape.squeeze batch else [])
+  := (let logits : tensor FLOAT (batch ::' cfg.n_ctx)
+        := PArray.checkpoint (logits.[…, -1, :]) in
+      let true_maximum : tensor IndexType (batch ::' 1)
+        := reduce_axis_m1 (keepdim:=true) Reduction.max tokens in
+      let log_probs
+        := log_softmax_dim_m1 logits in
+      let correct_log_probs
+        := PArray.checkpoint (gather_dim_m1 log_probs true_maximum) in
+      if return_per_token return (tensor FLOAT (if return_per_token return Shape (if return_per_token then _ else _) then _ else _))
+      then -Tensor.squeeze correct_log_probs
+      else -Tensor.mean correct_log_probs)%core.
+
+Definition acc_fn {r} {batch : Shape r} {return_per_token : with_default "return_per_token" bool false}
+  (logits : tensor FLOAT (batch ::' cfg.n_ctx ::' cfg.d_vocab_out))
+  (tokens : tensor IndexType (batch ::' cfg.n_ctx))
+  : tensor FLOAT (if return_per_token return Shape (if return_per_token then _ else _) then batch else [])
+  := (let pred_logits : tensor FLOAT (batch ::' cfg.n_ctx)
+        := PArray.checkpoint (logits.[…, -1, :]) in
+      let pred_tokens : tensor IndexType batch
+        := reduce_axis_m1 (keepdim:=false) Reduction.argmax pred_logits in
+      let true_maximum : tensor IndexType batch
+        := reduce_axis_m1 (keepdim:=false) Reduction.max tokens in
+      let res : tensor FLOAT _
+        := PArray.checkpoint (Tensor.of_bool (Tensor.map2 eqb pred_tokens true_maximum)) in
+      if return_per_token return (tensor FLOAT (if return_per_token return Shape (if return_per_token then _ else _) then _ else _))
+      then res
+      else Tensor.mean res)%core.
+
+Definition all_tokens : tensor RawIndexType [(cfg.d_vocab ^ cfg.n_ctx)%core : N; 2]
+  := let all_toks := Tensor.arange (start:=0) (Uint63.of_Z cfg.d_vocab) in
+     Tensor.cartesian_prod all_toks all_toks.
+
 (*
 Definition expected : tensor _ _ := Eval cbv in tensor_of_list [[11.4344;  0.5226;  3.3839;  1.9724;  4.5840;  0.6439;  3.9603;
            3.0340;  0.5467; -5.0662;  3.6980; -2.9019; -0.3635;  1.2298;

@@ -22,12 +22,16 @@ End IndexType.
 
 Module Type ExtendedIndexType.
   Include IndexType.
+  Parameter zero : has_zero t.
   Parameter one : has_one t.
   Parameter leb : has_leb t.
   Parameter ltb : has_ltb t.
   Parameter eqb : has_eqb t.
-  #[export] Existing Instances eqb.
-  #[export] Existing Instances one ltb leb.
+  Parameter mul : has_mul t.
+  Parameter add : has_add t.
+  Parameter int_div : has_int_div t.
+  Parameter modulo : has_mod t.
+  #[export] Existing Instances eqb one zero ltb leb mul add int_div modulo.
 End ExtendedIndexType.
 
 Module IndexGen.
@@ -209,6 +213,12 @@ Module IndexGen.
          | _, 0%nat => fun _ => []
          | S n, S r => fun xs => lastn n (hd xs) ::' (tl xs)
          end.
+
+    Fixpoint reduce {A} (reduction : A -> IndexType -> A) (init : A) {r} : Index r -> A
+      := match r with
+         | 0%nat => fun _ => init
+         | S r => fun idxs => reduction (reduce reduction init (hd idxs)) (tl idxs)
+         end.
   End Make.
 
   Module Type MakeSig (IndexType : IndexType) := Nop <+ Make IndexType.
@@ -216,6 +226,8 @@ Module IndexGen.
   Module ExtendedMake (IndexType : ExtendedIndexType).
     Import (hints) IndexType.
     Include Make IndexType.
+    Import IndexNotations.
+    #[local] Open Scope index_scope.
 
     Definition ones {r} := repeat 1%core r.
 
@@ -247,6 +259,40 @@ Module IndexGen.
       rewrite !IH; destruct b, IndexType.ltb, r; try reflexivity.
       all: destruct fold_map2; reflexivity.
     Qed.
+
+    Module Rank.
+      Fixpoint filter {r : Rank} (f : IndexType -> bool) : Index r -> Rank
+        := match r with
+           | 0%nat => fun _ => 0%nat
+           | S r => fun idx => @filter r f (hd idx) +' if f (tl idx) then 1 else 0
+           end.
+      Definition squeeze {r : Rank} (i : Index r) : Rank
+        := filter (fun i => (i != 1)%core) i.
+    End Rank.
+    Fixpoint filter {r : Rank} (f : IndexType -> bool) : forall i : Index r, Index (Rank.filter f i)
+      := match r return forall i : Index r, Index (Rank.filter f i) with
+         | 0%nat => fun _ => []
+         | S r => fun idx => @filter r f (hd idx) ++' if f (tl idx) as ftlidx return Index (if ftlidx then _ else _) then [tl idx] else []
+         end.
+
+    Definition squeeze {r : Rank} (i : Index r) : Index (Rank.squeeze i)
+      := filter (fun i => (i != 1)%core) i.
+
+    Fixpoint unfilter {r : Rank} (f : IndexType -> bool) : forall {i : Index r}, Index (Rank.filter f i) -> Index r
+      := match r return forall i : Index r, Index (Rank.filter f i) -> Index r with
+         | 0%nat => fun _ idxs => idxs
+         | S r
+           => fun idx
+              => if f (tl idx) as ftlidx return Index (_ +' if ftlidx then 1 else 0) -> Index (S r)
+                 then fun idxs => @unfilter r f (hd idx) (hd idxs) ::' tl idxs
+                 else fun idxs => @unfilter r f (hd idx) idxs ::' 0
+         end%core.
+
+    Definition unsqueeze {r : Rank} {i : Index r} : Index (Rank.squeeze i) -> Index r
+      := unfilter (fun i => (i != 1)%core).
+
+    Definition prod {r} : Index r -> IndexType
+      := reduce mul 1%core.
   End ExtendedMake.
 
   Module Type ExtendedMakeSig (IndexType : ExtendedIndexType) := Nop <+ ExtendedMake IndexType.
@@ -258,7 +304,12 @@ Module Shape.
     #[global] Strategy 100 [t].
     #[global] Bind Scope uint63_scope with t.
     Definition one : has_one t := _.
+    Definition zero : has_zero t := _.
     Definition eqb : has_eqb t := _.
+    Definition mul : has_mul t := _.
+    Definition add : has_add t := _.
+    Definition int_div : has_int_div t := _.
+    Definition modulo : has_mod t := _.
     (* eta expand to get around COQBUG(https://github.com/coq/coq/issues/17663) *)
     Definition leb : has_leb t := fun x y => Uint63.leb x y.
     Definition ltb : has_ltb t := fun x y => Uint63.ltb x y.
@@ -284,6 +335,11 @@ Module Shape.
     := map2 max.
   Definition broadcast3 {r} : Index r -> Index r -> Index r -> Index r
     := map3 (fun a b c => max (max a b) c).
+
+  Definition reshape' {r} : Index r -> Z
+    := Shape.reduce (fun z x => z * Uint63.to_Z x)%Z 1%Z.
+  Definition reshape {r} (s : Index r) : Index 1
+    := [Uint63.of_Z (reshape' s)].
 End Shape.
 Notation ShapeType := Shape.IndexType.
 Notation Shape := Shape.Index.
@@ -296,7 +352,12 @@ Module RawIndex.
     #[global] Strategy 100 [t].
     #[global] Bind Scope uint63_scope with t.
     Definition one : has_one t := _.
+    Definition zero : has_zero t := _.
     Definition eqb : has_eqb t := _.
+    Definition mul : has_mul t := _.
+    Definition add : has_add t := _.
+    Definition int_div : has_int_div t := _.
+    Definition modulo : has_mod t := _.
     (* eta expand to get around COQBUG(https://github.com/coq/coq/issues/17663) *)
     Definition leb : has_leb t := fun x y => Uint63.leb x y.
     Definition ltb : has_ltb t := fun x y => Uint63.ltb x y.
@@ -317,6 +378,105 @@ Module RawIndex.
     Notation "s1 ++ s2" := (app s1 s2) : raw_index_scope.
     Notation "s1 ++' s2" := (app s1 s2) : raw_index_scope.
   End RawIndexNotations.
+
+  Fixpoint reshape' {r} : Shape r -> Index r -> Z
+    := match r with
+       | 0%nat => fun s idx => 0
+       | S r
+         => fun s idx
+            => Uint63.to_Z (tl idx) + @reshape' r (Shape.hd s) (hd idx) * Uint63.to_Z (Shape.tl s)
+       end%Z%core%raw_index.
+
+  Fixpoint unreshape' {r} : Shape r -> Z -> Index r
+    := match r with
+       | 0%nat => fun _ _ => []
+       | S r
+         => fun s idx
+            => let tl_idx := idx mod (Uint63.to_Z (Shape.tl s)) in
+               let hd_idx := idx // (Uint63.to_Z (Shape.tl s)) in
+               @unreshape' r (Shape.hd s) hd_idx ::' Uint63.of_Z tl_idx
+       end%Z%core%raw_index.
+
+  Definition reshape {r} (s : Shape r) (idx : Index r) : Index 1 := [Uint63.of_Z (reshape' s idx)].
+  Definition unreshape {r} (s : Shape r) (idx : Index 1) : Index r := unreshape' s (Uint63.to_Z (item idx)).
+
+  Lemma unrereshape' {r} s idx : (match r with 0%nat => true | _ => idx <? s end)%core -> @unreshape' r s (@reshape' r s idx) = idx /\ (0 <= @reshape' r s idx < Shape.reshape' s)%Z.
+  Proof.
+    induction r; [ | rewrite expand_ltb ];
+      cbv [Shape.reshape'] in *;
+      cbn [Shape Index unreshape' reshape' Shape.reduce] in *;
+      cbv [is_true Shape.hd Shape.tl snoc nil hd tl fst snd Classes.int_div Classes.add Classes.mul Classes.modulo Z_has_int_div] in *;
+      repeat match goal with H : unit |- _ => destruct H | H : _ * _ |- _ => destruct H end; try (split; try reflexivity; lia);
+      cbv [Classes.ltb RawIndexType.ltb Uint63.ltb] in *.
+    all: rewrite Bool.andb_true_iff, Z_mod_plus_full, Uint63.ltb_spec.
+    all: intros [H0 H1].
+    repeat match goal with
+           | [ |- context[to_Z ?x] ]
+             => let lem := constr:(to_Z_bounded x) in
+                let ty := type of lem in
+                lazymatch goal with
+                | [ _ : ty |- _ ] => fail
+                | _ => idtac
+                end;
+                pose proof lem
+           end.
+    rewrite Z.mod_small, Z_div_plus_full, Z.div_small, Z.add_0_l, Uint63.of_to_Z by lia.
+    destruct r;
+      [ cbn [Shape Index unreshape' reshape' Shape.reduce] in *;
+        cbv [is_true Shape.hd Shape.tl snoc nil hd tl fst snd Classes.int_div Classes.add Classes.mul Classes.modulo Z_has_int_div] in *;
+        repeat match goal with H : unit |- _ => destruct H | H : _ * _ |- _ => destruct H end; split; try reflexivity; lia
+      | ].
+    specialize (IHr _ _ ltac:(eassumption)).
+    destruct IHr as [IHr1 IHr2].
+    rewrite IHr1; split; try reflexivity.
+    nia.
+  Qed.
+
+  Lemma reunreshape' {r} s idx : (0 <= idx < Shape.reshape' s)%Z -> @reshape' r s (@unreshape' r s idx) = idx /\ (match r with 0%nat => true | _ => @unreshape' r s idx <? s end)%core.
+  Proof.
+    revert idx; induction r; intro idx; [ | rewrite expand_ltb ];
+      cbv [Shape.reshape'] in *;
+      cbn [Shape Index unreshape' reshape' Shape.reduce] in *;
+      cbv [is_true Shape.hd Shape.tl snoc nil hd tl fst snd Classes.int_div Classes.add Classes.mul Classes.modulo Z_has_int_div] in *;
+      repeat match goal with H : unit |- _ => destruct H | H : _ * _ |- _ => destruct H end; try (split; try reflexivity; lia);
+      cbv [Classes.ltb RawIndexType.ltb Uint63.ltb] in *.
+    all: rewrite Bool.andb_true_iff, Uint63.ltb_spec, !Uint63.of_Z_spec.
+    intro H.
+    repeat match goal with
+           | [ |- context[to_Z ?x] ]
+             => let lem := constr:(to_Z_bounded x) in
+                let ty := type of lem in
+                lazymatch goal with
+                | [ _ : ty |- _ ] => fail
+                | _ => idtac
+                end;
+                pose proof lem
+           | [ |- context[(?x mod ?y)%Z] ]
+             => let lem := constr:(Z.mod_pos_bound x y ltac:(lia)) in
+                let ty := type of lem in
+                lazymatch goal with
+                | [ _ : ty |- _ ] => fail
+                | _ => idtac
+                end;
+                pose proof lem
+           | [ H : (0 <= ?idx < ?x * ?y)%Z |- _ ]
+             => lazymatch goal with
+                | [ _ : (0 < y)%Z |- _ ] => fail
+                | _ => idtac
+                end;
+                assert (0 < x)%Z by nia;
+                assert (0 < y)%Z by nia
+           end.
+    rewrite ?Z.mod_small by lia.
+    match goal with
+    | [ |- context[reshape' ?s (unreshape' ?s ?idx)] ]
+      => specialize (IHr s idx)
+    end.
+    specialize (IHr ltac:(Z.to_euclidean_division_equations; nia)).
+    destruct IHr as [IHr1 IHr2].
+    rewrite IHr1; repeat split; try (now destruct r); try lia; [].
+    Z.to_euclidean_division_equations; nia.
+  Qed.
 End RawIndex.
 Notation RawIndexType := RawIndex.IndexType.
 Notation RawIndex := RawIndex.Index.
@@ -329,7 +489,12 @@ Module Index.
     #[global] Strategy 100 [t].
     #[global] Bind Scope sint63_scope with t.
     Definition one : has_one t := _.
+    Definition zero : has_zero t := _.
     Definition eqb : has_eqb t := _.
+    Definition mul : has_mul t := _.
+    Definition add : has_add t := _.
+    Definition int_div : has_int_div t := _.
+    Definition modulo : has_mod t := _.
     (* eta expand to get around COQBUG(https://github.com/coq/coq/issues/17663) *)
     Definition leb : has_leb t := fun x y => Sint63.leb x y.
     Definition ltb : has_ltb t := fun x y => Sint63.ltb x y.
@@ -566,6 +731,7 @@ Definition raw_get {r A} {s : Shape r} (t : tensor A s) (idxs : RawIndex r) : A
   := t idxs.
 Definition get {r A} {s : Shape r} (t : tensor A s) (idxs : Index r) : A
   := raw_get t (adjust_indices_for s idxs).
+Definition item {A} (t : tensor A []) : A := raw_get t tt.
 
 Notation "x .[ y ]" := (get x y) : tensor_scope.
 Notation "x .[ y ]" := (raw_get x y) : raw_tensor_scope.
@@ -736,11 +902,64 @@ Definition softmax_dim_m1 {r A B C} {addB : has_add B} {expA : has_exp_to A B} {
       let sum_exp_t : tensor B s := reduce_axis_m1 (keepdim:=true) sum exp_t in
       exp_t / sum_exp_t)%core.
 
+Definition log_softmax_dim_m1 {r A B C D} {addB : has_add B} {lnA : has_ln_to B C} {expA : has_exp_to A B} {zeroB : has_zero B} {divB : has_div_by A C D} {s0 : Shape r} {s'} (s:=(s0 ::' s')%shape) (t : tensor A s) : tensor D s
+  := (let exp_t : tensor B s := map exp t in
+      let sum_exp_t : tensor B s := reduce_axis_m1 (keepdim:=true) sum exp_t in
+      let ln_sum_exp_t : tensor C s := map ln sum_exp_t in
+      t / ln_sum_exp_t)%core.
+
+Definition unsqueeze_dim_m1 {A r} {s : Shape r} (t : tensor A s) : tensor A (s ::' 1)
+  := fun idxs => raw_get t (RawIndex.hd idxs).
+
+Definition gather_dim_m1 {A r} {ssinput ssindex : Shape r} {sinput' sindex'}
+  (sinput := (ssinput ::' sinput')%shape) (sindex := (ssindex ::' sindex')%shape)
+  (input : tensor A sinput)
+  (index : tensor IndexType sindex)
+  : tensor A sindex
+  := fun idx => raw_get input (RawIndex.hd idx ::' adjust_index_for sinput' (raw_get index idx))%raw_index.
+
+Definition squeeze {r A} {s : Shape r} (t : tensor A s) : tensor A (Shape.squeeze s)
+  := fun idx => raw_get t (RawIndex.unsqueeze idx).
+
+Definition reshape_m1 {A r} {s : Shape r} (t : tensor A s) : tensor A (Shape.reshape s)
+  := fun idx => raw_get t (RawIndex.unreshape s idx).
+Definition unreshape_m1 {A r} {s : Shape r} (t : tensor A (Shape.reshape s)) : tensor A s
+  := fun idx => raw_get t (RawIndex.reshape s idx).
+(*
+Definition reshape {A r1 r2} {s1 : Shape r1} (t : tensor A s1) (s2 : Shape r2) : tensor A s2
+  := unreshape_m1 (reshape_m1 t : tensor A (Shape.reshape s2)).
+ *)
+
 Definition to_bool {A} {zero : has_zero A} {eqb : has_eqb A} {r} {s : Shape r} (xs : tensor A s) : tensor bool s
   := map (fun x => x ≠? 0)%core xs.
 
 Definition of_bool {A} {zero : has_zero A} {one : has_one A} {r} {s : Shape r} (xs : tensor bool s) : tensor A s
   := map (fun x:bool => if x then 1 else 0)%core xs.
+
+Definition mean {r A} {s : Shape r} {B C} {zero : has_zero A} {add : has_add A} {div_by : has_div_by A B C} {coer : has_coer Z B} (t : tensor A s) : tensor C []
+  := reduce_axis_m1 Reduction.mean (reshape_m1 t).
+(*
+Definition arange {A B} {START STOP STEP IDX} {oneA : has_one A} {zeroStart : has_zero START} {oneStep : has_one STEP} {sub : has_sub_with STOP START A} {subA : has_sub A} {div : has_int_div_by A STEP B} {coerZ : has_coer B Z} {coerIDX : has_coer int IDX} {add : has_add_with START C D} {mul : has_mul_with STEP IDX C}
+  {start : with_default "start" START 0%core} (stop : STOP) {step : with_default "step" STEP 1%core}
+  : tensor int [(1 + Uint63.of_Z (((stop - start) - 1) // step))%core%uint63]
+  := fun idx => let idx := RawIndex.item idx in
+                (start + idx * step)%uint63.
+*)
+Definition arange {start : with_default "start" int 0%uint63} (stop : int) {step : with_default "step" int 1%uint63}
+  : tensor int [(1 + (stop - start - 1) / step)%uint63]
+  := fun idx => let idx := RawIndex.item idx in
+                (start + idx * step)%uint63.
+
+#[global] Arguments arange (_ _ _)%uint63.
+#[global] Arguments arange {_} _ {_}, _ _ {_}, _ _ _.
+
+(* TODO: nary *)
+Definition tupleify {A B s1 s2} (t1 : tensor A [s1]) (t2 : tensor B [s2]) : tensor (A * B) [s1; s2]
+  := fun '((tt, a), b) => (raw_get t1 [a], raw_get t2 [b]).
+Definition cartesian_prod {A s1 s2} (t1 : tensor A [s1]) (t2 : tensor A [s2]) : tensor A [s1 * s2; 2]
+  := fun '((tt, idx), tuple_idx)
+     => let '(a, b) := raw_get (reshape_m1 (tupleify t1 t2)) [idx] in
+        nth_default a [a; b] (Z.to_nat (Uint63.to_Z (tuple_idx mod 2))).
 
 (** Quoting https://pytorch.org/docs/stable/generated/torch.tril.html
 

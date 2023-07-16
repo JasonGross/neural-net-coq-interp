@@ -183,6 +183,7 @@ Local Open Scope float_scope.
 #[export] Instance float_has_zero : has_zero float := 0.
 #[export] Instance float_has_one : has_one float := 1.
 #[export] Instance float_has_exp : has_exp float := eta1 PrimFloat.exp.
+#[export] Instance float_has_ln : has_ln float := eta1 PrimFloat.ln.
 
 Module Truncating.
   #[export] Instance coer_Z_int : has_coer Z int := Uint63.of_Z.
