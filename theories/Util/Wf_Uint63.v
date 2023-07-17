@@ -161,8 +161,10 @@ Definition map_reduce_no_init {A} (reduce : A -> A -> A) (start : int) (stop : i
             set (reduce val (f i))
      }})%core.
 
-Definition argmax_ {A B} {lebB : has_leb B} (x y : A * B) : A * B
+Definition argmin_ {A B} {lebB : has_leb B} (x y : A * B) : A * B
   := if (snd x <=? snd y)%core then x else y.
+Definition argmax_ {A B} {ltbB : has_ltb B} (x y : A * B) : A * B
+  := if (snd x <? snd y)%core then y else x.
 
 Module Import Reduction.
   Definition sum {A} {zeroA : has_zero A} {addA : has_add A} (start : int) (stop : int) (step : int) (f : int -> A) : A
@@ -173,7 +175,9 @@ Module Import Reduction.
     := map_reduce_no_init max start stop step f.
   Definition min {A} {min : has_min A} (start : int) (stop : int) (step : int) (f : int -> A) : A
     := map_reduce_no_init min start stop step f.
-  Definition argmax {A} {lebA : has_leb A} (start : int) (stop : int) (step : int) (f : int -> A) : int
+  Definition argmin {A} {lebA : has_leb A} (start : int) (stop : int) (step : int) (f : int -> A) : int
+    := fst (map_reduce_no_init argmin_ start stop step (fun i => (i, f i))).
+  Definition argmax {A} {ltbA : has_ltb A} (start : int) (stop : int) (step : int) (f : int -> A) : int
     := fst (map_reduce_no_init argmax_ start stop step (fun i => (i, f i))).
 
   Module Import LoopNotation2.

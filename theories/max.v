@@ -347,7 +347,7 @@ Definition loss_fn {r} {batch : Shape r} {return_per_token : with_default "retur
   (logits : tensor FLOAT (batch ::' cfg.n_ctx ::' cfg.d_vocab_out))
   (tokens : tensor IndexType (batch ::' cfg.n_ctx))
   : tensor FLOAT (if return_per_token return Shape (if return_per_token then _ else _) then Shape.squeeze batch else [])
-  := (let logits : tensor FLOAT (batch ::' cfg.n_ctx)
+  := (let logits : tensor FLOAT (batch ::' _)
         := PArray.checkpoint (logits.[…, -1, :]) in
       let true_maximum : tensor IndexType (batch ::' 1)
         := reduce_axis_m1 (keepdim:=true) Reduction.max tokens in
@@ -363,7 +363,7 @@ Definition acc_fn {r} {batch : Shape r} {return_per_token : with_default "return
   (logits : tensor FLOAT (batch ::' cfg.n_ctx ::' cfg.d_vocab_out))
   (tokens : tensor IndexType (batch ::' cfg.n_ctx))
   : tensor FLOAT (if return_per_token return Shape (if return_per_token then _ else _) then batch else [])
-  := (let pred_logits : tensor FLOAT (batch ::' cfg.n_ctx)
+  := (let pred_logits : tensor FLOAT (batch ::' _)
         := PArray.checkpoint (logits.[…, -1, :]) in
       let pred_tokens : tensor IndexType batch
         := reduce_axis_m1 (keepdim:=false) Reduction.argmax pred_logits in
@@ -375,10 +375,15 @@ Definition acc_fn {r} {batch : Shape r} {return_per_token : with_default "return
       then res
       else Tensor.mean res)%core.
 
-Definition all_tokens : tensor RawIndexType [(cfg.d_vocab ^ cfg.n_ctx)%core : N; 2]
+Definition all_tokens_gen : tensor RawIndexType [(cfg.d_vocab ^ cfg.n_ctx)%core : N; 2]
   := let all_toks := Tensor.arange (start:=0) (Uint63.of_Z cfg.d_vocab) in
      Tensor.cartesian_prod all_toks all_toks.
 
+Definition all_tokens_c : PArray.concrete_tensor RawIndexType _
+  := Eval vm_compute in PArray.concretize all_tokens_gen.
+
+Definition all_tokens : tensor RawIndexType _
+  := PArray.abstract all_tokens_c.
 (*
 Definition expected : tensor _ _ := Eval cbv in tensor_of_list [[11.4344;  0.5226;  3.3839;  1.9724;  4.5840;  0.6439;  3.9603;
            3.0340;  0.5467; -5.0662;  3.6980; -2.9019; -0.3635;  1.2298;
