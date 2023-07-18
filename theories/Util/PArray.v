@@ -116,10 +116,6 @@ Definition reduce_map_no_init {A A'} (red : A' -> A' -> A') (f : A -> A') (xs : 
            set (red acc (f xs.[i]))
        }}.
 
-(* TODO: probably want to broadcast torch.where without having to allocate arrays of bool, etc *)
-Definition where_ {A} (condition : array bool) (input other : array A) : array A
-  := broadcast_map3 Bool.where_ condition input other.
-
 Notation "\sum_ ( xi <- xs ) F" := (reduce_map_no_init add (fun xi => F) xs) : core_scope.
 Notation "∑_ ( xi <- xs ) F" := (reduce_map_no_init add (fun xi => F) xs) : core_scope.
 Notation "\prod_ ( xi <- xs ) F" := (reduce_map_no_init mul (fun xi => F) xs) : core_scope.

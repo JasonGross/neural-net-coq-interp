@@ -1,11 +1,11 @@
 -R theories NeuralNetInterp
 -arg -w -arg +implicit-core-hint-db,+implicits-in-term,+non-reversible-notation,+deprecated-intros-until-0,+deprecated-focus,+unused-intro-pattern,+variable-collision,+unexpected-implicit-declaration,+omega-is-deprecated,+deprecated-instantiate-syntax,+non-recursive,+undeclared-scope,+deprecated-hint-rewrite-without-locality,+deprecated-hint-without-locality,+deprecated-instance-without-locality,+deprecated-typeclasses-transparency-without-locality,unsupported-attributes
--arg -native-compiler -arg ondemand
 theories/max.v
 theories/max_all_logits.v
 theories/max_brute_force.v
 theories/max_heuristics.v
 theories/max_parameters.v
+theories/test.v
 theories/Einops/Parsing.v
 theories/Torch/Einsum.v
 theories/Torch/FancyEinsum.v
@@ -31,6 +31,7 @@ theories/Util/PrimitiveProd.v
 theories/Util/RList.v
 theories/Util/Slice.v
 theories/Util/Uint63.v
+theories/Util/ValueExtraction.v
 theories/Util/Wf_Uint63.v
 theories/Util/Arith/Classes.v
 theories/Util/Arith/FloatArith.v
@@ -38,6 +39,7 @@ theories/Util/Arith/Instances.v
 theories/Util/Arith/QArith.v
 theories/Util/Arith/ZArith.v
 theories/Util/List/Proofs.v
+theories/Util/PArray/Instances.v
 theories/Util/PArray/Proofs.v
 theories/Util/Strings/Ascii.v
 theories/Util/Strings/Byte.v

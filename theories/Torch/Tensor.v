@@ -1,5 +1,5 @@
 From Coq.Structures Require Import Equalities.
-From Coq Require Import ZArith Sint63 Uint63 List PArray Lia.
+From Coq Require Import ZArith Sint63 Uint63 List PArray Lia Relation_Definitions Morphisms.
 From NeuralNetInterp.Util Require Nat.
 From NeuralNetInterp.Util Require Import Wf_Uint63 PArray.Proofs List.Proofs Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool (*PrimitiveProd*).
 Import Util.Nat.Notations.
@@ -536,6 +536,9 @@ Bind Scope tensor_scope with tensor_of_rank.
 Bind Scope tensor_scope with tensor.
 Local Open Scope tensor_scope.
 
+Definition eqf {r A s} : relation (@tensor r A s)
+  := (eq ==> eq)%signature.
+
 #[export] Instance empty_of_rank {A r} {default : pointed A} : pointed (tensor_of_rank A r)
   := fun _ => default.
 #[export] Instance empty {r A} {default : pointed A} {s : Shape r} : pointed (tensor A s)
@@ -573,6 +576,15 @@ Module PArray.
   Definition concrete_tensor {r : Rank} (A : Type) (s : Shape r) : Type
     := concrete_tensor_of_rank A r.
   #[global] Strategy 100 [tensor_of_rank tensor concrete_tensor concrete_tensor_of_rank].
+
+  Module Tensor.
+    Fixpoint map {r A B} (f : A -> B) : forall {s}, @concrete_tensor r A s -> @concrete_tensor r B s
+      := match r return forall {s}, @concrete_tensor r A s -> @concrete_tensor r B s with
+         | O => fun _ => f
+         | S r => fun s t => @map r _ _ (PArray.map f) (Shape.hd s) t
+         end.
+    Definition copy {r A s} t := @map r A A (fun x => x) s t.
+  End Tensor.
 
   Fixpoint concretize {r : Rank} {A : Type} {default : pointed A} {struct r} : forall {s : Shape r} (t : tensor A s), concrete_tensor A s
     := match r with
@@ -613,26 +625,40 @@ Module PArray.
       reflexivity. }
   Qed.
 
-  Definition checkpoint {r : Rank} {A default s} t : @tensor r A s
-    := let t_ := t in
-       let t := @concretize r A default s t in
-       let t := abstract t in
+  Definition reabstract {r : Rank} {A s} (t_ : @tensor r A s) (t : @concrete_tensor r A s) : @tensor r A s
+    := let t := abstract t in
        fun idxs
        => if ((idxs <? s) && (idxs <? RawIndex.repeat PArray.max_length r))%core%bool
           then t idxs
           else t_ idxs.
 
-  Lemma checkpoint_correct {r A default} {s : Shape r} {t} {idxs : RawIndex r}
-    : @checkpoint r A default s t idxs = t idxs.
+  Lemma reabstract_correct {r A} {s : Shape r} {t_} {t} {idxs : RawIndex r}
+    : (forall
+          (in_bounds : is_true (match r with O => true | _ => idxs <? s end)%core)
+          (in_max_bounds : is_true (match r with O => true | _ => idxs <? RawIndex.repeat PArray.max_length r end)%core),
+          abstract t idxs = t_ idxs)
+      -> @reabstract r A s t_ t idxs = t_ idxs.
   Proof.
-    cbv [checkpoint].
-    generalize (@abstract_concretize r A default s t idxs).
+    cbv [reabstract].
     cbv [andb].
     repeat match goal with |- context[match ?x with _ => _ end] => destruct x eqn:? end.
     all: repeat match goal with H : context[match ?x with _ => _ end] |- _ => destruct x eqn:? end.
     all: auto.
     all: discriminate.
   Qed.
+
+  Lemma reabstract_ext_correct {r A default} {s : Shape r} {t_ t}
+    : t = @concretize r A default s t_ -> forall idxs, @reabstract r A s t_ t idxs = t_ idxs.
+  Proof. intros; subst; apply reabstract_correct, abstract_concretize. Qed.
+
+  Definition checkpoint {r : Rank} {A default s} t : @tensor r A s
+    := let t_ := t in
+       let t := @concretize r A default s t in
+       reabstract t_ t.
+
+  Lemma checkpoint_correct {r A default} {s : Shape r} {t} {idxs : RawIndex r}
+    : @checkpoint r A default s t idxs = t idxs.
+  Proof. cbv [checkpoint]; apply reabstract_ext_correct; reflexivity. Qed.
 End PArray.
 
 Module List.
@@ -644,6 +670,15 @@ Module List.
   Definition concrete_tensor {r : Rank} (A : Type) (s : Shape r) : Type
     := concrete_tensor_of_rank A r.
   #[global] Strategy 100 [tensor_of_rank tensor concrete_tensor concrete_tensor_of_rank].
+
+  Module Tensor.
+    Fixpoint map {r A B} (f : A -> B) : forall {s}, @concrete_tensor r A s -> @concrete_tensor r B s
+      := match r return forall {s}, @concrete_tensor r A s -> @concrete_tensor r B s with
+         | O => fun _ => f
+         | S r => fun s t => @map r _ _ (List.map f) (Shape.hd s) t
+         end.
+    Definition copy {r A s} t := @map r A A (fun x => x) s t.
+  End Tensor.
 
   Fixpoint concretize {r : Rank} {A : Type} {struct r} : forall {s : Shape r} (t : tensor A s), concrete_tensor A s
     := match r return forall {s : Shape r} (t : tensor A s), concrete_tensor A s with
@@ -689,23 +724,36 @@ Module List.
       all: first [ reflexivity | lia ]. }
   Qed.
 
-  Definition checkpoint {r : Rank} {A default s} t : @tensor r A s
-    := let t_ := t in
-       let t := concretize t in
-       let t := @abstract r A default s t in
+  Definition reabstract {r : Rank} {A default s} (t_ : @tensor r A s) (t : @concrete_tensor r A s) : @tensor r A s
+    := let t := @abstract r A default s t in
        fun idxs
        => if (idxs <? s)%core
           then t idxs
           else t_ idxs.
 
-  Lemma checkpoint_correct {r A default} {s : Shape r} {t} {idxs : RawIndex r}
-    : @checkpoint r A default s t idxs = t idxs.
+  Lemma reabstract_correct {r A default} {s : Shape r} {t_} {t} {idxs : RawIndex r}
+    : (forall
+          (in_bounds : is_true (match r with O => true | _ => idxs <? s end)%core),
+          abstract t idxs = t_ idxs)
+      -> @reabstract r A default s t_ t idxs = t_ idxs.
   Proof.
-    cbv [checkpoint].
-    generalize (@abstract_concretize r A default s t idxs).
+    cbv [reabstract].
     repeat match goal with |- context[match ?x with _ => _ end] => destruct x eqn:? end.
     all: auto.
   Qed.
+
+  Lemma reabstract_ext_correct {r A default} {s : Shape r} {t_ t}
+    : t = @concretize r A s t_ -> forall idxs, @reabstract r A default s t_ t idxs = t_ idxs.
+  Proof. intros; subst; apply reabstract_correct, abstract_concretize. Qed.
+
+  Definition checkpoint {r : Rank} {A default s} t : @tensor r A s
+    := let t_ := t in
+       let t := @concretize r A s t in
+       @reabstract r A default s t_ t.
+
+  Lemma checkpoint_correct {r A default} {s : Shape r} {t} {idxs : RawIndex r}
+    : @checkpoint r A default s t idxs = t idxs.
+  Proof. cbv [checkpoint]; apply reabstract_ext_correct; reflexivity. Qed.
 End List.
 
 Definition adjust_index_for (s : ShapeType) : Index.IndexType -> RawIndex.IndexType

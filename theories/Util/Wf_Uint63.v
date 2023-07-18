@@ -1,4 +1,4 @@
-From Coq Require Import Bool Uint63 ZArith Wellfounded Wf_Z Wf_nat Lia.
+From Coq Require Import Bool Uint63 ZArith Wellfounded Wf_Z Wf_nat Lia Setoid Morphisms.
 From NeuralNetInterp.Util Require Import Monad Notations Arith.Classes Arith.Instances Default.
 Set Universe Polymorphism.
 Set Polymorphic Inductive Cumulativity.
@@ -108,6 +108,28 @@ Proof.
        rewrite !Z.mod_small in * by lia;
        lia). }
 Defined.
+
+#[export] Instance for_loop_lt_Proper {A} : Proper (eq ==> eq ==> eq ==> (pointwise_relation _ (pointwise_relation _ eq)) ==> eq ==> eq) (@for_loop_lt A).
+Proof.
+  intros i _ <- ??? ??? f g H init _ <-; subst.
+  cbv [for_loop_lt Fix].
+  set (wf := Acc_intro_generator _ _ _); clearbody wf.
+  revert i wf init.
+  fix IH 2.
+  intros i wf init.
+  destruct wf as [wf].
+  cbn [Fix_F Acc_inv].
+  set (wf' := wf _).
+  specialize (fun v => IH _ (wf' v)).
+  clearbody wf'.
+  cbv [run_body].
+  do 2 (destruct Sumbool.sumbool_of_bool; try reflexivity).
+  all: erewrite H by reflexivity; try reflexivity.
+  destruct g; try reflexivity.
+  all: repeat match goal with H : unit |- _ => destruct H end.
+  all: rewrite IH.
+  all: reflexivity.
+Qed.
 
 Module LoopNotationAlises.
   Notation break := break.

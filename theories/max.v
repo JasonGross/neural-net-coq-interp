@@ -11,9 +11,6 @@ Import Arith.Instances.Truncating.
 Local Open Scope float_scope.
 Local Open Scope list_scope.
 Set Implicit Arguments.
-Set Universe Polymorphism.
-Unset Universe Minimization ToSet.
-Set Polymorphic Inductive Cumulativity.
 Import ListNotations.
 Local Open Scope raw_tensor_scope.
 
@@ -384,6 +381,9 @@ Definition all_tokens_c : PArray.concrete_tensor RawIndexType _
 
 Definition all_tokens : tensor RawIndexType _
   := PArray.abstract all_tokens_c.
+
+Definition logits_all_tokens : tensor _ _
+  := logits all_tokens.
 (*
 Definition expected : tensor _ _ := Eval cbv in tensor_of_list [[11.4344;  0.5226;  3.3839;  1.9724;  4.5840;  0.6439;  3.9603;
            3.0340;  0.5467; -5.0662;  3.6980; -2.9019; -0.3635;  1.2298;

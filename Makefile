@@ -17,8 +17,12 @@ SORT_COQPROJECT = sed 's,[^/]*/,~&,g' | env LC_COLLATE=C sort | sed 's,~,,g'
 EXISTING_COQPROJECT_CONTENTS_SORTED:=$(shell cat _CoqProject 2>&1 | $(SORT_COQPROJECT))
 WARNINGS_PLUS := +implicit-core-hint-db,+implicits-in-term,+non-reversible-notation,+deprecated-intros-until-0,+deprecated-focus,+unused-intro-pattern,+variable-collision,+unexpected-implicit-declaration,+omega-is-deprecated,+deprecated-instantiate-syntax,+non-recursive,+undeclared-scope,+deprecated-hint-rewrite-without-locality,+deprecated-hint-without-locality,+deprecated-instance-without-locality,+deprecated-typeclasses-transparency-without-locality
 WARNINGS := $(WARNINGS_PLUS),unsupported-attributes
-COQPROJECT_CMD:=(printf -- '-R $(SRC_DIR) $(MOD_NAME)\n'; printf -- '-arg -w -arg $(WARNINGS)\n'; printf -- '-arg -native-compiler -arg ondemand\n'; find $(SRC_DIR) -type f -name '*.v' | $(SORT_COQPROJECT))
+COQPROJECT_CMD:=(printf -- '-R $(SRC_DIR) $(MOD_NAME)\n'; printf -- '-arg -w -arg $(WARNINGS)\n'; find $(SRC_DIR) -type f -name '*.v' | $(SORT_COQPROJECT))
 NEW_COQPROJECT_CONTENTS_SORTED:=$(shell $(COQPROJECT_CMD) | $(SORT_COQPROJECT))
+
+#This is not required, but ulimit -s unlimited
+#OCAMLOPTFLAGS?=-linscan
+#export OCAMLOPTFLAGS
 
 ifneq ($(EXISTING_COQPROJECT_CONTENTS_SORTED),$(NEW_COQPROJECT_CONTENTS_SORTED))
 .PHONY: _CoqProject
@@ -29,7 +33,8 @@ endif
 _CoqProject:
 
 invoke-coqmakefile: Makefile.coq
-	$(MAKE) --no-print-directory -f Makefile.coq $(filter-out $(KNOWNTARGETS),$(MAKECMDGOALS))
+	. etc/ensure_stack_limit.sh; \
+	 $(MAKE) --no-print-directory -f Makefile.coq $(filter-out $(KNOWNTARGETS),$(MAKECMDGOALS))
 
 .PHONY: invoke-coqmakefile $(KNOWNFILES)
 
