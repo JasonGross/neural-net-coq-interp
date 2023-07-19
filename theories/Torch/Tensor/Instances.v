@@ -1,7 +1,21 @@
 From Coq.Structures Require Import Equalities.
-From Coq Require Import ZArith Sint63 Uint63 List PArray Lia.
+From Coq Require Import ZArith Sint63 Uint63 List PArray Lia Setoid Morphisms.
 From NeuralNetInterp.Util Require Nat.
-From NeuralNetInterp.Util Require Import Wf_Uint63 PArray.Proofs List.Proofs Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool (*PrimitiveProd*).
+From NeuralNetInterp.Util Require Import Wf_Uint63 PArray.Proofs PArray.Instances List.Proofs Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool (*PrimitiveProd*).
+From NeuralNetInterp.Torch Require Import Tensor.
+
+Definition eqf {r A s} : relation (@tensor r A s)
+  := (eq ==> eq)%signature.
+
+#[export] Instance eqf_Reflexive {r A s} : Reflexive (@eqf r A s).
+Proof. repeat intro; subst; reflexivity. Qed.
+#[export] Instance eqf_Symmetric {r A s} : Symmetric (@eqf r A s).
+Proof. cbv; repeat intro; subst; symmetry; auto. Qed.
+#[export] Instance eqf_Transitive {r A s} : Transitive (@eqf r A s).
+Proof. intros x y z H1 H2 i i' ?; subst; etransitivity; [ eapply H1 | eapply H2 ]; reflexivity. Qed.
+
+
+
 Import Util.Nat.Notations.
 Import Util.Wf_Uint63.LoopNotation.
 Import Util.Wf_Uint63.Reduction.
@@ -536,6 +550,16 @@ Bind Scope tensor_scope with tensor_of_rank.
 Bind Scope tensor_scope with tensor.
 Local Open Scope tensor_scope.
 
+Definition eqf {r A s} : relation (@tensor r A s)
+  := (eq ==> eq)%signature.
+
+#[export] Instance eqf_Reflexive {r A s} : Reflexive (@eqf r A s).
+Proof. repeat intro; subst; reflexivity. Qed.
+#[export] Instance eqf_Symmetric {r A s} : Symmetric (@eqf r A s).
+Proof. cbv; repeat intro; subst; symmetry; auto. Qed.
+#[export] Instance eqf_Transitive {r A s} : Transitive (@eqf r A s).
+Proof. intros x y z H1 H2 i i' ?; subst; etransitivity; [ eapply H1 | eapply H2 ]; reflexivity. Qed.
+
 #[export] Instance empty_of_rank {A r} {default : pointed A} : pointed (tensor_of_rank A r)
   := fun _ => default.
 #[export] Instance empty {r A} {default : pointed A} {s : Shape r} : pointed (tensor A s)
@@ -600,6 +624,17 @@ Module PArray.
     := abstract_of_rank.
 
   Notation to_tensor t := (@abstract _ _ (shape_of t%array) t%array) (only parsing).
+
+  #[export] Instance concretize_Proper {r A default s} : Proper (eqf ==> eq) (@concretize r A default s).
+  Proof.
+    cbv [eqf Proper respectful]; revert A default s; induction r; cbn [concretize]; intros A default s t1 t2 H; auto; [].
+    destruct s.
+    eapply IHr.
+    Locate init_default.
+    destr
+    { apply H. }
+Proof. intros x y z H1 H2 i i' ?; subst; etransitivity; [ eapply H1 | eapply H2 ]; reflexivity. Qed.
+
 
   Lemma abstract_concretize {r A default} {s : Shape r} {t} {idxs : RawIndex r}
     (in_bounds : is_true (match r with O => true | _ => idxs <? s end)%core)
