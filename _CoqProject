@@ -11,6 +11,7 @@ theories/Torch/Einsum.v
 theories/Torch/FancyEinsum.v
 theories/Torch/Slicing.v
 theories/Torch/Tensor.v
+theories/Torch/Tensor/Instances.v
 theories/Torch/Tensor/Proofs.v
 theories/Util/ArrayView.v
 theories/Util/Arrow.v
@@ -53,3 +54,4 @@ theories/Util/Tactics2/FixNotationsForPerformance.v
 theories/Util/Tactics2/Ident.v
 theories/Util/Tactics2/List.v
 theories/Util/Tactics2/Constr/Unsafe/MakeAbbreviations.v
+theories/Util/Wf_Uint63/Instances.v

@@ -1,8 +1,10 @@
 From Coq Require Import Bool Uint63 ZArith Wellfounded Wf_Z Wf_nat Lia Setoid Morphisms.
 From NeuralNetInterp.Util Require Import Monad Notations Arith.Classes Arith.Instances Default.
+(*
 Set Universe Polymorphism.
 Set Polymorphic Inductive Cumulativity.
 Unset Universe Minimization ToSet.
+*)
 Local Open Scope uint63_scope.
 
 #[local] Set Warnings Append "-ambiguous-paths".

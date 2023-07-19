@@ -1,8 +1,8 @@
 From Coq Require Import Floats Sint63 Uint63 QArith Lia List PArray Morphisms RelationClasses.
-From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool.
+From NeuralNetInterp.Util Require Import Default Pointed PArray PArray.Instances Wf_Uint63.Instances List Notations Arith.Classes Arith.Instances Bool.
 From NeuralNetInterp.Util Require Nat Wf_Uint63.
-From NeuralNetInterp Require Import max_parameters.
-From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
+From NeuralNetInterp Require Import max max_parameters.
+From NeuralNetInterp.Torch Require Import Tensor Tensor.Instances Einsum Slicing.
 Import Util.Nat.Notations.
 Import Util.Wf_Uint63.LoopNotation.
 Import Util.Wf_Uint63.
@@ -13,6 +13,52 @@ Local Open Scope list_scope.
 Set Implicit Arguments.
 Import ListNotations.
 Local Open Scope raw_tensor_scope.
+
+Local Ltac t_step :=
+  repeat first [ match goal with
+                 | [ |- ?x = ?x ] => reflexivity
+                 | [ |- PArray.checkpoint _ _ = PArray.checkpoint _ _ ]
+                   => apply PArray.checkpoint_Proper
+                 | [ |- Tensor.of_bool _ _ = Tensor.of_bool _ _ ]
+                   => apply of_bool_Proper
+                 | [ |- Tensor.map2 _ _ _ _ = Tensor.map2 _ _ _ _ ]
+                   => apply map2_Proper
+                 | [ |- reduce_axis_m1 _ _ _ = reduce_axis_m1 _ _ _ ]
+                   => apply @reduce_axis_m1_Proper with (RA:=eq)
+                 | [ |- Tensor.mean _ _ = Tensor.mean _ _ ]
+                   => apply mean_Proper
+                 | [ |- argmax _ _ _ _ = argmax _ _ _ _ ]
+                   => apply argmax_Proper_pointwise
+                 | [ |- max _ _ _ _ = max _ _ _ _ ]
+                   => apply max_Proper_pointwise
+                 | [ H : pointwise_relation _ ?R ?f ?g |- ?R (?f _) (?g _) ]
+                   => apply H
+                 | [ H : respectful _ ?R ?f ?g |- ?R (?f _) (?g _) ]
+                   => apply H
+                 end
+               | intro
+               | match goal with
+                 | [ |- context[match ?x with _ => _ end] ] => destruct x
+                 end ].
+
+Local Ltac t := repeat t_step.
+
+#[export] Instance Proper_acc_fn {r batch return_per_token}
+  : Proper ((eq ==> eq) ==> (eq ==> eq) ==> (eq ==> eq)) (@acc_fn r batch return_per_token).
+Proof.
+  intros logits1 logits2 Hlogits tokens1 tokens2 Htokens idxs idxs' Hidxs.
+  subst idxs'.
+  cbv [acc_fn].
+  t.
+  2:match goal with
+  end.
+  end.
+  end.
+       end.
+  t_step.
+
+
+
 
 (* Based on https://colab.research.google.com/drive/1N4iPEyBVuctveCA0Zre92SpfgH6nmHXY#scrollTo=Q1h45HnKi-43, Taking the minimum or maximum of two ints *)
 
@@ -645,3 +691,10 @@ Compute PArray.concretize (embed (tensor_of_list [0; 1]%uint63)).
 Compute PArray.concretize (pos_embed (tensor_of_list [[0; 1]]%uint63) : tensor FLOAT [1; cfg.n_ctx; cfg.d_model]).
 *)
 *)*)
+
+#[export] Instance Proper_acc_fn {r batch return_per_token}
+  : Proper ((eq ==> eq) ==> (eq ==> eq) ==> (eq ==> eq)) (@acc_fn r batch return_per_token).
+Proof.
+  intros logits1 logits2 Hlogits tokens1 tokens2 Htokens idxs idxs' Hidxs.
+  subst idxs'.
+  cbv [acc_fn].
