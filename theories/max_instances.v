@@ -2,7 +2,7 @@ From Coq Require Import Floats Sint63 Uint63 QArith Lia List PArray Morphisms Re
 From NeuralNetInterp.Util Require Import Default Pointed PArray PArray.Instances Wf_Uint63.Instances List Notations Arith.Classes Arith.Instances Bool.
 From NeuralNetInterp.Util Require Nat Wf_Uint63.
 From NeuralNetInterp Require Import max max_parameters.
-From NeuralNetInterp.Torch Require Import Tensor Tensor.Instances Einsum Slicing.
+From NeuralNetInterp.Torch Require Import Tensor Tensor.Instances Einsum Slicing Slicing.Instances.
 Import Util.Nat.Notations.
 Import Util.Wf_Uint63.LoopNotation.
 Import Util.Wf_Uint63.
@@ -18,19 +18,21 @@ Local Ltac t_step :=
   repeat first [ match goal with
                  | [ |- ?x = ?x ] => reflexivity
                  | [ |- PArray.checkpoint _ _ = PArray.checkpoint _ _ ]
-                   => apply PArray.checkpoint_Proper
+                   => apply Tensor.PArray.checkpoint_Proper
                  | [ |- Tensor.of_bool _ _ = Tensor.of_bool _ _ ]
-                   => apply of_bool_Proper
+                   => apply Tensor.of_bool_Proper
                  | [ |- Tensor.map2 _ _ _ _ = Tensor.map2 _ _ _ _ ]
-                   => apply map2_Proper
+                   => apply Tensor.map2_Proper
                  | [ |- reduce_axis_m1 _ _ _ = reduce_axis_m1 _ _ _ ]
-                   => apply @reduce_axis_m1_Proper with (RA:=eq)
+                   => apply @Tensor.reduce_axis_m1_Proper with (RA:=eq)
                  | [ |- Tensor.mean _ _ = Tensor.mean _ _ ]
-                   => apply mean_Proper
+                   => apply Tensor.mean_Proper
+                 | [ |- ?R (@SliceIndex.slice ?A ?ri ?ro ?idxs ?s _ _) (@SliceIndex.slice ?A ?ri ?ro ?idxs ?s _ _) ]
+                   => eapply (@SliceIndex.slice_Proper A ri ro idxs s R)
                  | [ |- argmax _ _ _ _ = argmax _ _ _ _ ]
-                   => apply argmax_Proper_pointwise
+                   => apply Reduction.argmax_Proper_pointwise
                  | [ |- max _ _ _ _ = max _ _ _ _ ]
-                   => apply max_Proper_pointwise
+                   => apply Reduction.max_Proper_pointwise
                  | [ H : pointwise_relation _ ?R ?f ?g |- ?R (?f _) (?g _) ]
                    => apply H
                  | [ H : respectful _ ?R ?f ?g |- ?R (?f _) (?g _) ]
@@ -43,56 +45,16 @@ Local Ltac t_step :=
 
 Local Ltac t := repeat t_step.
 
-#[export] Instance Proper_acc_fn {r batch return_per_token}
+#[export] Instance acc_fn_Proper {r batch return_per_token}
   : Proper ((eq ==> eq) ==> (eq ==> eq) ==> (eq ==> eq)) (@acc_fn r batch return_per_token).
 Proof.
   intros logits1 logits2 Hlogits tokens1 tokens2 Htokens idxs idxs' Hidxs.
   subst idxs'.
   cbv [acc_fn].
   t.
-  2:match goal with
-  end.
-  end.
-  end.
-       end.
-  t_step.
+Qed.
 
-
-
-
-(* Based on https://colab.research.google.com/drive/1N4iPEyBVuctveCA0Zre92SpfgH6nmHXY#scrollTo=Q1h45HnKi-43, Taking the minimum or maximum of two ints *)
-
-(** Coq infra *)
-#[local] Coercion Uint63.of_Z : Z >-> Uint63.int.
-
-(** Hyperparameters *)
-Definition N_LAYERS : nat := 1.
-Definition N_HEADS : nat := 1.
-Definition D_MODEL : nat := 32.
-Definition D_HEAD : nat := 32.
-(*Definition D_MLP = None*)
-
-Definition D_VOCAB : nat := 64.
-
-Notation tensor_of_list ls := (Tensor.PArray.abstract (Tensor.PArray.concretize (Tensor.of_list ls))) (only parsing).
-Definition W_E : tensor _ _ := Eval cbv in tensor_of_list max_parameters.W_E.
-Definition W_pos : tensor _ _ := Eval cbv in tensor_of_list max_parameters.W_pos.
-Definition L0_attn_W_Q : tensor _ _ := Eval cbv in tensor_of_list max_parameters.L0_attn_W_Q.
-Definition L0_attn_W_K : tensor _ _ := Eval cbv in tensor_of_list max_parameters.L0_attn_W_K.
-Definition L0_attn_W_V : tensor _ _ := Eval cbv in tensor_of_list max_parameters.L0_attn_W_V.
-Definition L0_attn_W_O : tensor _ _ := Eval cbv in tensor_of_list max_parameters.L0_attn_W_O.
-Definition L0_attn_b_Q : tensor _ _ := Eval cbv in tensor_of_list max_parameters.L0_attn_b_Q.
-Definition L0_attn_b_K : tensor _ _ := Eval cbv in tensor_of_list max_parameters.L0_attn_b_K.
-Definition L0_attn_b_V : tensor _ _ := Eval cbv in tensor_of_list max_parameters.L0_attn_b_V.
-Definition L0_attn_b_O : tensor _ _ := Eval cbv in tensor_of_list max_parameters.L0_attn_b_O.
-Definition L0_ln1_b : tensor _ _ := Eval cbv in tensor_of_list max_parameters.L0_ln1_b.
-Definition L0_ln1_w : tensor _ _ := Eval cbv in tensor_of_list max_parameters.L0_ln1_w.
-Definition ln_final_b : tensor _ _ := Eval cbv in tensor_of_list max_parameters.ln_final_b.
-Definition ln_final_w : tensor _ _ := Eval cbv in tensor_of_list max_parameters.ln_final_w.
-Definition W_U : tensor _ _ := Eval cbv in tensor_of_list max_parameters.W_U.
-Definition b_U : tensor _ _ := Eval cbv in tensor_of_list max_parameters.b_U.
-
-#[local] Notation FLOAT := float (only parsing). (* or Q *)
+(*
 
 Definition embed {r} {s : Shape r} (tokens : tensor IndexType s) : tensor FLOAT (s ::' Shape.tl (shape_of W_E))
   := (W_E.[tokens, :])%fancy_raw_tensor.
@@ -698,3 +660,4 @@ Proof.
   intros logits1 logits2 Hlogits tokens1 tokens2 Htokens idxs idxs' Hidxs.
   subst idxs'.
   cbv [acc_fn].
+*)

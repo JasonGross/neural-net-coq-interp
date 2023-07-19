@@ -622,19 +622,19 @@ Module PArray.
       reflexivity. }
   Qed.
 
-  Definition reabstract {r : Rank} {A s} (t_ : @tensor r A s) (t : @concrete_tensor r A s) : @tensor r A s
+  Definition reabstract {r : Rank} {A s} (t_ : unit -> @tensor r A s) (t : @concrete_tensor r A s) : @tensor r A s
     := let t := abstract t in
        fun idxs
        => if ((idxs <? s) && (idxs <? RawIndex.repeat PArray.max_length r))%core%bool
           then t idxs
-          else t_ idxs.
+          else t_ tt idxs.
 
   Lemma reabstract_correct {r A} {s : Shape r} {t_} {t} {idxs : RawIndex r}
     : (forall
           (in_bounds : is_true (match r with O => true | _ => idxs <? s end)%core)
           (in_max_bounds : is_true (match r with O => true | _ => idxs <? RawIndex.repeat PArray.max_length r end)%core),
-          abstract t idxs = t_ idxs)
-      -> @reabstract r A s t_ t idxs = t_ idxs.
+          abstract t idxs = t_ tt idxs)
+      -> @reabstract r A s t_ t idxs = t_ tt idxs.
   Proof.
     cbv [reabstract].
     cbv [andb].
@@ -645,17 +645,17 @@ Module PArray.
   Qed.
 
   Lemma reabstract_ext_correct {r A default} {s : Shape r} {t_ t}
-    : t = @concretize r A default s t_ -> forall idxs, @reabstract r A s t_ t idxs = t_ idxs.
+    : t = @concretize r A default s (t_ tt) -> forall idxs, @reabstract r A s t_ t idxs = t_ tt idxs.
   Proof. intros; subst; apply reabstract_correct, abstract_concretize. Qed.
 
   Definition checkpoint {r : Rank} {A default s} t : @tensor r A s
-    := let t_ := t in
+    := let t_ _ := t in
        let t := @concretize r A default s t in
        reabstract t_ t.
 
   Lemma checkpoint_correct {r A default} {s : Shape r} {t} {idxs : RawIndex r}
     : @checkpoint r A default s t idxs = t idxs.
-  Proof. cbv [checkpoint]; apply reabstract_ext_correct; reflexivity. Qed.
+  Proof. cbv [checkpoint]; erewrite reabstract_ext_correct; reflexivity. Qed.
 End PArray.
 
 Module List.
@@ -721,18 +721,18 @@ Module List.
       all: first [ reflexivity | lia ]. }
   Qed.
 
-  Definition reabstract {r : Rank} {A default s} (t_ : @tensor r A s) (t : @concrete_tensor r A s) : @tensor r A s
+  Definition reabstract {r : Rank} {A default s} (t_ : unit -> @tensor r A s) (t : @concrete_tensor r A s) : @tensor r A s
     := let t := @abstract r A default s t in
        fun idxs
        => if (idxs <? s)%core
           then t idxs
-          else t_ idxs.
+          else t_ tt idxs.
 
   Lemma reabstract_correct {r A default} {s : Shape r} {t_} {t} {idxs : RawIndex r}
     : (forall
           (in_bounds : is_true (match r with O => true | _ => idxs <? s end)%core),
-          abstract t idxs = t_ idxs)
-      -> @reabstract r A default s t_ t idxs = t_ idxs.
+          abstract t idxs = t_ tt idxs)
+      -> @reabstract r A default s t_ t idxs = t_ tt idxs.
   Proof.
     cbv [reabstract].
     repeat match goal with |- context[match ?x with _ => _ end] => destruct x eqn:? end.
@@ -740,17 +740,17 @@ Module List.
   Qed.
 
   Lemma reabstract_ext_correct {r A default} {s : Shape r} {t_ t}
-    : t = @concretize r A s t_ -> forall idxs, @reabstract r A default s t_ t idxs = t_ idxs.
+    : t = @concretize r A s (t_ tt) -> forall idxs, @reabstract r A default s t_ t idxs = t_ tt idxs.
   Proof. intros; subst; apply reabstract_correct, abstract_concretize. Qed.
 
   Definition checkpoint {r : Rank} {A default s} t : @tensor r A s
-    := let t_ := t in
+    := let t_ _ := t in
        let t := @concretize r A s t in
        @reabstract r A default s t_ t.
 
   Lemma checkpoint_correct {r A default} {s : Shape r} {t} {idxs : RawIndex r}
     : @checkpoint r A default s t idxs = t idxs.
-  Proof. cbv [checkpoint]; apply reabstract_ext_correct; reflexivity. Qed.
+  Proof. cbv [checkpoint]; erewrite reabstract_ext_correct; reflexivity. Qed.
 End List.
 
 Definition adjust_index_for (s : ShapeType) : Index.IndexType -> RawIndex.IndexType

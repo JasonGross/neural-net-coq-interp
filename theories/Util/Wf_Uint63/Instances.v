@@ -88,51 +88,54 @@ Proof.
   repeat intro; eapply map_reduce_no_init_Proper_R; try eassumption; cbv in *; intros; subst; eauto.
 Qed.
 
-Import Wf_Uint63.Reduction.
-#[export] Instance sum_Proper_pointwise {A zeroA addA} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ eq ==> eq)))) (@sum A zeroA addA).
-Proof.
-  cbv [sum]; repeat intro.
-  eapply map_reduce_Proper; repeat intro; cbv [pointwise_relation respectful] in *; subst; eauto.
-Qed.
-#[export] Instance prod_Proper_pointwise {A oneA mulA} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ eq ==> eq)))) (@prod A oneA mulA).
-Proof.
-  cbv [prod]; repeat intro.
-  eapply map_reduce_Proper; repeat intro; cbv [pointwise_relation respectful] in *; subst; eauto.
-Qed.
-#[export] Instance max_Proper_pointwise {A maxA} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ eq ==> eq)))) (@max A maxA).
-Proof.
-  cbv [max]; repeat intro.
-  eapply map_reduce_no_init_Proper; repeat intro; cbv [pointwise_relation respectful] in *; subst; eauto.
-Qed.
-#[export] Instance min_Proper_pointwise {A minA} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ eq ==> eq)))) (@min A minA).
-Proof.
-  cbv [min]; repeat intro.
-  eapply map_reduce_no_init_Proper; repeat intro; cbv [pointwise_relation respectful] in *; subst; eauto.
-Qed.
-#[export] Instance argmax_Proper_pointwise {A ltbA} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ eq ==> eq)))) (@argmax A ltbA).
-Proof.
-  cbv [argmax]; repeat intro.
-  erewrite map_reduce_no_init_Proper; try reflexivity.
-  cbv in *; intros; congruence.
-Qed.
-#[export] Instance argmin_Proper_pointwise {A lebA} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ eq ==> eq)))) (@argmin A lebA).
-Proof.
-  cbv [argmin]; repeat intro.
-  erewrite map_reduce_no_init_Proper; try reflexivity.
-  cbv in *; intros; congruence.
-Qed.
-#[export] Instance mean_Proper_pointwise {A B C zeroA addA div_byABC coerB} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ eq ==> eq)))) (@mean A B C zeroA addA div_byABC coerB).
-Proof.
-  cbv [mean]; repeat intro.
-  erewrite sum_Proper_pointwise by eassumption.
-  reflexivity.
-Qed.
-#[export] Instance var_Proper_pointwise {A B zeroA addA mulA subA div_byAB coerB correction} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ eq ==> eq)))) (@var A B zeroA addA mulA subA div_byAB coerB correction).
-Proof.
-  cbv [var]; repeat intro.
-  erewrite sum_Proper_pointwise; [ reflexivity | ].
-  intro.
-  erewrite mean_Proper_pointwise by eassumption.
-  cbv [pointwise_relation] in *.
-  congruence.
-Qed.
+Module Reduction.
+  Export Wf_Uint63.Reduction.
+  #[export] Instance sum_Proper_pointwise {A zeroA addA} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ eq ==> eq)))) (@sum A zeroA addA).
+  Proof.
+    cbv [sum]; repeat intro.
+    eapply map_reduce_Proper; repeat intro; cbv [pointwise_relation respectful] in *; subst; eauto.
+  Qed.
+  #[export] Instance prod_Proper_pointwise {A oneA mulA} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ eq ==> eq)))) (@prod A oneA mulA).
+  Proof.
+    cbv [prod]; repeat intro.
+    eapply map_reduce_Proper; repeat intro; cbv [pointwise_relation respectful] in *; subst; eauto.
+  Qed.
+  #[export] Instance max_Proper_pointwise {A maxA} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ eq ==> eq)))) (@max A maxA).
+  Proof.
+    cbv [max]; repeat intro.
+    eapply map_reduce_no_init_Proper; repeat intro; cbv [pointwise_relation respectful] in *; subst; eauto.
+  Qed.
+  #[export] Instance min_Proper_pointwise {A minA} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ eq ==> eq)))) (@min A minA).
+  Proof.
+    cbv [min]; repeat intro.
+    eapply map_reduce_no_init_Proper; repeat intro; cbv [pointwise_relation respectful] in *; subst; eauto.
+  Qed.
+  #[export] Instance argmax_Proper_pointwise {A ltbA} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ eq ==> eq)))) (@argmax A ltbA).
+  Proof.
+    cbv [argmax]; repeat intro.
+    erewrite map_reduce_no_init_Proper; try reflexivity.
+    cbv in *; intros; congruence.
+  Qed.
+  #[export] Instance argmin_Proper_pointwise {A lebA} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ eq ==> eq)))) (@argmin A lebA).
+  Proof.
+    cbv [argmin]; repeat intro.
+    erewrite map_reduce_no_init_Proper; try reflexivity.
+    cbv in *; intros; congruence.
+  Qed.
+  #[export] Instance mean_Proper_pointwise {A B C zeroA addA div_byABC coerB} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ eq ==> eq)))) (@mean A B C zeroA addA div_byABC coerB).
+  Proof.
+    cbv [mean]; repeat intro.
+    erewrite sum_Proper_pointwise by eassumption.
+    reflexivity.
+  Qed.
+  #[export] Instance var_Proper_pointwise {A B zeroA addA mulA subA div_byAB coerB correction} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ eq ==> eq)))) (@var A B zeroA addA mulA subA div_byAB coerB correction).
+  Proof.
+    cbv [var]; repeat intro.
+    erewrite sum_Proper_pointwise; [ reflexivity | ].
+    intro.
+    erewrite mean_Proper_pointwise by eassumption.
+    cbv [pointwise_relation] in *.
+    congruence.
+  Qed.
+End Reduction.
+Export (hints) Reduction.
