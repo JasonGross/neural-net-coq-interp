@@ -136,6 +136,10 @@ Proof.
   cbv beta iota delta [reduce_axis_m1 reduce_axis_m1' reshape_snoc_split RawIndex.curry_radd RawIndex.combine_radd map RawIndex] in true_maximum.
   cbv beta iota delta [Reduction.max max has_default_max_leb leb] in true_maximum.
   cbv -[PrimInt63.leb all_toks_c] in true_maximum.
+  move out' at bottom.
+  cbv -[map2' raw_get v pattern RawIndex.snoc RawIndex.nil] in out'.
+  unfold Reduction.sum in (value of out) at 1.
+  cbv -[map2' Reduction.sum L0_attn_W_O out'] in out.
 HERE
   subst all_toks_c.
   cbv beta iota delta [cartesian_prod] in true_maximum.
