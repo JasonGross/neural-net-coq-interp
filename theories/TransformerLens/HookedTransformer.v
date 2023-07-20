@@ -319,15 +319,21 @@ Module HookedTransformer.
       Definition unembed (resid : tensor A resid_shape) : tensor A (s ::' d_vocab_out)
         := Unembed.forward W_U b_U resid.
 
+      Definition blocks_cps {T} (residual : tensor A resid_shape) (K : tensor A resid_shape -> T) : T
+        := List.fold_right
+             (fun block cont residual
+              => let residual := PArray.checkpoint (block residual) in
+                 cont residual)
+             K
+             blocks
+             residual.
+
       Definition logits (tokens : tensor IndexType s) : tensor A (s ::' d_vocab_out)
         := (let embed          := embed tokens in
             let pos_embed      := pos_embed tokens in
             let residual       := PArray.checkpoint (embed + pos_embed)%core in
-            (fun f ls a => List.fold_right f a ls residual)
-              (fun block cont residual
-               => let residual := PArray.checkpoint (block residual) in
-                  cont residual)
-              blocks
+            blocks_cps
+              residual
               (fun residual
                => let residual := PArray.checkpoint (ln_final residual) in
                   let logits   := PArray.checkpoint (unembed residual) in

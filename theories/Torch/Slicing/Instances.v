@@ -125,12 +125,14 @@ Module FancyIndex.
     all: try assumption.
   Qed.
 
-  (* TODO: dep *)
-  #[export] Instance slice_Proper {A rb sb ri ro idxs s}
-    : Proper (Tensor.eqf ==> Tensor.eqf) (@slice A rb sb ri ro idxs s).
+  #[export] Instance slice_Proper {A rb sb ri ro}
+    : Proper (t_relation ==> forall_relation (fun s => Tensor.eqf ==> Tensor.eqf_rank)) (@slice A rb sb ri ro).
   Proof.
     cbv [slice slice_ Tensor.map_dep]; repeat intro.
-    apply Tensor.reshape_app_combine'_Proper; repeat intro.
+    apply Tensor.reshape_app_combine'_Proper_rank; repeat intro; trivial.
+    let H := match goal with H : t_relation _ _ |- _ => H end in
+    eapply broadcast_Proper in H;
+    rewrite H.
     apply SliceIndex.slice_Proper; assumption.
   Qed.
 End FancyIndex.

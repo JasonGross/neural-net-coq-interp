@@ -5,8 +5,11 @@ From NeuralNetInterp.Util Require Import Wf_Uint63 Wf_Uint63.Instances PArray.Pr
 From NeuralNetInterp.Torch Require Import Tensor.
 
 Module Tensor.
-  Definition eqfR {r A s} R : relation (@tensor r A s)
+  Definition eqfR_rank {A r} R : relation (@tensor_of_rank A r)
     := pointwise_relation _ R.
+  Notation eqf_rank := (eqfR_rank eq).
+  Definition eqfR {r A s} R : relation (@tensor r A s)
+    := eqfR_rank R.
   Notation eqf := (eqfR eq).
 
   #[export] Instance eqf_Reflexive {r A s R} {_ : Reflexive R} : Reflexive (@eqfR r A s R).
@@ -28,7 +31,7 @@ Module Tensor.
     Qed.
 
     #[export] Instance reabstract_Proper {r A s} : Proper (pointwise_relation _ eqf ==> eq ==> eqf) (@reabstract r A s).
-    Proof. cbv [reabstract pointwise_relation eqf]; repeat intro; subst; destruct andb; eauto. Qed.
+    Proof. cbv [reabstract pointwise_relation eqf eqf_rank]; repeat intro; subst; destruct andb; eauto. Qed.
 
     #[export] Instance checkpoint_Proper {r A default s} : Proper (eqf ==> eqf) (@checkpoint r A default s).
     Proof. cbv [checkpoint]; repeat intro; subst; apply reabstract_Proper; try apply concretize_Proper; repeat intro; auto. Qed.
@@ -47,7 +50,7 @@ Module Tensor.
     Qed.
 
     #[export] Instance reabstract_Proper {r A default s} : Proper (pointwise_relation _ eqf ==> eq ==> eqf) (@reabstract r A default s).
-    Proof. cbv [reabstract pointwise_relation eqf]; repeat intro; subst; match goal with |- context[match ?x with _ => _ end] => destruct x end; eauto. Qed.
+    Proof. cbv [reabstract pointwise_relation eqf eqf_rank]; repeat intro; subst; match goal with |- context[match ?x with _ => _ end] => destruct x end; eauto. Qed.
 
     #[export] Instance checkpoint_Proper {r A default s} : Proper (eqf ==> eqf) (@checkpoint r A default s).
     Proof. cbv [checkpoint]; repeat intro; subst; apply reabstract_Proper; try apply concretize_Proper; repeat intro; auto. Qed.
@@ -112,29 +115,39 @@ Definition map_dep {r A B} {s : Shape r} (f : forall a : A, B a) (t : tensor A s
   #[export] Instance tensor_opp_Proper {r s A oppA R} {_ : Proper (R ==> R) oppA} : Proper (eqfR R ==> eqfR R) (@tensor_opp r s A oppA).
   Proof. cbv [tensor_opp opp]; repeat intro; eapply map_Proper_R; eassumption. Qed.
 
-
-  #[export] Instance reshape_app_split'_Proper {A r1 r2 s1 s2 R} : Proper (eqfR R ==> eqfR (eqfR R)) (@reshape_app_split' A r1 r2 s1 s2).
+  #[export] Instance reshape_app_split'_Proper_rank {A r1 r2 R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank R ==> eqfR_rank (eqfR_rank R)) (@reshape_app_split' A r1 r2).
   Proof.
     cbv [reshape_app_split' RawIndex.curry_radd].
     repeat intro; eauto.
   Qed.
-  #[export] Instance reshape_app_combine'_Proper {A r1 r2 s1 s2 R} : Proper (eqfR (eqfR R) ==> eqfR R) (@reshape_app_combine' A r1 r2 s1 s2).
+  #[export] Instance reshape_app_combine'_Proper_rank {A r1 r2 R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank (eqfR_rank R) ==> eqfR_rank R) (@reshape_app_combine' A r1 r2).
   Proof.
     cbv [reshape_app_combine' RawIndex.uncurry_radd].
-    repeat intro; destruct RawIndex.split_radd; cbv [eqfR pointwise_relation] in *; eauto.
+    repeat intro; destruct RawIndex.split_radd; cbv [eqfR eqfR_rank pointwise_relation] in *; eauto.
   Qed.
-  #[export] Instance reshape_app_split_Proper {A r1 r2 s1 s2 R} : Proper (eqfR R ==> eqfR (eqfR R)) (@reshape_app_split A r1 r2 s1 s2) := _.
-  #[export] Instance reshape_app_combine_Proper {A r1 r2 s1 s2 R} : Proper (eqfR (eqfR R) ==> eqfR R) (@reshape_app_combine A r1 r2 s1 s2) := _.
-  #[export] Instance reshape_snoc_split_Proper {A r s1 s2 R} : Proper (eqfR R ==> eqfR (eqfR R)) (@reshape_snoc_split A r s1 s2).
+  #[export] Instance reshape_app_split_Proper_rank {A r1 r2 R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank R ==> eqfR_rank (eqfR_rank R)) (@reshape_app_split A r1 r2) := _.
+  #[export] Instance reshape_app_combine_Proper_rank {A r1 r2 R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank (eqfR_rank R) ==> eqfR_rank R) (@reshape_app_combine A r1 r2) := _.
+  #[export] Instance reshape_snoc_split_Proper_rank {A r R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank R ==> eqfR_rank (eqfR_rank R)) (@reshape_snoc_split A r).
   Proof.
     cbv [reshape_snoc_split RawIndex.curry_radd].
     repeat intro; eauto.
   Qed.
-  #[export] Instance reshape_snoc_combine_Proper {A r s1 s2 R} : Proper (eqfR (eqfR R) ==> eqfR R) (@reshape_snoc_combine A r s1 s2).
+  #[export] Instance reshape_snoc_combine_Proper_rank {A r R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank (eqfR_rank R) ==> eqfR_rank R) (@reshape_snoc_combine A r).
   Proof.
     cbv [reshape_snoc_combine RawIndex.uncurry_radd].
-    repeat intro; destruct RawIndex.split_radd; cbv [eqfR pointwise_relation] in *; eauto.
+    repeat intro; destruct RawIndex.split_radd; cbv [eqfR eqfR_rank pointwise_relation] in *; eauto.
   Qed.
+
+  #[export] Instance reshape_app_split'_Proper {A r1 r2 s1 s2 R} : Proper (eqfR R ==> eqfR (eqfR R)) (@reshape_app_split' A r1 r2 s1 s2).
+  Proof. repeat intro; eapply reshape_app_split'_Proper_rank; trivial. Qed.
+  #[export] Instance reshape_app_combine'_Proper {A r1 r2 s1 s2 R} : Proper (eqfR (eqfR R) ==> eqfR R) (@reshape_app_combine' A r1 r2 s1 s2).
+  Proof. repeat intro; eapply reshape_app_combine'_Proper_rank; trivial. Qed.
+  #[export] Instance reshape_app_split_Proper {A r1 r2 s1 s2 R} : Proper (eqfR R ==> eqfR (eqfR R)) (@reshape_app_split A r1 r2 s1 s2) := _.
+  #[export] Instance reshape_app_combine_Proper {A r1 r2 s1 s2 R} : Proper (eqfR (eqfR R) ==> eqfR R) (@reshape_app_combine A r1 r2 s1 s2) := _.
+  #[export] Instance reshape_snoc_split_Proper {A r s1 s2 R} : Proper (eqfR R ==> eqfR (eqfR R)) (@reshape_snoc_split A r s1 s2).
+  Proof. repeat intro; eapply reshape_snoc_split_Proper_rank; trivial. Qed.
+  #[export] Instance reshape_snoc_combine_Proper {A r s1 s2 R} : Proper (eqfR (eqfR R) ==> eqfR R) (@reshape_snoc_combine A r s1 s2).
+  Proof. repeat intro; eapply reshape_snoc_combine_Proper_rank; trivial. Qed.
   (*
 Definition uncurry {r A} {s : Shape r} : @RawIndex.curriedT r A -> tensor A s
   := RawIndex.uncurry.

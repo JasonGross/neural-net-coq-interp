@@ -40,10 +40,10 @@ Existing Class has_coer_to.
 Existing Class has_coer_can_trans.
 #[export] Typeclasses Opaque has_coer_can_trans has_coer_from has_coer_to.
 
-Definition gtb {A} {ltb : has_ltb A} (x y : A) : bool := ltb y x.
-Definition geb {A} {leb : has_leb A} (x y : A) : bool := leb y x.
-Definition neqb {A} {eqb : has_eqb A} (x y : A) : bool := negb (eqb x y).
-Definition sqr {A} {mul : has_mul A} (x : A) : A := mul x x.
+Definition gtb {A} {ltbA : has_ltb A} (x y : A) : bool := ltb y x.
+Definition geb {A} {lebA : has_leb A} (x y : A) : bool := leb y x.
+Definition neqb {A} {eqbA : has_eqb A} (x y : A) : bool := negb (eqb x y).
+Definition sqr {A} {mulA : has_mul A} (x : A) : A := mul x x.
 
 Infix "<?" := ltb : core_scope.
 Infix "<=?" := leb : core_scope.
