@@ -122,15 +122,9 @@ Definition acc_fn {r} {batch : Shape r} {return_per_token : with_default "return
       then res
       else Tensor.mean res)%core.
 
-Definition all_tokens_gen : tensor RawIndexType [(cfg.d_vocab ^ cfg.n_ctx)%core : N; 2]
+Definition all_tokens : tensor RawIndexType [(cfg.d_vocab ^ cfg.n_ctx)%core : N; 2]
   := let all_toks := Tensor.arange (start:=0) (Uint63.of_Z cfg.d_vocab) in
-     Tensor.cartesian_prod all_toks all_toks.
-
-Definition all_tokens_c : PArray.concrete_tensor RawIndexType _
-  := Eval vm_compute in PArray.concretize all_tokens_gen.
-
-Definition all_tokens : tensor RawIndexType _
-  := PArray.abstract all_tokens_c.
+     PArray.checkpoint (Tensor.cartesian_prod all_toks all_toks).
 
 Definition logits_all_tokens : tensor _ _
   := logits all_tokens.

@@ -19,6 +19,23 @@ Module Tensor.
   #[export] Instance eqf_Transitive {r A s R} {_ : Transitive R} : Transitive (@eqfR r A s R).
   Proof. intros x y z H1 H2; repeat intro; subst; etransitivity; [ eapply H1 | eapply H2 ]; reflexivity. Qed.
 
+  #[export] Instance eqfR_Proper_flip {r A s R1 R2 R3}
+    {HP : Proper (R1 ==> R2 ==> Basics.flip Basics.impl) R3}
+    : Proper (@Tensor.eqfR r A s R1 ==> @Tensor.eqfR r A s R2 ==> Basics.flip Basics.impl) (@Tensor.eqfR r A s R3).
+  Proof. repeat intro; eapply HP; eauto. Qed.
+
+  #[export] Instance eqfR_Proper {r A s R1 R2 R3}
+    {HP : Proper (R1 ==> R2 ==> Basics.impl) R3}
+    : Proper (@Tensor.eqfR r A s R1 ==> @Tensor.eqfR r A s R2 ==> Basics.impl) (@Tensor.eqfR r A s R3).
+  Proof. repeat intro; eapply HP; eauto. Qed.
+
+  #[export] Instance eqf_Proper_flip {r A s}
+    : Proper (Tensor.eqf ==> Tensor.eqf ==> Basics.flip Basics.impl) (@Tensor.eqfR r A s eq)
+    := _.
+  #[export] Instance eqf_Proper {r A s}
+    : Proper (Tensor.eqf ==> Tensor.eqf ==> Basics.impl) (@Tensor.eqfR r A s eq)
+    := _.
+
   Module PArray.
     Import Tensor.PArray.
     #[export] Instance concretize_Proper {r A default s} : Proper (eqf ==> eq) (@concretize r A default s).
@@ -35,6 +52,9 @@ Module Tensor.
 
     #[export] Instance checkpoint_Proper {r A default s} : Proper (eqf ==> eqf) (@checkpoint r A default s).
     Proof. cbv [checkpoint]; repeat intro; subst; apply reabstract_Proper; try apply concretize_Proper; repeat intro; auto. Qed.
+
+    Definition checkpoint_correct_eqf {r A default s t} : eqf (@checkpoint r A default s t) t
+      := fun idxs => checkpoint_correct.
   End PArray.
   Export (hints) PArray.
 
@@ -54,6 +74,9 @@ Module Tensor.
 
     #[export] Instance checkpoint_Proper {r A default s} : Proper (eqf ==> eqf) (@checkpoint r A default s).
     Proof. cbv [checkpoint]; repeat intro; subst; apply reabstract_Proper; try apply concretize_Proper; repeat intro; auto. Qed.
+
+    Definition checkpoint_correct_eqf {r A default s t} : eqf (@checkpoint r A default s t) t
+      := fun idxs => checkpoint_correct.
   End List.
   Export (hints) List.
 
@@ -115,6 +138,19 @@ Definition map_dep {r A B} {s : Shape r} (f : forall a : A, B a) (t : tensor A s
   #[export] Instance tensor_opp_Proper {r s A oppA R} {_ : Proper (R ==> R) oppA} : Proper (eqfR R ==> eqfR R) (@tensor_opp r s A oppA).
   Proof. cbv [tensor_opp opp]; repeat intro; eapply map_Proper_R; eassumption. Qed.
 
+  #[export] Instance add_Proper {r sA sB A B C addA RA RB RC} {_ : Proper (RA ==> RB ==> RC) addA} : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@Classes.add _ _ _ (@tensor_add r sA sB A B C addA))
+    := _.
+  #[export] Instance sub_Proper {r sA sB A B C subA RA RB RC} {_ : Proper (RA ==> RB ==> RC) subA} : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@Classes.sub _ _ _ (@tensor_sub r sA sB A B C subA))
+    := _.
+  #[export] Instance mul_Proper {r sA sB A B C mulA RA RB RC} {_ : Proper (RA ==> RB ==> RC) mulA} : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@Classes.mul _ _ _ (@tensor_mul r sA sB A B C mulA))
+    := _.
+  #[export] Instance div_Proper {r sA sB A B C div_byA RA RB RC} {_ : Proper (RA ==> RB ==> RC) div_byA} : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@Classes.div _ _ _ (@tensor_div_by r sA sB A B C div_byA))
+    := _.
+  #[export] Instance sqrt_Proper {r s A sqrtA R} {_ : Proper (R ==> R) sqrtA} : Proper (eqfR R ==> eqfR R) (@Classes.sqrt _ (@tensor_sqrt r s A sqrtA))
+    := _.
+  #[export] Instance opp_Proper {r s A oppA R} {_ : Proper (R ==> R) oppA} : Proper (eqfR R ==> eqfR R) (@Classes.opp _ (@tensor_opp r s A oppA))
+    := _.
+
   #[export] Instance reshape_app_split'_Proper_rank {A r1 r2 R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank R ==> eqfR_rank (eqfR_rank R)) (@reshape_app_split' A r1 r2).
   Proof.
     cbv [reshape_app_split' RawIndex.curry_radd].
@@ -170,6 +206,15 @@ Definition curry {r A} {s : Shape r} : tensor A s -> @RawIndex.curriedT r A
     all: apply reshape_app_split_Proper; eassumption.
   Qed.
 
+  #[export] Instance map'_Proper_2 {ra1 ra2 rb A B sa1 sa2 sb f RA RB}
+    {Hf : Proper (eqfR RA ==> eqfR RB) f}
+    : Proper (eqfR RA ==> eqfR RB) (@map' ra1 ra2 rb A B sa1 sa2 sb f)
+    := _.
+  #[export] Instance map2'_Proper_2 {ri1 ri2 ro A B C sA1 sB1 sA2 sB2 so f RA RB RC}
+    {_ : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) f}
+    : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@map2' ri1 ri2 ro A B C sA1 sB1 sA2 sB2 so f)
+    := _.
+
   #[export] Instance broadcast_Proper {r A s R} : Proper (eqfR R ==> forall_relation (fun r' => eqfR R)) (@broadcast r A s).
   Proof.
     cbv [broadcast broadcast' repeat']; intros ??? ?.
@@ -211,6 +256,24 @@ Definition curry {r A} {s : Shape r} : tensor A s -> @RawIndex.curriedT r A
     all: eapply reduce_axis_m1'_Proper; try eassumption.
   Qed.
 
+  #[export] Instance reduce_axis_m1'_Proper_2 {r A B s1 s2 reduction RA RB}
+   {_ : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ RA ==> RB)))) reduction}
+    : Proper (eqfR RA ==> eqfR RB) (@reduce_axis_m1' r A B s1 s2 reduction)
+    := _.
+
+  #[export] Instance reduce_axis_m1_Proper_2 {r A B s1 s2 keepdim reduction RA RB}
+    {_ : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ RA ==> RB)))) reduction}
+    : Proper (eqfR RA ==> eqfR RB) (@reduce_axis_m1 r A B s1 s2 keepdim reduction)
+    := _.
+
+  #[export] Instance reduce_axis_m1_Proper_2_keepdim_false {r A B s1 s2 reduction RA RB}
+    {_ : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ RA ==> RB)))) reduction}
+    : Proper (eqfR RA ==> eqfR RB) (@reduce_axis_m1 r A B s1 s2 false reduction)
+    := _.
+  #[export] Instance reduce_axis_m1_Proper_2_keepdim_true {r A B s1 s2 reduction RA RB}
+    {_ : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ RA ==> RB)))) reduction}
+    : Proper (eqfR RA ==> eqfR RB) (@reduce_axis_m1 r A B s1 s2 true reduction)
+    := _.
 
   (*#[export] Instance reduce_axis_m1'_Proper' {r A B s1 s2 reduction RA} : Proper (eqfR RA ==> eqf) (@reduce_axis_m1' r A B s1 s2 reduction).
 Proof.
@@ -317,5 +380,10 @@ Definition cartesian_prod {A s1 s2} (t1 : tensor A [s1]) (t2 : tensor A [s2]) : 
     rewrite H.
     reflexivity.
   Qed.
+
+  (* probably not needed, but might speed things up a bit *)
+  #[export] Instance : Params (@Tensor.eqfR) 4 := {}.
+  #[export] Instance : Params (@Tensor.map2) 6 := {}.
+  #[export] Instance : Params (@Tensor.of_bool) 5 := {}.
 End Tensor.
 Export (hints) Tensor.

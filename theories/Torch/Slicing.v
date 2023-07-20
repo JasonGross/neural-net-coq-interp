@@ -2,9 +2,11 @@ From Coq Require Import Sint63 Uint63.
 From NeuralNetInterp.Torch Require Import Tensor.
 From NeuralNetInterp.Util Require Import Slice Arith.Classes Arith.Instances PolymorphicOption Nat Notations.
 Set Implicit Arguments.
+(*
 Set Universe Polymorphism.
 Unset Universe Minimization ToSet.
 Set Polymorphic Inductive Cumulativity.
+*)
 Set Boolean Equality Schemes.
 Set Decidable Equality Schemes.
 

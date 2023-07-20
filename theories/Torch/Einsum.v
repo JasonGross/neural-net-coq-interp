@@ -242,8 +242,8 @@ Notation "{{{ {{ i1 .. i_ , j1 .. j_ -> k1 .. k_ }} , t1 , t2 }}}"
                                      (λ k1 .. k_ ,
                                        match @Arith.Classes.mul
                                                A B C try_tc
-                                               (t1' (RawIndex.snoc .. (RawIndex.snoc RawIndex.nil i1) .. i_))
-                                               (t2' (RawIndex.snoc .. (RawIndex.snoc RawIndex.nil j1) .. j_))
+                                               (raw_get t1' (RawIndex.snoc .. (RawIndex.snoc RawIndex.nil i1) .. i_))
+                                               (raw_get t2' (RawIndex.snoc .. (RawIndex.snoc RawIndex.nil j1) .. j_))
                                              return C
                                        with
                                        | __EINSUM_TENSOR_VALUE
