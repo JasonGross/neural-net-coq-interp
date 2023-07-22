@@ -1,5 +1,6 @@
-From Coq Require Import Qround Sint63 Uint63 NArith PArith ZArith QArith Floats.
+From Coq Require Import Qabs Qround Sint63 Uint63 NArith PArith ZArith QArith Floats.
 From NeuralNetInterp.Util Require Import Default.
+From NeuralNetInterp.Util.Arith Require Import QArith.
 Local Open Scope float_scope.
 Notation "'∞'" := infinity : float_scope.
 #[local] Coercion Z.of_N : N >-> Z.
@@ -14,6 +15,54 @@ Module PrimFloat.
     := if Sint63.ltb x 0
        then (-(PrimFloat.of_uint63 (-x)%sint63))%float
        else PrimFloat.of_uint63 x.
+
+  Definition to_Q_cps (x : float) {T} (on_nan : T) (on_pinf : T) (on_ninf : T) (on_nzero : T) (on_Q : Q -> T) : T
+    := match Prim2SF x with
+       | S754_nan => on_nan
+       | S754_zero is_neg
+         => if is_neg
+            then on_nzero
+            else on_Q 0%Q
+       | S754_infinity false => on_pinf
+       | S754_infinity true => on_ninf
+       | S754_finite is_neg m e
+         => let z := (if (e <? 0)%Z
+                      then m / (2^(-e))%Z
+                      else m * (2^e)%Z)%Q in
+            on_Q (if is_neg then -z else z)%Q
+       end.
+
+  Definition Q2SF (q : Q) : spec_float
+    := let is_neg := negb (Qle_bool 0 q) in
+       let q := Qabs q in
+       let '(q, e)
+         := if Qle_bool q 1
+            then let e := (Z.log2 (Qfloor (Qinv q)) + prec - 1)%Z in
+                 (q * (2^e)%Z, (-e)%Z)%Q
+            else let e := (Z.log2 (Qfloor q) + prec - 1)%Z in
+                 (q / (2^e)%Z, e)%Q in
+       if Qeq_bool q 0
+       then S754_zero is_neg
+       else
+         if (e - prec <=? emax)%Z
+         then
+           let m := Qround q in
+           if (m =? 0)%Z
+           then S754_zero is_neg
+           else
+             let m := Z.to_pos m in
+             if (emin <=? Pos.size m + e - prec)%Z
+             then
+               (* normal *)
+               S754_finite is_neg m e
+             else
+               S754_zero is_neg
+         else
+           S754_infinity is_neg.
+
+  Definition
+
+  Definition of_Q (q : Q) : float
 
   Definition Qred_to_uint63 (num : N) (den : N) : (int * int) + float
     := let max_int := Z.to_N (Uint63.to_Z Uint63.max_int) in
@@ -94,19 +143,6 @@ Module PrimFloat.
     (x : float)
     : Z
     := to_Z_cps x nan pinf ninf (fun x => x).
-
-  Definition to_Q_cps (x : float) {T} (on_nan : T) (on_pinf : T) (on_ninf : T) (on_Q : Q -> T) : T
-    := match Prim2SF x with
-       | S754_nan => on_nan
-       | S754_zero _ => on_Q 0%Q
-       | S754_infinity false => on_pinf
-       | S754_infinity true => on_ninf
-       | S754_finite is_neg m e
-         => let z := (if (e <? 0)%Z
-                      then m / (2^(-e))%Z
-                      else m * (2^e)%Z)%Q in
-            on_Q (if is_neg then -z else z)%Q
-       end.
 
   Definition to_Q
     {nan : with_default "nan" Q 0%Q}
