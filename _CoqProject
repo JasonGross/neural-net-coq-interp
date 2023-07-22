@@ -39,10 +39,11 @@ theories/Util/SolveProperEqRel.v
 theories/Util/ValueExtraction.v
 theories/Util/Wf_Uint63.v
 theories/Util/Arith/Classes.v
-theories/Util/Arith/FloatArith.v
 theories/Util/Arith/Instances.v
 theories/Util/Arith/QArith.v
 theories/Util/Arith/ZArith.v
+theories/Util/Arith/FloatArith/Definitions.v
+theories/Util/Arith/FloatArith/Proofs.v
 theories/Util/List/Proofs.v
 theories/Util/PArray/Instances.v
 theories/Util/PArray/Proofs.v

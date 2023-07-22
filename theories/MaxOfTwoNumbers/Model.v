@@ -151,7 +151,7 @@ Definition expected : tensor _ _ := Eval cbv in tensor_of_list [[11.4344;  0.522
            2.1076; -3.4658; -4.5172;  2.4994;  1.8171; -4.6102; -6.5373;
            1.7269]].
 Time Definition result_arr : PArray.concrete_tensor _ _ := Eval vm_compute in PArray.concretize (logits (tensor_of_list [0; 1]%uint63)).
-Compute FloatArith.PrimFloat.of_Q ((64*64)%Z * 0.3 / 60)%Q.
+Compute FloatArith.Definitions.PrimFloat.of_Q ((64*64)%Z * 0.3 / 60)%Q.
 Compute PArray.concretize (logits (tensor_of_list [0; 2]%uint63)).
 Definition result : tensor _ _ := PArray.abstract result_arr.
 Compute PArray.concretize (result - expected)%core.

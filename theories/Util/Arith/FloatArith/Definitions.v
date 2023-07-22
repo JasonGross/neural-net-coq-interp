@@ -5,6 +5,7 @@ Notation "'∞'" := infinity : float_scope.
 #[local] Coercion Z.of_N : N >-> Z.
 #[local] Coercion inject_Z : Z >-> Q.
 #[local] Coercion Z.pos : positive >-> Z.
+#[local] Coercion is_true : bool >-> Sortclass.
 Local Open Scope float_scope.
 Notation "'∞'" := infinity : float_scope.
 

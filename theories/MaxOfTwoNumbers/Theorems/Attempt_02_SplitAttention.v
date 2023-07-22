@@ -1,7 +1,7 @@
 From Coq Require Import Floats Sint63 Uint63 QArith Lia List PArray Derive.
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
 From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Wf_Uint63.Instances SolveProperEqRel.
-From NeuralNetInterp.Util.Arith Require Import Classes Instances FloatArith.
+From NeuralNetInterp.Util.Arith Require Import Classes Instances FloatArith.Definitions.
 From NeuralNetInterp.Torch Require Import Tensor.Instances Slicing.Instances.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Instances.
 From NeuralNetInterp.MaxOfTwoNumbers Require Import Parameters Model Heuristics TheoremStatement Model.Instances.
@@ -140,7 +140,13 @@ Proof.
   cbv -[map2' raw_get v pattern RawIndex.snoc RawIndex.nil] in out'.
   unfold Reduction.sum in (value of out) at 1.
   cbv -[map2' Reduction.sum L0_attn_W_O out'] in out.
-HERE
+  cbv [mean Reduction.mean reduce_axis_m1 reduce_axis_m1' map item SliceIndex.slice raw_get Truncating.coer_Z_float Shape.reshape' Shape.reduce Shape.tl snd reshape_m1 reshape_snoc_split].
+  vm_compute of_Z.
+  vm_compute PrimFloat.of_Z.
+  cbv [RawIndex.unreshape RawIndex.unreshape' RawIndex.curry_radd RawIndex.combine_radd RawIndex.item RawIndex.snoc RawIndex.tl RawIndex.nil snd Shape.tl].
+  cbv [expected_accuracy].
+  cbv [error].
+  vm_compute expected_accuracy.
   subst all_toks_c.
   cbv beta iota delta [cartesian_prod] in true_maximum.
   cbv beta iota delta [reshape_m1 modulo PrimInt63.mod Uint63.to_Z Uint63.to_Z_rec Uint63.size Uint63.is_even Uint63.is_zero Uint63.land Uint63.eqb Uint63.compare PrimInt63.lsr Z.double Z.succ_double Z.to_nat nth_default nth_error Pos.to_nat Pos.iter_op] in true_maximum.

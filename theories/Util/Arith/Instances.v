@@ -1,5 +1,5 @@
 From Coq Require Import List Floats PArray Sint63 Uint63 Arith PArith NArith ZArith QArith.
-From NeuralNetInterp.Util.Arith Require Import Classes FloatArith QArith ZArith.
+From NeuralNetInterp.Util.Arith Require Import Classes FloatArith.Definitions QArith ZArith.
 Import ListNotations.
 Set Implicit Arguments.
 #[global] Set Warnings Append "-ambiguous-paths".

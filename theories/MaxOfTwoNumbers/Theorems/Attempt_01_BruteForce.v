@@ -1,7 +1,7 @@
 From Coq Require Import Floats Sint63 Uint63 QArith Lia List PArray Derive.
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
 From NeuralNetInterp.Util Require Import Pointed.
-From NeuralNetInterp.Util.Arith Require Import Classes Instances FloatArith.
+From NeuralNetInterp.Util.Arith Require Import Classes Instances FloatArith.Definitions.
 From NeuralNetInterp.Torch Require Import Tensor.Instances.
 From NeuralNetInterp.MaxOfTwoNumbers Require Import Parameters Model Heuristics TheoremStatement Model.Instances.
 From NeuralNetInterp.MaxOfTwoNumbers.Computed Require Import AllLogits.
