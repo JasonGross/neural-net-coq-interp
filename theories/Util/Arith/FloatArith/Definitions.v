@@ -4,6 +4,7 @@ From NeuralNetInterp.Util.Arith Require Import QArith.
 Local Open Scope float_scope.
 Notation "'∞'" := infinity : float_scope.
 #[local] Coercion Z.of_N : N >-> Z.
+#[local] Coercion N.of_nat : nat >-> N.
 #[local] Coercion inject_Z : Z >-> Q.
 #[local] Coercion Z.pos : positive >-> Z.
 #[local] Coercion is_true : bool >-> Sortclass.
@@ -31,6 +32,15 @@ Module PrimFloat.
                       else m * (2^e)%Z)%Q in
             on_Q (if is_neg then -z else z)%Q
        end.
+
+  Definition to_Q
+    {nan : with_default "nan" Q 0%Q}
+    {pinf : with_default "+∞" Q (2^emax)%Z}
+    {ninf : with_default "-∞" Q (-(2^emax))%Z}
+    {nzero : with_default "-0" Q (-1 / (2^(-(emin-1)))%Z)%Q}
+    (x : float)
+    : Q
+    := to_Q_cps x nan pinf ninf nzero (fun x => x).
 
   Definition Q2SF (q : Q) : spec_float
     := let is_neg := negb (Qle_bool 0 q) in
@@ -60,97 +70,20 @@ Module PrimFloat.
          else
            S754_infinity is_neg.
 
-  Definition
-
-  Definition of_Q (q : Q) : float
-
-  Definition Qred_to_uint63 (num : N) (den : N) : (int * int) + float
-    := let max_int := Z.to_N (Uint63.to_Z Uint63.max_int) in
-       if ((num <=? max_int) && (den <=? max_int))%N
-       then inl (Uint63.of_Z num, Uint63.of_Z den)
-       else if (den =? 0)%N
-            then inr ((if (num =? 0)%N then 0 else 1) / 0)
-            else
-              let '(num, den) := let q := Qred (inject_Z num / inject_Z den) in
-                                 (Z.to_N (Qnum q), Npos (Qden q)) in
-              if ((num <=? max_int) && (den <=? max_int))%N
-              then inl (Uint63.of_Z num, Uint63.of_Z den)
-              else if (max_int <? num / den)%N
-                   then inr ∞
-                   else let c := (1 + (N.max num den - 1) / max_int)%N in
-                        let '(num, den) := (num / c, den / c)%N in
-                        inl (Uint63.of_Z num, Uint63.of_Z den).
-
-  Definition QredN_to_float (num : N) (den : N) : float
-    := match Qred_to_uint63 num den with
-       | inr f => f
-       | inl (num, den) => PrimFloat.of_uint63 num / PrimFloat.of_uint63 den
-       end.
-
-  Definition Qred_to_float (q : Q) : float
-    := if Qeq_bool q 0
-       then 0
-       else let num := if Qle_bool q 0
-                       then Qnum (-q)
-                       else Qnum q in
-            QredN_to_float (Z.to_N num) (Npos (Qden q)).
-
-  Definition of_N (v : N) : float
-    := let e := N.log2 v in
-       if (Uint63.to_Z Uint63.max_int <? (e + shift))%Z
-       then ∞
-       else ldshiftexp (QredN_to_float v (2^e)) (Uint63.of_Z (e + shift)).
-
-  Definition of_Z (v : Z) : float
-    := if (v <? 0)%Z
-       then -of_N (Z.to_N (-v))
-       else of_N (Z.to_N v).
-
-  Definition of_Q_pos (q : Q) : float
-    := let q := Qred q in
-       let max_int := Z.to_N (Uint63.to_Z Uint63.max_int) in
-       if ((Qnum q <=? max_int) && (Zpos (Qden q) <=? max_int))%Z
-       then Qred_to_float q
-       else let z := Qfloor q in
-            let q := (q / z)%Q in
-            of_Z z * Qred_to_float q.
-
-  Definition of_Q (q : Q) : float
-    := if Qeq_bool q 0
-       then 0
-       else if Qle_bool q 0
-            then -of_Q_pos (-q)
-            else of_Q_pos q.
-
-  Definition to_Z_cps (x : float) {T} (on_nan : T) (on_pinf : T) (on_ninf : T) (on_Z : Z -> T) : T
-    := match Prim2SF x with
-       | S754_nan => on_nan
-       | S754_zero _ => on_Z 0%Z
-       | S754_infinity false => on_pinf
-       | S754_infinity true => on_ninf
-       | S754_finite is_neg m e
-         => let z := (if (e <? 0)
-                      then m / 2^(-e)
-                      else m * 2^e)%Z in
-            on_Z (if is_neg then -z else z)%Z
-       end.
-
-  (* float64 stores numbers 2.2E-308 to 1.7E+308, aka around 2^1024, so let's pick 2^2048 as inf *)
+  Definition of_Q (q : Q) : float := SF2Prim (Q2SF q).
+  Definition of_Z (z : Z) : float := of_Q z.
+  Definition of_N (n : N) : float := of_Z n.
+  Definition of_nat (n : nat) : float := of_N n.
+  Definition to_Z_cps (x : float) {T} (on_nan : T) (on_pinf : T) (on_ninf : T) (on_nzero : T) (on_Z : Z -> T) : T
+    := to_Q_cps x on_nan on_pinf on_ninf on_nzero (fun q => on_Z (Qround q)).
   Definition to_Z
     {nan : with_default "nan" Z 0%Z}
-    {pinf : with_default "+∞" Z (2^2048)%Z}
-    {ninf : with_default "-∞" Z (-(2^2048))%Z}
+    {pinf : with_default "+∞" Z (2^emax)%Z}
+    {ninf : with_default "-∞" Z (-(2^emax))%Z}
+    {nzero : with_default "-0" Z 0%Z}
     (x : float)
     : Z
-    := to_Z_cps x nan pinf ninf (fun x => x).
-
-  Definition to_Q
-    {nan : with_default "nan" Q 0%Q}
-    {pinf : with_default "+∞" Q (2^2048)%Z}
-    {ninf : with_default "-∞" Q (-(2^2048))%Z}
-    (x : float)
-    : Q
-    := to_Q_cps x nan pinf ninf (fun x => x).
+    := to_Z_cps x nan pinf ninf nzero (fun x => x).
 
   #[local] Notation fmaf x y z := (x * y + z) (only parsing).
 
@@ -321,7 +254,7 @@ float my_expf_unchecked (float a)
     let j := fmaf 0x1.715476p0 a big - big in (* 1.442695f, 12582912f *)
     let f := fmaf j (-0x1.62e400p-1)  a in (* -6.93145752e-1f *) (* log_2_hi *)
     let f := fmaf j (-0x1.7f7d1cp-20) f in (* -1.42860677e-6f *) (* log_2_lo *)
-    match to_Z_cps j (inr nan) (inr ∞) (inr (-∞)) (@inl _ _) with (* inl i or inr return *)
+    match to_Z_cps j (inr nan) (inr ∞) (inr (-∞)) (inr 1) (@inl _ _) with (* inl i or inr return *)
     | inr out_of_bounds => out_of_bounds
     | inl i =>
         (* approximate r = exp(f) on interval [-log(2)/2, +log(2)/2] *)

@@ -14,6 +14,9 @@ Definition pow_Z R (rI : R) (rmul : R -> R -> R) (rdiv : R -> R -> R) (x : R) (p
      | Zpos p => @pow_N R rI rmul x (Npos p)
      end.
 
+#[export] Instance subrelation_eq_Qeq : subrelation eq Qeq.
+Proof. repeat intro; subst; reflexivity. Qed.
+
 #[local] Coercion inject_Z : Z >-> Q.
 
 Definition Qround (q : Q) : Z
@@ -227,6 +230,12 @@ Definition Qexp {expansion_terms : with_default "Taylor expansion terms" nat def
 
 Definition Qlog2_approx (x : Q) : Z
   := (Z.log2_round (Qnum x) - Z.log2_round (Zpos (Qden x)))%Z.
+
+Lemma Qabs_alt q : Qabs q = if Qle_bool 0 q then q else -q.
+Proof.
+  destruct q as [n d]; cbv [Qle_bool Qabs Qnum Qden inject_Z Qopp]; break_innermost_match; f_equal.
+  all: lia.
+Qed.
 (*
 Definition Qlog2_approx (x : Q) : Z
   := (Z.log2_round (Qnum x) - Z.log2_round (Zpos (Qden x)))%Z.
