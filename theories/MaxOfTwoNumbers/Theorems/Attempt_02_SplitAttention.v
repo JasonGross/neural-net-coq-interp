@@ -165,6 +165,10 @@ Proof.
   cbn -[all_toks] in true_maximum'.
   cbv [Uint63.to_Z Uint63.to_Z_red] in true_maximum'.
 
+  HERE?
+https://coq.zulipchat.com/#narrow/stream/237977-Coq-users/topic/Working.20with.20primitive.20floats/near/377735862
+
+
   cbv [RawInde
   cbv [
   cbv [tupleify] in
