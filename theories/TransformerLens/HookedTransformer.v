@@ -206,6 +206,8 @@ Module Attention.
   End __.
 End Attention.
 
+Variant NormalizationType := LN (*| LNPre*).
+
 Module TransformerBlock.
   Section __.
     Context {A r} {batch : Shape r}
@@ -215,11 +217,15 @@ Module TransformerBlock.
       {default : pointed A}
       {pos n_heads d_model d_head} {n_ctx:N}
       {use_split_qkv_input : with_default "use_split_qkv_input" bool false}
+      {normalization_type : with_default "normalization_type" (option NormalizationType) (Some LN)}
       (W_Q W_K W_V W_O : tensor A [n_heads; d_model; d_head])
       (b_Q b_K b_V : tensor A [n_heads; d_head])
       (b_O : tensor A [d_model])
       (eps : A)
-      (ln1_w ln1_b ln2_w ln2_b : tensor A [d_model])
+      (ln1_w ln1_b ln2_w ln2_b : match normalization_type with
+                                 | Some LN => tensor A [d_model]
+                                 | Datatypes.None => with_default "()" True I
+                                 end)
       (resid_pre : tensor A ((batch ::' pos) ++' [d_model]))
       (maybe_n_heads := fun b : bool => (if b return Shape (if b then _ else _) then [n_heads] else [])%shape).
 
@@ -240,10 +246,21 @@ Module TransformerBlock.
     Definition value_input : tensor A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model))
       := add_head_dimension resid_pre.
 
+    #[local] Notation LayerNorm_forward
+      := (match normalization_type
+                return match normalization_type with Some LN => _ | _ => _ end
+                       -> match normalization_type with Some LN => _ | _ => _ end
+                       -> _
+          with
+          | Some LN => LayerNorm.forward eps
+          | Datatypes.None => fun _ _ t => t
+          end)
+           (only parsing).
+
     Definition ln1 {r} {s : Shape r} (t : tensor A (s ::' d_model)) : tensor A (s ::' d_model)
-      := LayerNorm.forward eps ln1_w ln1_b t.
+      := LayerNorm_forward ln1_w ln1_b t.
     Definition ln2 {r} {s : Shape r} (t : tensor A (s ::' d_model)) : tensor A (s ::' d_model)
-      := LayerNorm.forward eps ln2_w ln2_b t.
+      := LayerNorm_forward ln2_w ln2_b t.
 
     Definition attn_only_out : tensor A (batch ++ [pos; d_model])
       := (let attn_out : tensor A (batch ++ [pos; d_model])
@@ -267,6 +284,7 @@ Module HookedTransformer.
       {default : pointed A}
       {d_vocab d_vocab_out n_heads d_model d_head} {n_ctx:N}
       (*{use_split_qkv_input : with_default "use_split_qkv_input" bool false}*)
+      {normalization_type : with_default "normalization_type" (option NormalizationType) (Some LN)}
       (eps : A)
 
       (W_E : tensor A [d_vocab; d_model])
@@ -280,9 +298,20 @@ Module HookedTransformer.
               tensor A [n_heads; d_model; d_head] * tensor A [n_heads; d_model; d_head] * tensor A [n_heads; d_model; d_head] * tensor A [n_heads; d_model; d_head]
               * tensor A [n_heads; d_head] * tensor A [n_heads; d_head] * tensor A [n_heads; d_head]
               * tensor A [d_model]
-              * tensor A [d_model] * tensor A [d_model]))
+              * match normalization_type with
+                | Some LN => tensor A [d_model]
+                | Datatypes.None => with_default "()" True I
+                end
+              * match normalization_type with
+                | Some LN => tensor A [d_model]
+                | Datatypes.None => with_default "()" True I
+                end))
 
-      (ln_final_w ln_final_b : tensor A [d_model])
+      (ln_final_w ln_final_b
+        : match normalization_type with
+          | Some LN => tensor A [d_model]
+          | Datatypes.None => with_default "()" True I
+          end)
 
       (W_U : tensor A [d_model; d_vocab_out]) (b_U : tensor A [d_vocab_out])
     .
@@ -313,8 +342,19 @@ Module HookedTransformer.
                    ln1_w ln1_b)
              blocks_params.
 
+    #[local] Notation LayerNorm_forward
+      := (match normalization_type
+                return match normalization_type with Some LN => _ | _ => _ end
+                       -> match normalization_type with Some LN => _ | _ => _ end
+                       -> _
+          with
+          | Some LN => LayerNorm.forward eps
+          | Datatypes.None => fun _ _ t => t
+          end)
+           (only parsing).
+
       Definition ln_final (resid : tensor A resid_shape) : tensor A resid_shape
-        := LayerNorm.forward eps ln_final_w ln_final_b resid.
+        := LayerNorm_forward ln_final_w ln_final_b resid.
 
       Definition unembed (resid : tensor A resid_shape) : tensor A (s ::' d_vocab_out)
         := Unembed.forward W_U b_U resid.

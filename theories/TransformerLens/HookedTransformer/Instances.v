@@ -1,6 +1,6 @@
 From Coq Require Import Floats Sint63 Uint63 QArith Lia List PArray Morphisms RelationClasses.
 From NeuralNetInterp.Util Require Import Default Pointed PArray PArray.Instances Wf_Uint63.Instances List Notations Arith.Classes Arith.Instances Bool SolveProperEqRel.
-From NeuralNetInterp.Util.Tactics Require Import DestructHead.
+From NeuralNetInterp.Util.Tactics Require Import DestructHead BreakMatch.
 From NeuralNetInterp.Util Require Nat Wf_Uint63.
 From NeuralNetInterp.Torch Require Import Tensor Tensor.Instances Einsum Slicing Slicing.Instances.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer.
@@ -217,15 +217,15 @@ Module HookedTransformer.
       : Proper (Tensor.eqf ==> Tensor.eqf) (@value_input A r batch pos n_heads d_model use_split_qkv_input)
       := _.
 
-    #[export] Instance ln1_Proper {A zeroA coerZ addA subA mulA divA sqrtA default d_model eps ln1_w ln1_b r s}
-      : Proper (Tensor.eqf ==> Tensor.eqf) (@ln1 A zeroA coerZ addA subA mulA divA sqrtA default d_model eps ln1_w ln1_b r s)
-      := _.
-    #[export] Instance ln2_Proper {A zeroA coerZ addA subA mulA divA sqrtA default d_model eps ln2_w ln2_b r s}
-      : Proper (Tensor.eqf ==> Tensor.eqf) (@ln2 A zeroA coerZ addA subA mulA divA sqrtA default d_model eps ln2_w ln2_b r s)
-      := _.
+    #[export] Instance ln1_Proper {A zeroA coerZ addA subA mulA divA sqrtA default d_model normalization_type eps ln1_w ln1_b r s}
+      : Proper (Tensor.eqf ==> Tensor.eqf) (@ln1 A zeroA coerZ addA subA mulA divA sqrtA default d_model normalization_type eps ln1_w ln1_b r s).
+    Proof. break_innermost_match_hyps; try exact _; t. Qed.
+    #[export] Instance ln2_Proper {A zeroA coerZ addA subA mulA divA sqrtA default d_model normalization_type eps ln2_w ln2_b r s}
+      : Proper (Tensor.eqf ==> Tensor.eqf) (@ln2 A zeroA coerZ addA subA mulA divA sqrtA default d_model normalization_type eps ln2_w ln2_b r s).
+    Proof. break_innermost_match_hyps; try exact _; t. Qed.
 
-    #[export] Instance attn_only_out_Proper {A r batch zeroA coerZ addA subA mulA divA sqrtA expA default pos n_heads d_model d_head n_ctx use_split_qkv_input W_Q W_K W_V W_O b_Q b_K b_V b_O eps ln1_w ln1_b}
-      : Proper (Tensor.eqf ==> Tensor.eqf) (@attn_only_out A r batch zeroA coerZ addA subA mulA divA sqrtA expA default pos n_heads d_model d_head n_ctx use_split_qkv_input W_Q W_K W_V W_O b_Q b_K b_V b_O eps ln1_w ln1_b).
+    #[export] Instance attn_only_out_Proper {A r batch zeroA coerZ addA subA mulA divA sqrtA expA default pos n_heads d_model d_head n_ctx use_split_qkv_input normalization_type W_Q W_K W_V W_O b_Q b_K b_V b_O eps ln1_w ln1_b}
+      : Proper (Tensor.eqf ==> Tensor.eqf) (@attn_only_out A r batch zeroA coerZ addA subA mulA divA sqrtA expA default pos n_heads d_model d_head n_ctx use_split_qkv_input normalization_type W_Q W_K W_V W_O b_Q b_K b_V b_O eps ln1_w ln1_b).
     Proof.
       cbv [attn_only_out]; t.
       all: apply Attention.attn_out_Proper; t.
@@ -245,8 +245,8 @@ Module HookedTransformer.
       : Proper (Tensor.eqf ==> Tensor.eqf) (@pos_embed A d_model n_ctx W_pos r batch pos)
       := _.
 
-    #[export] Instance blocks_Proper {A zeroA coerZ addA subA mulA divA sqrtA expA default n_heads d_model d_head n_ctx eps blocks_params r batch pos}
-      : Proper (List.Forall2 (Tensor.eqf ==> Tensor.eqf))%signature (@blocks A zeroA coerZ addA subA mulA divA sqrtA expA default n_heads d_model d_head n_ctx eps blocks_params r batch pos).
+    #[export] Instance blocks_Proper {A zeroA coerZ addA subA mulA divA sqrtA expA default n_heads d_model d_head n_ctx normalization_type eps blocks_params r batch pos}
+      : Proper (List.Forall2 (Tensor.eqf ==> Tensor.eqf))%signature (@blocks A zeroA coerZ addA subA mulA divA sqrtA expA default n_heads d_model d_head n_ctx normalization_type eps blocks_params r batch pos).
     Proof.
       cbv [Proper blocks]; clear.
       induction blocks_params as [|?? IH]; cbn [List.map]; constructor; auto; [].
@@ -254,16 +254,16 @@ Module HookedTransformer.
       apply TransformerBlock.attn_only_out_Proper.
     Qed.
 
-    #[export] Instance ln_final_Proper {A zeroA coerZ addA subA mulA divA sqrtA default d_model eps ln_final_w ln_final_b r batch pos}
-      : Proper (Tensor.eqf ==> Tensor.eqf) (@ln_final A zeroA coerZ addA subA mulA divA sqrtA default d_model eps ln_final_w ln_final_b r batch pos)
+    #[export] Instance ln_final_Proper {A zeroA coerZ addA subA mulA divA sqrtA default d_model normalization_type eps ln_final_w ln_final_b r batch pos}
+      : Proper (Tensor.eqf ==> Tensor.eqf) (@ln_final A zeroA coerZ addA subA mulA divA sqrtA default d_model normalization_type eps ln_final_w ln_final_b r batch pos)
       := _.
 
     #[export] Instance unembed_Proper {A zeroA addA mulA d_vocab_out d_model W_U b_U r batch pos}
       : Proper (Tensor.eqf ==> Tensor.eqf) (@unembed A zeroA addA mulA d_vocab_out d_model W_U b_U r batch pos)
       := _.
 
-    #[export] Instance blocks_cps_Proper {A zeroA coerZ addA subA mulA divA sqrtA expA default n_heads d_model d_head n_ctx eps blocks_params r batch pos T R}
-      : Proper (Tensor.eqf ==> (Tensor.eqf ==> R) ==> R) (@blocks_cps A zeroA coerZ addA subA mulA divA sqrtA expA default n_heads d_model d_head n_ctx eps blocks_params r batch pos T).
+    #[export] Instance blocks_cps_Proper {A zeroA coerZ addA subA mulA divA sqrtA expA default n_heads d_model d_head n_ctx normalization_type eps blocks_params r batch pos T R}
+      : Proper (Tensor.eqf ==> (Tensor.eqf ==> R) ==> R) (@blocks_cps A zeroA coerZ addA subA mulA divA sqrtA expA default n_heads d_model d_head n_ctx normalization_type eps blocks_params r batch pos T).
     Proof.
       cbv [blocks_cps].
       let blocks := lazymatch goal with |- context[fold_right _ _ ?ls] => ls end in
@@ -273,8 +273,8 @@ Module HookedTransformer.
       apply IH; clear IH; t; assumption.
     Qed.
 
-    #[export] Instance logits_Proper {A zeroA coerZ addA subA mulA divA sqrtA expA default d_vocab d_vocab_out n_heads d_model d_head n_ctx eps W_E W_pos blocks_params ln_final_w ln_final_b W_U b_U r batch pos}
-      : Proper (Tensor.eqf ==> Tensor.eqf) (@logits A zeroA coerZ addA subA mulA divA sqrtA expA default d_vocab d_vocab_out n_heads d_model d_head n_ctx eps W_E W_pos blocks_params ln_final_w ln_final_b W_U b_U r batch pos).
+    #[export] Instance logits_Proper {A zeroA coerZ addA subA mulA divA sqrtA expA default d_vocab d_vocab_out n_heads d_model d_head n_ctx normalization_type eps W_E W_pos blocks_params ln_final_w ln_final_b W_U b_U r batch pos}
+      : Proper (Tensor.eqf ==> Tensor.eqf) (@logits A zeroA coerZ addA subA mulA divA sqrtA expA default d_vocab d_vocab_out n_heads d_model d_head n_ctx normalization_type eps W_E W_pos blocks_params ln_final_w ln_final_b W_U b_U r batch pos).
     Proof.
       cbv [logits]; t.
       refine (blocks_cps_Proper (R:=Tensor.eqf) _ _ _); t.
@@ -282,8 +282,8 @@ Module HookedTransformer.
       apply ln_final_Proper; t.
     Qed.
 
-    #[export] Instance forward_Proper {A zeroA coerZ addA subA mulA divA sqrtA expA default d_vocab d_vocab_out n_heads d_model d_head n_ctx eps W_E W_pos blocks_params ln_final_w ln_final_b W_U b_U r batch pos}
-      : Proper (Tensor.eqf ==> Tensor.eqf) (@forward A zeroA coerZ addA subA mulA divA sqrtA expA default d_vocab d_vocab_out n_heads d_model d_head n_ctx eps W_E W_pos blocks_params ln_final_w ln_final_b W_U b_U r batch pos)
+    #[export] Instance forward_Proper {A zeroA coerZ addA subA mulA divA sqrtA expA default d_vocab d_vocab_out n_heads d_model d_head n_ctx normalization_type eps W_E W_pos blocks_params ln_final_w ln_final_b W_U b_U r batch pos}
+      : Proper (Tensor.eqf ==> Tensor.eqf) (@forward A zeroA coerZ addA subA mulA divA sqrtA expA default d_vocab d_vocab_out n_heads d_model d_head n_ctx normalization_type eps W_E W_pos blocks_params ln_final_w ln_final_b W_U b_U r batch pos)
       := _.
   End HookedTransformer.
   Export (hints) HookedTransformer.
