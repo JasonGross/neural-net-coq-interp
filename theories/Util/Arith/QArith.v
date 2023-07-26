@@ -228,6 +228,9 @@ End exp.
 Definition Qexp {expansion_terms : with_default "Taylor expansion terms" nat default_exp_precision} (x : Q) : Q
   := Qred (@exp Q 1 Qmult Qdiv Qplus Qsplit_int_frac inject_Z expansion_terms x).
 
+Definition Qlog2_floor (x : Q) : Z
+  := (Z.log2 (Qnum x) - Z.log2 (Zpos (Qden x)))%Z.
+
 Definition Qlog2_approx (x : Q) : Z
   := (Z.log2_round (Qnum x) - Z.log2_round (Zpos (Qden x)))%Z.
 

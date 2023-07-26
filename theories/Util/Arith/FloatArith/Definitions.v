@@ -17,6 +17,17 @@ Module PrimFloat.
        then (-(PrimFloat.of_uint63 (-x)%sint63))%float
        else PrimFloat.of_uint63 x.
 
+  Notation mul_2p m e
+    := (if Z.ltb e 0
+        then Qdiv m (inject_Z (2^(-e)))
+        else Qmult m (inject_Z (2^e)))
+         (only parsing).
+  Notation div_2p m e
+    := (if Z.ltb e 0
+        then Qmult m (inject_Z (2^(-e)))
+        else Qdiv m (inject_Z (2^e)))
+         (only parsing).
+
   Definition to_Q_cps (x : float) {T} (on_nan : T) (on_pinf : T) (on_ninf : T) (on_nzero : T) (on_Q : Q -> T) : T
     := match Prim2SF x with
        | S754_nan => on_nan
@@ -27,9 +38,7 @@ Module PrimFloat.
        | S754_infinity false => on_pinf
        | S754_infinity true => on_ninf
        | S754_finite is_neg m e
-         => let z := (if (e <? 0)%Z
-                      then m / (2^(-e))%Z
-                      else m * (2^e)%Z)%Q in
+         => let z := mul_2p m e in
             on_Q (if is_neg then -z else z)%Q
        end.
 
@@ -44,33 +53,30 @@ Module PrimFloat.
 
   Definition Q2SF (q : Q) : spec_float
     := let is_neg := negb (Qle_bool 0 q) in
-       let q := Qabs q in
-       let '(q, e)
-         := if Qle_bool q 1
-            then let e := (Z.log2 (Qfloor (Qinv q)) + prec - 1)%Z in
-                 (q * (2^e)%Z, (-e)%Z)%Q
-            else let e := (Z.log2 (Qfloor q) + prec - 1)%Z in
-                 (q / (2^e)%Z, e)%Q in
-       if Qeq_bool q 0
-       then S754_zero is_neg
-       else
-         if (e - prec <=? emax)%Z
-         then
-           let m := Qround q in
-           if (m =? 0)%Z
-           then S754_zero is_neg
-           else
-             let m := Z.to_pos m in
-             if (emin <=? Pos.size m + e - prec)%Z
-             then
-               (* normal *)
-               S754_finite is_neg m e
-             else
-               S754_zero is_neg
-         else
-           S754_infinity is_neg.
+       let q := Qred (Qabs q) in
+
+       let e := (Z.log2 (Qnum q) - Z.log2 (Qden q) - prec + 1)%Z in
+       let q := div_2p q e in
+       let m := Z.to_pos (Qround q) in
+       let '(m, e) := if (Z.log2 m + 1 =? prec)%Z
+                      then (m, e)
+                      else let shift := (prec - (Z.log2 m + 1))%Z in
+                           let q := div_2p q shift in
+                           let m := Z.to_pos (Qround q) in
+                           (m, (e + shift)%Z) in
+       if (e <=? emax - prec)%Z
+       then
+         if canonical_mantissa prec emax m e
+         then S754_finite is_neg m e
+         else S754_zero is_neg
+       else S754_infinity is_neg.
 
   Definition of_Q (q : Q) : float := SF2Prim (Q2SF q).
+  Goal True.
+    pose (of_Q ((2^5+1)/(2^5-1))).
+    cbv beta delta [of_Q Q2SF] in f.
+
+  Compute of_Q ((2^5+1)/(2^5-1)).
   Definition of_Z (z : Z) : float := of_Q z.
   Definition of_N (n : N) : float := of_Z n.
   Definition of_nat (n : nat) : float := of_N n.

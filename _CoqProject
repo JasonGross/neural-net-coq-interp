@@ -9,7 +9,14 @@ theories/MaxOfTwoNumbers/Computed/AllLogits.v
 theories/MaxOfTwoNumbers/Model/Instances.v
 theories/MaxOfTwoNumbers/Theorems/Attempt_01_BruteForce.v
 theories/MaxOfTwoNumbers/Theorems/Attempt_02_SplitAttention.v
+theories/MaxOfTwoNumbersSimpler/Heuristics.v
+theories/MaxOfTwoNumbersSimpler/Model.v
 theories/MaxOfTwoNumbersSimpler/Parameters.v
+theories/MaxOfTwoNumbersSimpler/TheoremStatement.v
+theories/MaxOfTwoNumbersSimpler/Computed/AllLogits.v
+theories/MaxOfTwoNumbersSimpler/Model/Instances.v
+theories/MaxOfTwoNumbersSimpler/Theorems/Attempt_01_BruteForce.v
+theories/MaxOfTwoNumbersSimpler/Theorems/Attempt_02_SplitAttention.v
 theories/Torch/Einsum.v
 theories/Torch/Slicing.v
 theories/Torch/Tensor.v

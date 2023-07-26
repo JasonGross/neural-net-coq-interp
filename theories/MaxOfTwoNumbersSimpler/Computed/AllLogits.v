@@ -1,4 +1,4 @@
-From NeuralNetInterp.MaxOfTwoNumbers Require Import Model.
+From NeuralNetInterp.MaxOfTwoNumbersSimpler Require Import Model.
 From NeuralNetInterp.Torch Require Import Tensor.
 From NeuralNetInterp.Util Require Import Pointed ValueExtraction.
 
