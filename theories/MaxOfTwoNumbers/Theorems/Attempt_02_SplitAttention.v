@@ -186,7 +186,7 @@ Proof.
   From Coq Require Import Lra.
   replace k with (Rdefinitions.IZR 4096) by (cbv -[Rdefinitions.RinvImpl.Rinv Rdefinitions.IZR]; lra).
   cbn [xorb].
-
+(*
   Search is_finite Bminus.
   2: { subst k; clear.
 
@@ -405,3 +405,4 @@ https://coq.zulipchat.com/#narrow/stream/237977-Coq-users/topic/Working.20with.2
   rewrite <- computed_accuracy_eq.
   vm_compute; reflexivity.
 Qed.
+*)
