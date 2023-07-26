@@ -1,6 +1,7 @@
 From Coq Require Import Floats Sint63 Uint63 QArith Lia List PArray Derive.
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
-From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Wf_Uint63.Instances SolveProperEqRel.
+From NeuralNetInterp.Util.Tactics Require Import IsFloat.
+From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Wf_Uint63.Instances SolveProperEqRel Default.
 From NeuralNetInterp.Util.Arith Require Import Classes Instances FloatArith.Definitions.
 From NeuralNetInterp.Torch Require Import Tensor.Instances Slicing.Instances.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Instances.
@@ -49,6 +50,7 @@ Local Ltac let_bind_subst_shape _ :=
   tensor tensor_of_rank
   Tensor.eqfR
   raw_get
+  with_default
 .
 #[export] Hint Transparent PrimInt63.leb : typeclass_instances.
 #[local] Set Keyed Unification.
@@ -162,6 +164,62 @@ Proof.
   subst all_toks.
   cbv [RawIndex.item RawIndex.tl raw_get] in true_maximum.
   cbn [snd] in true_maximum.
+  From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
+  From NeuralNetInterp.Util.Arith Require Import Flocq.
+  rewrite Flocq.IEEE754.PrimFloat.ltb_equiv, Flocq.IEEE754.PrimFloat.abs_equiv, Flocq.IEEE754.PrimFloat.sub_equiv, Flocq.IEEE754.PrimFloat.div_equiv.
+  rewrite Bltb_correct_full, B2R_Babs, B2R_Bminus, B2R_Bdiv, Bsign_Babs, is_nan_Babs, is_finite_Babs.
+  repeat match goal with
+         | [ |- context[?f (Prim2B ?x)] ]
+           => is_float x;
+              lazymatch f with
+              | @Bsign _ _ => idtac
+              | @is_nan _ _ => idtac
+              | @is_finite _ _ => idtac
+              end;
+              let v := (eval cbv in (f (Prim2B x))) in
+              change (f (Prim2B x)) with v
+         end.
+  cbn [negb Bool.eqb].
+  rewrite ?andb_false_r, ?orb_false_r.
+  vm_compute Rdefinitions.IZR.
+  set (k := B2R (Prim2B 4096)).
+  From Coq Require Import Lra.
+  replace k with (Rdefinitions.IZR 4096) by (cbv -[Rdefinitions.RinvImpl.Rinv Rdefinitions.IZR]; lra).
+  cbn [xorb].
+
+  Search is_finite Bminus.
+  2: { subst k; clear.
+
+
+       vm_compute Prim2B.
+       cbv [B2R].
+       cbv [Defs.F2R cond_Zopp].
+       cbv [Zaux.radix2].
+       cbv [Raux.bpow].
+       cbv [Defs.Fexp Defs.Fnum].
+       cbv [Zaux.radix_val].
+       vm_compute Z.pow_pos.
+       lra.
+  exfalso; clear -k.
+  vm_compute Prim2B in k.
+  cbv [B2R] in k.
+  hnf in k.
+  Search Rdefinitions.RbaseSymbolsImpl.Rmult Rdefinitions.IZR.
+  Print Rdefinitions.RbaseSymbolsImpl.Rmult_def.
+  Check @B2R.
+  vm_compute Raux.Req_bool.
+  Search Bsign Bdiv.
+  Search is_nan Babs.
+  From
+  From Ltac2 Require Import Ltac2 Constr.
+  Ltac2 is_float(c:constr) := match Constr.Unsafe.kind c with | Constr.Unsafe.Float _ => true | _ => false end.
+  Search xorb false.
+Print Bsign_Babs.
+
+  cbv [Babs].
+  Locate Rabs.
+  cbv [SFltb]
+  From Flocq
   cbn -[all_toks] in true_maximum'.
   cbv [Uint63.to_Z Uint63.to_Z_red] in true_maximum'.
 

@@ -17,6 +17,34 @@ Module PrimFloat.
        then (-(PrimFloat.of_uint63 (-x)%sint63))%float
        else PrimFloat.of_uint63 x.
 
+  (** Fused multiply and add [x * y + z] with a single round *)
+  Definition SFfma prec emax (x y z : spec_float) : spec_float
+    := match x, y, z with
+       | S754_nan, _, _
+       | _, S754_nan, _
+       | _, _, S754_nan
+         => S754_nan
+       | S754_infinity _, _, _
+       | _, S754_infinity _, _
+         => SFadd prec emax (SFmul prec emax x y) z
+       | _, _, S754_infinity _
+         => z
+       | S754_zero _, _, _
+       | _, S754_zero _, _
+       | _, _, S754_zero _
+         => SFadd prec emax (SFmul prec emax x y) z
+       | S754_finite sx mx ex, S754_finite sy my ey, S754_finite sz mz ez
+         => let '(sxy, mxy, exy) := (xorb sx sy, (mx * my)%positive, (ex + ey)%Z) in
+            let exyz := Z.min exy ez in
+            binary_normalize
+              prec emax
+              (Zplus (cond_Zopp sxy (Zpos (fst (shl_align mxy exy exyz)))) (cond_Zopp sz (Zpos (fst (shl_align mz ez exyz)))))
+              exyz false
+       end.
+  Definition SF64fma := SFfma prec emax.
+  Definition fmaf (x y z : float) : float
+    := SF2Prim (SF64fma (Prim2SF x) (Prim2SF y) (Prim2SF z)).
+
   Notation mul_2p m e
     := (if Z.ltb e 0
         then Qdiv m (inject_Z (2^(-e)))
@@ -51,33 +79,18 @@ Module PrimFloat.
     : Q
     := to_Q_cps x nan pinf ninf nzero (fun x => x).
 
+  Definition Z2SF (z : Z) : spec_float := binary_normalize prec emax z 0 false.
   Definition Q2SF (q : Q) : spec_float
     := let is_neg := negb (Qle_bool 0 q) in
        let q := Qred (Qabs q) in
-
-       let e := (Z.log2 (Qnum q) - Z.log2 (Qden q) - prec + 1)%Z in
+       (* goal: Z.log2 (Z.pos m) should be at least prec, ideally exactly prec, and m * 2^e should be close to q *)
+       let e := (Z.log2 (Qnum q) - Z.log2 (Qden q) - prec - 1)%Z in
        let q := div_2p q e in
-       let m := Z.to_pos (Qround q) in
-       let '(m, e) := if (Z.log2 m + 1 =? prec)%Z
-                      then (m, e)
-                      else let shift := (prec - (Z.log2 m + 1))%Z in
-                           let q := div_2p q shift in
-                           let m := Z.to_pos (Qround q) in
-                           (m, (e + shift)%Z) in
-       if (e <=? emax - prec)%Z
-       then
-         if canonical_mantissa prec emax m e
-         then S754_finite is_neg m e
-         else S754_zero is_neg
-       else S754_infinity is_neg.
-
+       let m := Qround q in
+       let m' := if is_neg then Z.opp m else m in
+       binary_normalize prec emax m e is_neg.
   Definition of_Q (q : Q) : float := SF2Prim (Q2SF q).
-  Goal True.
-    pose (of_Q ((2^5+1)/(2^5-1))).
-    cbv beta delta [of_Q Q2SF] in f.
-
-  Compute of_Q ((2^5+1)/(2^5-1)).
-  Definition of_Z (z : Z) : float := of_Q z.
+  Definition of_Z (z : Z) : float := SF2Prim (Z2SF z).
   Definition of_N (n : N) : float := of_Z n.
   Definition of_nat (n : nat) : float := of_N n.
   Definition to_Z_cps (x : float) {T} (on_nan : T) (on_pinf : T) (on_ninf : T) (on_nzero : T) (on_Z : Z -> T) : T
@@ -90,8 +103,6 @@ Module PrimFloat.
     (x : float)
     : Z
     := to_Z_cps x nan pinf ninf nzero (fun x => x).
-
-  #[local] Notation fmaf x y z := (x * y + z) (only parsing).
 
   (** Translating from https://stackoverflow.com/a/40519989/377022 with GPT-4
 <<<

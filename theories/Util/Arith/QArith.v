@@ -239,6 +239,8 @@ Proof.
   destruct q as [n d]; cbv [Qle_bool Qabs Qnum Qden inject_Z Qopp]; break_innermost_match; f_equal.
   all: lia.
 Qed.
+
+#[export] Instance Qred_wd : Proper (Qeq ==> eq) Qred := Qred_complete.
 (*
 Definition Qlog2_approx (x : Q) : Z
   := (Z.log2_round (Qnum x) - Z.log2_round (Zpos (Qden x)))%Z.

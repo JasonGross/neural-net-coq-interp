@@ -1,6 +1,6 @@
 From Coq Require Import Floats Sint63 Uint63 QArith Lia List PArray Derive.
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
-From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Wf_Uint63.Instances SolveProperEqRel.
+From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Wf_Uint63.Instances SolveProperEqRel Default.
 From NeuralNetInterp.Util.Arith Require Import Classes Instances FloatArith.Definitions.
 From NeuralNetInterp.Torch Require Import Tensor.Instances Slicing.Instances.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Instances.
@@ -49,6 +49,7 @@ Local Ltac let_bind_subst_shape _ :=
   tensor tensor_of_rank
   Tensor.eqfR
   raw_get
+  with_default
 .
 #[export] Hint Transparent PrimInt63.leb : typeclass_instances.
 #[local] Set Keyed Unification.

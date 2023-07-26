@@ -47,6 +47,7 @@ theories/Util/SolveProperEqRel.v
 theories/Util/ValueExtraction.v
 theories/Util/Wf_Uint63.v
 theories/Util/Arith/Classes.v
+theories/Util/Arith/Flocq.v
 theories/Util/Arith/Instances.v
 theories/Util/Arith/QArith.v
 theories/Util/Arith/ZArith.v
@@ -63,6 +64,9 @@ theories/Util/Tactics/DestructHead.v
 theories/Util/Tactics/DestructHyps.v
 theories/Util/Tactics/FindHyp.v
 theories/Util/Tactics/Head.v
+theories/Util/Tactics/IsArray.v
+theories/Util/Tactics/IsFloat.v
+theories/Util/Tactics/IsUint63.v
 theories/Util/Tactics/UniquePose.v
 theories/Util/Tactics2/Constr.v
 theories/Util/Tactics2/FixNotationsForPerformance.v
