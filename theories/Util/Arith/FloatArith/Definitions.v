@@ -33,15 +33,15 @@ Module PrimFloat.
        | _, S754_zero _, _
          => SFadd prec emax (SFmul prec emax x y) z
        | _, _, S754_zero _
-         (* in most cases, we could do [SFadd prec emax (SFmul prec emax x y) z], but in the case where [x] and [y] are subnormal and [x * y] underflows to zero in [SFmul], we should keep the sign of [x * y] rather than re-rounding by adding with [z] *)
+         (* in most cases, we could do [SFadd (SFmul x y) z] here too,
+            but in the case where [x] and [y] are subnormal, [x * y]
+            underflows to [-0] in [SFmul], and [z] is [+0], we should
+            keep the sign of [x * y] rather than re-rounding by adding
+            with [z] *)
          => SFmul prec emax x y
        | S754_finite sx mx ex, S754_finite sy my ey, S754_finite sz mz ez
-         => let '(sxy, mxy, exy) := (xorb sx sy, (mx * my)%positive, (ex + ey)%Z) in
-            let exyz := Z.min exy ez in
-            binary_normalize
-              prec emax
-              (Zplus (cond_Zopp sxy (Zpos (fst (shl_align mxy exy exyz)))) (cond_Zopp sz (Zpos (fst (shl_align mz ez exyz)))))
-              exyz false
+         => let xy := S754_finite (xorb sx sy) (mx * my) (ex + ey) (* no rounding *) in
+            SFadd prec emax xy z
        end.
   Definition SF64fma := SFfma prec emax.
   Definition fmaf (x y z : float) : float
