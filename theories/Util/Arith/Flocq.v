@@ -4,7 +4,7 @@ From Coq.Floats Require Import Floats.
 From Flocq.Core Require Import Raux Generic_fmt Zaux FLX.
 From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
 From NeuralNetInterp.Util.Arith Require Import FloatArith.Definitions.
-From NeuralNetInterp.Util.Tactics Require Import BreakMatch DestructHead.
+From NeuralNetInterp.Util.Tactics Require Import BreakMatch DestructHead UniquePose.
 Local Open Scope bool_scope.
 
 Section Binary.
@@ -170,12 +170,617 @@ Proof.
                 subst H2
            end.
     cbv [SF2B].
+    cbv [Operations.Fmult].
+    cbv [Bplus].
+    cbv [Bmult].
+    set (pf := proj1 _); clearbody pf; revert pf.
+    cbv [cond_Zopp Z.opp Z.mul].
+    cbv [binary_normalize].
+    repeat match goal with
+           | [ |- context[match (match ?b with true => ?x | false => ?y end) with Z0 => ?Z | Z.pos p => @?P p | Z.neg n => @?N n end] ]
+             => replace (match (match b with true => x | false => y end) with Z0 => Z | Z.pos p => P p | Z.neg n => N n end)
+               with (if b then match x with Z0 => Z | Z.pos p => P p | Z.neg n => N n end else match y with Z0 => Z | Z.pos p => P p | Z.neg n => N n end)
+               by now destruct b
+           | [ |- context[if ?s then if ?s' then ?a else ?b else if ?s' then ?b else ?a] ]
+             => replace (if s then if s' then a else b else if s' then b else a)
+               with (if xorb s s' then b else a)
+               by now destruct s, s'
+           end.
+    repeat match goal with
+           | [ |- context[?v] ]
+             => lazymatch v with
+                | (if ?b
+                   then ?f (?g ?true ?x ?y) (proj1 (?h ?true' ?z ?w))
+                   else ?f (?g ?false ?x ?y) (proj1 (?h ?false' ?z ?w)))
+                  => replace v
+                    with (f (g (if b then true else false) x y) (proj1 (h (if b then true' else false') z w)))
+                    by now destruct b
+                end
+           | [ |- context[if ?b then true else false] ]
+             => replace (if b then true else false) with b by now destruct b
+           | [ |- context[if ?b then false else true] ]
+             => replace (if b then false else true) with (negb b) by now destruct b
+           end.
+    set (pf' := proj1 _); clearbody pf'; revert pf'.
+    cbv [binary_round] in *.
+    cbv [shl_align_fexp shl_align].
+    repeat match goal with
+           | [ |- context[match (match ?b with Z.neg n => @?N n | Z0 => ?Z | Z.pos p => @?P p end) with pair A B => @?PP A B end] ]
+             => replace (match (match b with Z.neg n => @N n | Z0 => Z | Z.pos p => @P p end) with pair A B => @PP A B end)
+               with (PP (match b with Z.neg n => fst (N n) | Z0 => fst Z | Z.pos p => fst (P p) end)
+                       (match b with Z.neg n => snd (N n) | Z0 => snd Z | Z.pos p => snd (P p) end))
+               by now destruct b
+           end.
+    cbn [fst snd].
+    cbv [Bool.eqb].
+    cbv [valid_binary bounded canonical_mantissa] in * |- .
+    rewrite Bool.andb_true_iff, Z.leb_le in *.
+    destruct_head'_and.
+    repeat match goal with H : Zeq_bool _ _ = true |- _ => apply Zeq_bool_eq in H end.
+    repeat match goal with
+           | [ |- context[?v] ]
+             => lazymatch v with
+                | (if ?b
+                   then ?f (?g ?true ?x ?y) (proj1 (?h ?true' ?z ?w))
+                   else ?f (?g ?false ?x ?y) (proj1 (?h ?false' ?z ?w)))
+                  => replace v
+                    with (f (g (if b then true else false) x y) (proj1 (h (if b then true' else false') z w)))
+                    by now destruct b
+                end
+           | [ |- context[if ?b then true else false] ]
+             => replace (if b then true else false) with b by now destruct b
+           | [ |- context[if ?b then false else true] ]
+             => replace (if b then false else true) with (negb b) by now destruct b
+           end.
+    match goal with
+    | [ |- context[fexp ?prec ?emax (?m + ?e)] ]
+      => assert (0 <= fexp prec emax (m + e) - e)%Z
+    end.
+    { cbv [fexp] in *.
+      all: change digits2_pos with Pos.size in *.
+      repeat match goal with H : context[Z.max] |- _ => revert H end.
+      all: repeat match goal with
+             | [ |- context[Z.pos (Pos.size ?x)] ]
+               => let k := fresh in
+                  set (k := Z.pos (Pos.size x)) in *;
+                  let H' := fresh in
+                  assert (H' : (k = Z.log2 (Z.pos x) + 1)%Z)
+                    by (clear; subst k; cbn; break_innermost_match; cbn; lia);
+                  first [ clearbody k; subst k
+                        | rewrite ?H' in *; clear H'; subst k ]
+             | [ |- context[Z.log2 (Z.pos (?x * ?y))] ]
+               => change (Z.log2 (Z.pos (x * y))) with (Z.log2 (Z.pos x * Z.pos y)) in *;
+                  pose proof (Z.log2_mul_below (Z.pos x) (Z.pos y) ltac:(lia) ltac:(lia));
+                  pose proof (Z.log2_mul_above (Z.pos x) (Z.pos y) ltac:(lia) ltac:(lia))
+             | [ |- context[Z.log2 ?x] ]
+               => unique pose proof (Z.log2_nonneg x)
+             end.
+      repeat apply Z.max_case_strong.
+      all: intros.
+      all: subst.
+      all: repeat match goal with
+             | [ H : (Z.log2 ?x + ?y + ?z - ?w = ?z)%Z |- _ ]
+               => assert (Z.log2 x = w - y)%Z by lia; clear H
+             | [ H : Z.log2 _ = _ |- _ ] => progress rewrite ?H in *
+             | [ H : (?x <= ?y)%Z, H' : (?y <= ?x + 1)%Z |- _ ]
+               => assert (y = x \/ y = x + 1)%Z by lia; clear H H'
+             | _ => progress destruct_head'_or
+             end.
+      all: try lia.
+      all: try (vm_compute emin in *; vm_compute emax in *; cbv [prec emax] in *; lia). }
+    repeat match goal with
+           | [ |- context[?v] ]
+             => lazymatch v with
+                | match (fexp ?prec ?emax (?m + ?e) - ?e)%Z with Z.neg n => @?N n | Z0 => ?z | Z.pos _ => ?z end
+                  => replace v with z
+                    by (destruct (fexp prec emax (m + e) - e)%Z eqn:?; try lia)
+                end
+           end.
+    intros.
+    repeat match goal with
+           | [ H1 : ?x = true, H2 : ?x = true |- _ ]
+             => assert (H1 = H2)
+               by (clear; generalize dependent x; clear; intros; subst; (idtac + symmetry); apply UIP_refl_bool);
+                subst H2
+           end.
+    break_innermost_match; try reflexivity.
+    cbv [binary_round_aux binary_fit_aux binary_overflow overflow_to_inf SF2B] in *.
+    repeat (break_innermost_match_hyps_step; []).
+    repeat match goal with
+           | [ H : context[match ?x with _ => _ end] |- _ ]
+             => destruct x eqn:?; subst; try (break_innermost_match_hyps; congruence); []
+           end.
+    repeat match goal with
+           | [ H : S754_zero _ = S754_zero _ |- _ ] => inversion H; clear H
+           | [ H : B754_zero _ = B754_zero _ |- _ ] => inversion H; clear H
+           end.
+    subst.
+    repeat first [ progress subst
+                 | match goal with
+                   | [ H : (_, _) = (_, _) |- _ ]
+                     => pose proof (f_equal (@fst _ _) H);
+                        pose proof (f_equal (@snd _ _) H);
+                        clear H; cbn [fst snd] in *
+                   | [ H : context[shr_fexp] |- _ ]
+                     => rewrite shr_fexp_truncate in H by (cbv [choice_mode Round.cond_incr]; break_innermost_match; (exact _ + lia))
+                   end
+                 | break_innermost_match_hyps_step ].
+    rewrite ?loc_of_shr_record_of_loc, ?shr_m_shr_record_of_loc in *.
+    cbv [Round.truncate] in *.
+    rewrite <- Digits.Zdigits2_Zdigits in *.
+    cbv [Zdigits2] in *.
+    break_innermost_match_hyps; rewrite ?Z.ltb_lt, ?Z.ltb_ge in *.
+    cbv [Round.truncate_aux] in *.
+    all: repeat first [ progress subst
+                      | match goal with
+                        | [ H : (_, _) = (_, _) |- _ ]
+                          => pose proof (f_equal (@fst _ _) H);
+                             pose proof (f_equal (@snd _ _) H);
+                             clear H; cbn [fst snd] in *
+                        | [ H : context[shr_fexp] |- _ ]
+                          => rewrite shr_fexp_truncate in H by (cbv [choice_mode Round.cond_incr]; break_innermost_match; (exact _ + lia))
+                        end
+                      | break_innermost_match_hyps_step ].
+
+
+    all: cbv [Round.truncate] in *.
+    all: rewrite <- ?Digits.Zdigits2_Zdigits in *.
+    all: cbv [Zdigits2] in *.
+    2: { cbv [choice_mode Round.cond_incr] in *.
+
+         rewrite shr_fexp_truncate in Heqp. by (cbv [choice_mode Round.cond_incr]; break_innermost_match; (exact _ + lia))
+    Search Digits.Zdigits.
+    cbv [Digits.Zdigits].
+    Print Round.truncate.
+    Search Round.truncate.
+    match goal with
+    | [ H : context[shr_fexp] |- _ ]
+      => rewrite shr_fexp_truncate in H; try exact _
+    end.
+    2: { cbv [choice_mode Round.cond_incr].
+    Print choice_mode.
+    Search shr_record_of_loc.
+    cbv [shr_record_of_loc] in *.
+    2: exact _.
+    Search shr_fexp.
+    cbv [shr_fexp] in *.
+    cbv [shr] in *.
+    cbv [Zdigits2] in *.
+Search
+    match goal with
+           | [ H : (0 <= ?x)%Z, H' : context[?v] |- _ ]
+             => lazymatch v with
+                | match ?x with Z.neg n => @?N n | Z0 => ?z | Z.pos _ => ?z end
+                  => replace v with z
+                    by (destruct x eqn:?; try lia)
+                end
+           end.
+    cbv [loc_of_shr_record] in *.
+    cbv [choice_mode] in *.
+    cbv [Round.cond_incr] in *.
+    cbv [shr_fexp] in *.
+    cbv [shr_record_of_loc] in *.
+    cbv [shr] in *.
+    cbn in *.
+    destruct_head shr_record.
+    break_innermost_match_hyps_step; try congruence.
+    2: { break_innermost_match_hyps_step.
+    break_innermost_match_hyps_step
+    break_innermost_match_hyps; try congruence.
+    2: {
+    cbn in *.
+    brea
+    break_match_hyps.
+    break_innermost_match; try reflexivity.
+    2: {
+
+    2: { match goal with
+           | [ H : (Z.log2 ?x + ?y + ?z - ?w <= ?k)%Z |- _ ]
+             => assert (Z.log2 x <= k + w - z - y)%Z by lia; clear H
+           end.
+              match goal with
+              | [ H : (?x <= ?y)%Z, H' : (?y <= ?x + 1)%Z |- _ ]
+                => assert (y = x \/ y = x + 1)%Z by lia; clear H H'
+              end.
+              destruct_head'_or.
+              all: vm_compute emin in *; vm_compute emax in *; cbv [prec emax] in *.
+              all: try lia.
+              all: rewrite H in *.
+              all: repeat match goal with H : _ |- _ => progress ring_simplify in H end.
+              lazymatch goal with
+              | [ H : (?x <= - ?y - ?z - ?w)%Z |- _ ]
+                => assert (y + z <= -w - x)%Z by lia; clear H
+              end.
+              all: repeat match goal with H : _ |- _ => progress ring_simplify in H end.
+              clear H3 H4 H5.
+
+              all: ring_sim
+              change (53-1)%Z with 52%Z in *.
+              change (52+52)%Z with (104%Z) in *.
+              change (104+1)%Z with 105%Z in *.
+              cbv [emax] in *.
+              ring_simplify in H9.
+              ring_simplify in H0.
+              ring_simplify in H2.
+              assert (
+              cbn in *.
+
+              nia.
+         all: try lia.
+         match goal with
+           2: {
+         end.
+         intros.
+         ring_simplify.
+
+
+         Zify.zify.
+
+         lia.
+    cbv [fexp].
+    break_innermost_match; intros.
+    all: repeat match goal with
+           | [ H1 : ?x = true, H2 : ?x = true |- _ ]
+             => assert (H1 = H2)
+               by (clear; generalize dependent x; clear; intros; subst; (idtac + symmetry); apply UIP_refl_bool);
+                subst H2
+           end.
+    all: try congruence.
+    all: repeat match goal with H : valid_binary _ = true |- _ => revert H end.
+    all: rewrite ?Zpower.shift_pos_correct in *.
+    all: cbv [fexp] in *.
+    all: repeat match goal with H : context[Z.max] |- _ => revert H; apply Z.max_case_strong end.
+    all: repeat match goal with
+           | [ |- context[(?x + ?y - ?z - ?y)%Z] ]
+             => replace (x + y - z - y)%Z with (x - z)%Z by lia
+           end.
+    all: try (intros; break_match; reflexivity).
+    all: try lia.
+    all: intros.
+    all: repeat match goal with
+           | [ H : (?x + ?y - ?z = ?y)%Z |- _ ]
+             => assert (x = z) by lia; clear H; subst
+           end.
+    all: change digits2_pos with Pos.size in *.
+    all: repeat match goal with
+           | [ H : context[Z.pos (Pos.size ?x)] |- _ ]
+             => let k := fresh in
+                set (k := Z.pos (Pos.size x)) in *;
+                let H' := fresh in
+                assert (H' : (k = Z.log2 (Z.pos x) + 1)%Z)
+                  by (clear; subst k; cbn; break_innermost_match; cbn; lia);
+                first [ clearbody k; subst k
+                      | rewrite ?H' in *; clear H'; subst k ]
+           end.
+    all: repeat match goal with
+           | [ H : (Z.log2 ?x + 1 = ?y)%Z |- _ ]
+             => assert (Z.log2 x = (y - 1))%Z by lia; clear H
+           | [ H : Z.log2 ?x = _, H' : context[Z.log2 ?x] |- _ ]
+             => rewrite H in H'
+           end.
+    all: repeat match goal with
+           | [ H : context[Z.log2 (Z.pos (?x * ?y))] |- _ ]
+             => change (Z.log2 (Z.pos (x * y))) with (Z.log2 (Z.pos x * Z.pos y)) in *;
+                pose proof (Z.log2_mul_below (Z.pos x) (Z.pos y) ltac:(lia) ltac:(lia));
+                pose proof (Z.log2_mul_above (Z.pos x) (Z.pos y) ltac:(lia) ltac:(lia))
+           end.
+    all: repeat match goal with
+           | [ H : (Z.log2 ?x + 1 - ?z = ?y)%Z |- _ ]
+             => assert (Z.log2 x = (y + z - 1))%Z by lia; clear H
+           | [ H : (?y = Z.log2 ?x + 1)%Z |- _ ]
+             => assert (Z.log2 x = (y - 1))%Z by lia; clear H
+           | [ H : Z.log2 ?x = _, H' : context[Z.log2 ?x] |- _ ]
+             => rewrite H in H'
+           end.
+    all: repeat match goal with
+           | [ H : context[Z.log2 ?x] |- _ ]
+             => unique pose proof (Z.log2_nonneg x)
+           end.
+    all: try (vm_compute emin in *; cbv [prec] in *; lia).
+    all: repeat match goal with
+           | [ H : (?y - 1 + ?x <= ?z + ?y - 1)%Z |- _ ]
+             => assert (x <= z)%Z by lia; clear H
+           | [ H : (?x + ?y - 1 <= ?y - 1 + ?z + ?w)%Z |- _ ]
+             => assert (x <= z + w)%Z by lia; clear H
+           | [ H : (?x + ?y - 1 <= ?z + (?y - 1) + ?w)%Z |- _ ]
+             => assert (x <= z + w)%Z by lia; clear H
+           | [ H : (?x + (?y - 1) <= ?z + ?y - 1)%Z |- _ ]
+             => assert (x <= z)%Z by lia; clear H
+           | [ H : (Z.log2 ?x <= 0)%Z |- _ ]
+             => assert ((Z.log2 x = 0)%Z) by lia; clear H
+           | [ H : (Z.log2 ?x <= Z.neg _)%Z |- _ ]
+             => exfalso; clear -H; pose proof (Z.log2_nonneg x); lia
+           end.
+    all: rewrite ?Z.log2_null in *.
+    all: repeat first [ progress subst
+                      | rewrite Z.sub_diag in *
+                      | match goal with
+                        | [ H : (Z.pos ?x <= 1)%Z |- _ ]
+                          => assert (x = 1%positive) by lia; clear H
+                        | [ H : context[(?x - (?y + ?x))%Z] |- _ ]
+                          => replace (x - (y + x))%Z with (-y)%Z in * by lia
+                        | [ H : context[(?x - (?x + ?y))%Z] |- _ ]
+                          => replace (x - (x + y))%Z with (-y)%Z in * by lia
+                        | [ H : Z.opp ?x = ?y |- _ ]
+                          => is_var x; assert (x = Z.opp y) by lia; clear H
+                        end ].
+    all: cbn [Z.opp] in *.
+    all: try (break_match; try reflexivity; []).
+    all: cbv [SF2B] in *; break_innermost_match_hyps; try congruence.
+    all: match goal with H : B754_zero _ = B754_zero _ |- _ => inversion H; clear H end.
+    all: subst.
+    all: rewrite ?Pos.mul_1_r in *.
+    all: rewrite ?Pos.mul_1_l in *.
+    all: rewrite ?Z.add_0_l in *.
+    all: rewrite ?Z.add_0_r in *.
+    all: rewrite ?Z.mul_1_r in *.
+    all: rewrite ?Z.mul_1_l in *.
+    all: exfalso.
+
+    all: cbv [binary_round_aux binary_fit_aux binary_overflow overflow_to_inf] in *; break_innermost_match_hyps; try congruence.
+    all: rewrite ?Z.leb_le, ?Z.leb_gt in *.
+    all: match goal with H : S754_zero _ = S754_zero _ |- _ => inversion H; clear H end.
+    all: subst.
+    all: cbv [shr_fexp shr fexp Zdigits2 shr_record_of_loc] in *.
+    cbv [loc_of_shr_record choice_mode Round.cond_incr] in *.
+    all: repeat match goal with
+           | [ H : context[match ?b with Z.neg n => (@?N n, @?N' n) | Z0 => (?Z, ?Z') | Z.pos p => (@?P p, @?P' p) end] |- _ ]
+             => replace (match b with Z.neg n => (@N n, @N' n) | Z0 => (Z, Z') | Z.pos p => (@P p, @P' p) end)
+               with (match b with Z.neg n => N n | Z0 => Z | Z.pos p => P p end,
+                      match b with Z.neg n => N' n | Z0 => Z' | Z.pos p => P' p end)
+               in *
+                 by now destruct b
+           end.
+    all: change digits2_pos with Pos.size in *.
+    all: repeat match goal with
+           | [ H : context[Z.pos (Pos.size ?x)] |- _ ]
+             => let k := fresh in
+                set (k := Z.pos (Pos.size x)) in *;
+                let H' := fresh in
+                assert (H' : (k = Z.log2 (Z.pos x) + 1)%Z)
+                  by (clear; subst k; cbn; break_innermost_match; cbn; lia);
+                first [ clearbody k; subst k
+                      | rewrite ?H' in *; clear H'; subst k ]
+           end.
+    all: repeat match goal with
+           | [ H : (_, _) = (_, _) |- _ ]
+             => pose proof (f_equal (@fst _ _) H);
+                pose proof (f_equal (@snd _ _) H);
+                clear H; cbn [fst snd] in *
+           end.
+    all: repeat match goal with H : context[Z.max] |- _ => revert H end.
+    all: repeat apply Z.max_case_strong.
+    all: intros.
+    all: repeat first [ progress cbn [SpecFloat.shr_m] in *
+                      | progress subst
+                      | congruence
+                      | break_innermost_match_hyps_step ].
+    all: try lia.
+    all: change digits2_pos with Pos.size in *.
+    all: repeat match goal with
+           | [ H : context[Z.pos (Pos.size ?x)] |- _ ]
+             => let k := fresh in
+                set (k := Z.pos (Pos.size x)) in *;
+                let H' := fresh in
+                assert (H' : (k = Z.log2 (Z.pos x) + 1)%Z)
+                  by (clear; subst k; cbn; break_innermost_match; cbn; lia);
+                first [ clearbody k; subst k
+                      | rewrite ?H' in *; clear H'; subst k ]
+           end.
+    all: cbn [shr_m] in *.
+    all: try lia.
+    all: rewrite ?Pos.mul_1_r, ?Pos.mul_1_l, ?Z.add_0_l, ?Z.add_0_r, ?Z.mul_1_r, ?Z.mul_1_l in *.
+    all: repeat match goal with
+           | [ H : (?y - 1 + ?x <= ?z + ?y - 1)%Z |- _ ]
+             => assert (x <= z)%Z by lia; clear H
+           | [ H : (?x + ?y - 1 <= ?y - 1 + ?z + ?w)%Z |- _ ]
+             => assert (x <= z + w)%Z by lia; clear H
+           | [ H : (?x + ?y - 1 <= ?z + (?y - 1) + ?w)%Z |- _ ]
+             => assert (x <= z + w)%Z by lia; clear H
+           | [ H : (?x + (?y - 1) <= ?z + ?y - 1)%Z |- _ ]
+             => assert (x <= z)%Z by lia; clear H
+           | [ H : (?y <= ?x + ?y - ?z)%Z |- _ ]
+             => assert (z <= x)%Z by lia; clear H
+           | [ H : (?x + ?y - ?z - (?x + ?y) = ?w)%Z |- _ ]
+             => assert (z = -w)%Z by lia; clear H
+           | [ H : (?x + ?y + ?z - ?w - ?z = 0)%Z |- _ ]
+             => assert (x = w - y)%Z by lia; clear H
+           | [ H : (?x <= ?y - ?z + ?z + (?w + ?x) - ?y)%Z |- _ ]
+             => assert (0 <= w)%Z by lia; clear H
+           | [ H : (Z.log2 ?x <= 0)%Z |- _ ]
+             => assert ((Z.log2 x = 0)%Z) by lia; clear H
+           | [ H : (Z.log2 ?x <= Z.neg _)%Z |- _ ]
+             => exfalso; clear -H; pose proof (Z.log2_nonneg x); lia
+           | [ H : Z.log2 ?x = _, H' : context[Z.log2 ?x] |- _ ]
+             => rewrite H in H'
+           | [ H : ?x = ?x |- _ ] => clear H
+           | _ => progress change (Z.log2 1) with 0%Z in *
+           | [ H : (?x <= ?x)%Z |- _ ] => clear H
+           end.
+    all: cbn [Z.opp] in *.
+    all: try (vm_compute emin in *; cbv [prec] in *; lia).
+    move p at bottom.
+    cbn in Heqz0.
+    inversion Heqz0; clear Heqz0; subst.
+
+    Search iter_pos.
+    cbv [shr_1] in *.
+    inversion H12; subst; clear H12.
+    vm_compute in H2, H, H4, H1, H9.
+    repeat match goal with H : _ |- _ => ring_simplify in H end.
+    cbv [
+    rewrite H14 in *.
+    repeat match goal with H : ?x = ?x |- _ => clear H
+           end.
+    repeat match goal with H : _ |- _ => ring_simplify in H end.
+    match goal with
+    end.
+    match goal with
+    | [ H : (?x - ?y + 1 = 0)%Z |- _ ] => assert (x = y - 1)%Z by lia; clear H
+    end.
+
+    all:
+    all: rewrite
+    ring_simplify in Heqz3.
+    cbv [prec Z.opp] in Heqz3.
+    inversion Heqz3; subst.
+    rewrite H13 in *.
+    2: {
+    cbv [shr_m shr_record_of_loc] in *.
+    lia.
+                      match b with Z.neg n => (@N n, @N' n) | Z0 => (Z, Z') | Z.pos p => (@P p, @P' p) end)
+                       PP (match b with Z.neg n => fst (N n) | Z0 => fst Z | Z.pos p => fst (P p) end)
+                       (match b with Z.neg n => snd (N n) | Z0 => snd Z | Z.pos p => snd (P p) end))
+               by now destruct b
+
+
+    all: break_innermost_match_hyps.
+    all: try lia.
+    Print Zdigits2.
+    5: {
+    cbv [overflow_to_inf] in *.
+    a
+
+
+    ring_simplify in H7.
+    match goal with
+
+    end.
+    all: repeat match goal with
+           | [ H : Z.log2 ?x = _, H' : context[Z.log2 ?x] |- _ ]
+             => rewrite H in H'
+
+
+    all: cbv [binary_round_aux] in *; break_innermost_match_hyps.
+    Print binary_round_aux.
+    Check Z.log2_pos.
+    lazymatch goal with
+    | [ H : context[Z.log2 (Z.pos ?x)] |- _ ]
+      => unique pose proof (Z.log2_pos (Z.pos x) ltac:(clear; lia))
+    end.
+           | [ H : context[Z.pos (Pos.size ?x)] |- _ ]
+             => replace (Z.pos (Pos.size x)) with (Z.log2 (Z.pos x) + 1)%Z in H
+                 by (clear; cbn; break_innermost_match; cbn; lia)
+           end.
+    match goal with
+    end.
+
+    all: try lia.
+
+    Search Z.log2 Z.mul.
+
+
+    Search Pos.size.
+    Search Pos.size Pos.mul.
+    break_innermost_match.
+    all: cbv [valid_binary bounded canonical_mantissa].
+    all:
+
+    Print emin.
+    all: rewrite ?Z
+    all: match goal with
+    rewrite Heqb.
+
+    lazymatch goal with
+    | [ |- context[if ?b then ?f _ else ?g _] ]
+      => idtac f g
+    end.
+        e
+                           if b then x else x') (if b then y else y')) by now destruct b
+           end.
+    match goal with
+    end.
+    Check binary_round_aux_equiv.
+
+    pose proof binary_round_aux_correct.
     destruct_head'_bool;
       cbv [Bmult Bplus Operations.Fmult binary_normalize cond_Zopp Z.mul Z.opp].
     cbv [binary_round].
     cbn [xorb].
     all: shelve. }
-  { cbv [Prim2B].
+  { rewrite binary_normalize_equiv.
+    change (SF2Prim (B2SF ?x)) with (B2Prim x).
+    rewrite Prim2B_B2Prim.
+    cbv [Operations.Fplus Operations.Falign Operations.Fmult].
+    repeat match goal with
+           | [ |- context[match (if ?b then (?x, ?y) else (?x', ?y')) with pair A B => @?P A B end] ]
+             => replace (match (if b then (x, y) else (x', y')) with pair A B => P A B end)
+               with (P (if b then x else x') (if b then y else y')) by now destruct b
+           end.
+    cbv [shl_align].
+    destruct Z.leb eqn:H'.
+    all: rewrite ?Z.leb_le, ?Z.leb_gt in H'.
+    all: rewrite ?Z.min_l, ?Z.min_r by lia.
+    all: rewrite ?Z.sub_diag.
+    all: cbn [fst snd].
+    all: match goal with
+         | [ |- binary_normalize _ _ _ _ _ ?m ?e ?z = binary_normalize _ _ _ _ _ ?m' ?e' ?z' ]
+           => unshelve ((tryif constr_eq m m' then idtac else replace m with m' by shelve);
+                        (tryif constr_eq e e' then idtac else replace e with e' by shelve);
+                        (tryif constr_eq z z'
+                          then idtac
+                          else
+                            cut (m' = 0%Z -> z = z');
+                         [ cbv [binary_normalize]; break_innermost_match; try reflexivity; try now intros -> | ]))
+         end.
+    all: cbv [radix2 radix_val Z.pow] in *.
+    all: break_innermost_match; try lia.
+    all: cbn [fst snd].
+    all: rewrite ?Zpower.shift_pos_correct.
+    all: repeat first [ match goal with
+                        | [ H : (?x - ?y = 0)%Z |- _ ]
+                          => is_var y; assert (y = x) by lia; clear H; subst
+                        | [ H : (?x - ?y = ?w)%Z, H' : context[(?y - ?x)%Z] |- _ ]
+                          => replace (y - x)%Z with (Z.opp w) in * by lia
+                        | [ H : Z.neg _ = Z.neg _ |- _ ] => inversion H; clear H
+                        end
+                      | progress subst
+                      | progress cbn [Z.opp] in *
+                      | rewrite Z.sub_diag in * ].
+    all: destruct_head'_bool; cbv [cond_Zopp xorb Z.mul Z.opp Bool.eqb] in *; break_innermost_match; try lia. }
+    { destruct_head'_bool; cbv [cond_Zopp xorb Z.mul Z.opp radix2 radix_val]; break_innermost_match; cbn [fst snd]; try reflexivity; try lia.
+
+      all: change (Z.neg (Zpower.shift_pos ?x ?y)) with (Z.opp (Z.pos (Zpower.shift_pos x y))) in *; rewrite ?Zpower.shift_pos_correct.
+      all: cbn [Z.opp] in *.
+      all: rewrite ?Z.sub_diag in *.
+      all: try lia. }
+    { destruct_head'_bool; try reflexivity; cbn.
+      all: cbv [Z.pow].
+      all: break_innermost_match; try lia. }
+    { break_innermost_match; try lia.
+      all: try reflexivity.
+      Search Zpower.shift_pos.
+      Search (
+      repeat match goal with
+             end.
+
+      all: match goal with
+           | [ H : (2^?e)%Z = _ |- _ ] => destruct e eqn:?; cbn in H; try lia
+           end.
+      zify.
+      lia.
+      destruct
+    f_equal.
+
+    2: intros ->.
+                replace m with m';
+              [ replace e with e';
+
+    Print binary_normalize.
+    all: f_equal.
+
+    2: { destruct_head'_bool; try reflexivity; cbn.
+    break_innermost_match; try lia.
+    Search (?x - ?x)%Z.
+    Search (_ <=? _)%Z false iff.
+    break_innermost_match_step.
+    Print B2Prim.
+    Search Prim2B SF2Prim.
+    Search Z.min
+    Check Operations.Falign_spec.
+    cbv [Operations.Falign].
+    destruct_head'_bool; cbn [xorb];
+      cbv [Bmult Bplus Operations.Fmult Operations.Fplus Operations.Falign binary_normalize cond_Zopp Z.mul Z.opp].
 
 
 
