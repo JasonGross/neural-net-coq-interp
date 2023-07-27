@@ -31,8 +31,10 @@ Module PrimFloat.
          => z
        | S754_zero _, _, _
        | _, S754_zero _, _
-       | _, _, S754_zero _
          => SFadd prec emax (SFmul prec emax x y) z
+       | _, _, S754_zero _
+         (* in most cases, we could do [SFadd prec emax (SFmul prec emax x y) z], but in the case where [x] and [y] are subnormal and [x * y] underflows to zero in [SFmul], we should keep the sign of [x * y] rather than re-rounding by adding with [z] *)
+         => SFmul prec emax x y
        | S754_finite sx mx ex, S754_finite sy my ey, S754_finite sz mz ez
          => let '(sxy, mxy, exy) := (xorb sx sy, (mx * my)%positive, (ex + ey)%Z) in
             let exyz := Z.min exy ez in
