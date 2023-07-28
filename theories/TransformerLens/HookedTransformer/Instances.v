@@ -314,7 +314,7 @@ Module HookedTransformer.
     Proof.
       cbv [logits]; t.
       refine (blocks_cps_Proper (R:=Tensor.eqf) _ _ _ _); t.
-      all: first [ apply resid_postembed_Proper | apply unembed_Proper ]; t.
+      all: first [ apply resid_postembed_Proper | apply embed_Proper | apply pos_embed_Proper | apply unembed_Proper ]; t.
       apply ln_final_Proper; t.
     Qed.
 
