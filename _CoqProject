@@ -26,6 +26,7 @@ theories/Torch/Tensor/Proofs.v
 theories/TransformerLens/HookedTransformer.v
 theories/TransformerLens/HookedTransformerConfig.v
 theories/TransformerLens/HookedTransformer/Instances.v
+theories/TransformerLens/HookedTransformer/foo.v
 theories/Util/Arrow.v
 theories/Util/Bool.v
 theories/Util/Classes.v
