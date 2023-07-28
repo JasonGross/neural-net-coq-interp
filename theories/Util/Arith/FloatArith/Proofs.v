@@ -79,16 +79,9 @@ Module PrimFloat.
   #[export] Instance Q2SF_Proper : Proper (Qeq ==> eq) Q2SF.
   Proof.
     intros x y H.
-    cbv [Q2SF]; rewrite H.
-    repeat match goal with
-           | [ H : ?x == ?y, H' : context[?x] |- _ ] => rewrite !H in H'; rewrite ?H' in *
-           | _ => break_innermost_match_step
-           | [ H : ?x == ?y |- context[?x] ] => rewrite H
-           | [ H : ?x == ?y |- _ ] => is_var x; clear x H
-           end.
-    all: reflexivity.
+    cbv [Q2SF].
+    rewrite !H; reflexivity.
   Qed.
-
 
   #[export] Instance of_Q_Proper : Proper (Qeq ==> eq) of_Q.
   Proof. cbv [of_Q]; now intros ?? ->. Qed.
@@ -103,6 +96,60 @@ Module PrimFloat.
          | right; make_cases () ]
     | _ => idtac
     end.
+
+  Local Ltac t_step _ :=
+    first [ progress destruct_head'_and
+          | match goal with
+            | [ H : (_ * _ == 0)%Q |- _ ] => apply Qmult_integral in H; destruct H
+            | [ H : Qle_bool ?x ?y = false |- _ ]
+              => pose proof (@Qle_bool_iff x y); rewrite H in *; clear H
+            | [ H : Qeq_bool ?x ?y = false |- _ ] => apply Qeq_bool_neq in H
+            | [ H : Qeq_bool _ _ = true |- _ ] => rewrite Qeq_bool_iff in H
+            | [ H : Qle_bool _ _ = true |- _ ] => rewrite Qle_bool_iff in H
+            | [ H : false = true <-> ?P |- _ ]
+              => assert (~P) by (rewrite <- H; congruence); clear H
+            | [ H : ~?x <= ?y |- _ ] => assert (y < x) by lra; clear H
+            | [ H : inject_Z ?x == 0 |- _ ]
+              => assert (x = 0)%Z by (now apply inject_Z_injective); clear H
+            | [ H : (_^_ = 0)%Z |- _ ]
+              => rewrite Z.pow_eq_0_iff in H
+            | [ H : (Z.log2 ?x + _ - _ < 0)%Z |- _ ]
+              => clear -H; pose proof (Z.log2_nonneg x); lia
+            | [ H : Z.leb _ _ = true |- _ ] => rewrite Z.leb_le in H
+            | [ H : Z.eqb _ _ = true |- _ ] => rewrite Z.eqb_eq in H
+            | [ H : (?q == 0)%Q |- _ ] => is_var q; rewrite H in *; clear q H
+            | [ |- ?x = ?x -> _ ] => intros _
+            end
+          | progress destruct_head'_or
+          | lra
+          | lia
+          | reflexivity
+          | constructor; congruence
+          | clear;
+            lazymatch goal with
+            | [ H : _ |- _ ] => fail
+            | _ => vm_compute
+            end ].
+  Local Ltac t _ := repeat t_step ().
+  Lemma Q2SF_0_iff q
+    : 0 <= q < 1/(2^(-emin))%Z <-> Q2SF q = S754_zero false.
+  Proof.
+    cbv [Q2SF negb].
+    vm_compute emin.
+    cbv [emax prec].
+    rewrite Qabs_alt.
+    break_innermost_match; try congruence; split; try congruence; try reflexivity.
+    all: t ().
+    all: try match goal with
+           | [ H : Qround ?x = 0%Z |- _ ]
+             => let H' := fresh in
+                pose proof (Qround_diff_max x) as H';
+                rewrite H in *;
+                clear H
+           end.
+(*    { rewrite Qabs_pos in *.*)
+  Abort.
+(*
   Lemma Q2SF_classify q
     : (q == 0 /\ Q2SF q = S754_zero false)
       \/ ((((-1) / (2^(-(emin-1)))%Z) <= q < 0)%Q /\ Q2SF q = S754_zero true)
@@ -147,6 +194,76 @@ Module PrimFloat.
          cbv beta iota in H
     end.
   Admitted.
+  Search Qeq_bool.
+  Local Ltac t_step _ ::=
+    first [ progress destruct_head'_and
+          | match goal with
+            | [ H : (_ * _ == 0)%Q |- _ ] => apply Qmult_integral in H; destruct H
+            | [ H : Qle_bool ?x ?y = false |- _ ]
+              => pose proof (@Qle_bool_iff x y); rewrite H in *; clear H
+            | [ H : Qeq_bool ?x ?y = false |- _ ] => apply Qeq_bool_neq in H
+            | [ H : Qeq_bool _ _ = true |- _ ] => rewrite Qeq_bool_iff in H
+            | [ H : Qle_bool _ _ = true |- _ ] => rewrite Qle_bool_iff in H
+            | [ H : false = true <-> ?P |- _ ]
+              => assert (~P) by (rewrite <- H; congruence); clear H
+            | [ H : ~?x <= ?y |- _ ] => assert (y < x) by lra; clear H
+            | [ H : inject_Z ?x == 0 |- _ ]
+              => assert (x = 0)%Z by (now apply inject_Z_injective); clear H
+            | [ H : (_^_ = 0)%Z |- _ ]
+              => rewrite Z.pow_eq_0_iff in H
+            | [ H : (Z.log2 ?x + _ - _ < 0)%Z |- _ ]
+              => clear -H; pose proof (Z.log2_nonneg x); lia
+            | [ H : Z.leb _ _ = true |- _ ] => rewrite Z.leb_le in H
+            | [ |- Z.leb _ _ = true ] => rewrite Z.leb_le
+            | [ H : Z.eqb _ _ = true |- _ ] => rewrite Z.eqb_eq in H
+            | [ |- Z.eqb _ _ = true ] => rewrite Z.eqb_eq
+            | [ H : Z.eqb _ _ = false |- _ ] => rewrite Z.eqb_neq in H
+            | [ |- Z.eqb _ _ = false ] => rewrite Z.eqb_neq
+            | [ H : (?q == 0)%Q |- _ ] => is_var q; rewrite H in *; clear q H
+            | [ H : ~inject_Z ?x == 0 |- _ ]
+              => assert (x <> 0)%Z by (clear -H; intro; generalize dependent x; clear; intros; subst; vm_compute in *; congruence); clear H
+            | [ |- ?x = ?x -> _ ] => intros _
+            | [ H : ~(?x * ?y == 0)%Q |- _ ]
+              => assert (~x == 0 /\ ~y == 0)%Q by (clear -H; nra); clear H
+            | [ H : ~(Qabs ?q == 0)%Q |- _ ]
+              => assert (~q == 0)%Q
+                by (clear -H; let H' := fresh in intro H'; rewrite H' in H; vm_compute in H; congruence); clear H
+            | [ |- andb _ _ = true ] => rewrite Bool.andb_true_iff
+            | [ |- _ /\ _ ] => split
+            end
+          | progress destruct_head'_or
+          | lra
+          | lia
+          | reflexivity
+          | constructor; congruence
+          | clear;
+            lazymatch goal with
+            | [ H : _ |- _ ] => fail
+            | _ => vm_compute
+            end ].
+
+  Lemma valid_binary_Q2SF q : valid_binary (Q2SF q) = true.
+  Proof.
+    cbv [valid_binary bounded canonical_mantissa Q2SF fexp negb].
+    change digits2_pos with Pos.size.
+    break_innermost_match; t ().
+    2: {
+    Search (Z.eqb _ _ = false).
+    lazymatch goal with
+    end.
+
+    end.
+    nra.
+      => apply Qmult_integral in H; destruct H
+
+    lazymatch goal with
+    | [ H : ~(inject_Z ?x == 0)%Q |- _ ]
+      => idtac
+    end.
+    Print fexp.
+    Search Zeq_bool.
+    replace Zeq_bool with Z.eqb.
+    rewrite
 
   Lemma to_of_Q' q {nan pinf ninf nzero}
     : @to_Q nan pinf ninf nzero (of_Q q)
@@ -166,6 +283,25 @@ Module PrimFloat.
       | [ H : q == _ |- _ ] => rewrite !H; cbv -["=="]; lra
       end. }
     all: cbv [andb negb]; break_innermost_match.
+    all: t ().
+    all: repeat match goal with
+           | [ H : ?q <= ?x, H' : ?y <= ?q |- _ ]
+             => unique assert (y <= x) by lra
+           | [ H : ?q < ?x, H' : ?y <= ?q |- _ ]
+             => unique assert (y < x) by lra
+           end.
+    all: try match goal with
+           | [ H : _ |- _ ]
+             => exfalso; revert H; clear;
+                lazymatch goal with
+                | [ H : _ |- _ ] => fail
+                | _ => idtac
+                end;
+                vm_compute; congruence
+           | [ H : forall m e, _ = _ :> spec_float |- _ ]
+             => exfalso; clear -H; epose (H _ _); discriminate
+           end.
+9: {
     all: repeat match goal with
            | [ H : Qle_bool _ _ = true |- _ ] => rewrite Qle_bool_iff in H
            | [ H : Qeq_bool _ _ = true |- _ ] => rewrite Qeq_bool_iff in H
@@ -177,12 +313,6 @@ Module PrimFloat.
            | [ H : ~?x <= ?y |- _ ] => assert (y < x) by (clear -H; lra); clear H
            end.
     all: try lra.
-    all: repeat match goal with
-           | [ H : ?q <= ?x, H' : ?y <= ?q |- _ ]
-             => unique assert (y <= x) by lra
-           | [ H : ?q < ?x, H' : ?y <= ?q |- _ ]
-             => unique assert (y < x) by lra
-           end.
     all: try match goal with
            | [ H : _ |- _ ]
              => exfalso; revert H; clear;
@@ -322,6 +452,6 @@ Module PrimFloat.
                                        if is_infinity f
                                        then if f <? 0 then ninf else pinf
                                        else f.
-
+*)
 End PrimFloat.
 Export (hints) PrimFloat.

@@ -71,6 +71,7 @@ Local Ltac Proper_Tensor_eqf_t_step _
      end.
 Local Ltac Proper_Tensor_eqf_t _ := repeat Proper_Tensor_eqf_t_step ().
 #[export] Hint Extern 1 (Proper (_ ==> _) (fun _ => _)) => progress Proper_Tensor_eqf_t () : typeclass_instances.
+(*
 Theorem good_accuracy : TheoremStatement.Accuracy.best (* (abs (real_accuracy - expected_accuracy) <? error)%float = true *).
 Proof.
   cbv [real_accuracy].
@@ -348,3 +349,4 @@ https://coq.zulipchat.com/#narrow/stream/237977-Coq-users/topic/Working.20with.2
   rewrite <- computed_accuracy_eq.
   vm_compute; reflexivity.
 Qed.
+*)

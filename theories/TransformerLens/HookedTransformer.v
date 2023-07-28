@@ -253,7 +253,7 @@ Module TransformerBlock.
                        -> _
           with
           | Some LN => LayerNorm.forward eps
-          | Datatypes.None => fun _ _ t => t
+          | Datatypes.None => fun _ _ => PArray.checkpoint
           end)
            (only parsing).
 

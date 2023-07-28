@@ -219,10 +219,10 @@ Module HookedTransformer.
 
     #[export] Instance ln1_Proper {A zeroA coerZ addA subA mulA divA sqrtA default d_model normalization_type eps ln1_w ln1_b r s}
       : Proper (Tensor.eqf ==> Tensor.eqf) (@ln1 A zeroA coerZ addA subA mulA divA sqrtA default d_model normalization_type eps ln1_w ln1_b r s).
-    Proof. break_innermost_match_hyps; try exact _; t. Qed.
+    Proof. break_innermost_match_hyps; cbv [ln1]; try solve [ t ]; exact _. Qed.
     #[export] Instance ln2_Proper {A zeroA coerZ addA subA mulA divA sqrtA default d_model normalization_type eps ln2_w ln2_b r s}
       : Proper (Tensor.eqf ==> Tensor.eqf) (@ln2 A zeroA coerZ addA subA mulA divA sqrtA default d_model normalization_type eps ln2_w ln2_b r s).
-    Proof. break_innermost_match_hyps; try exact _; t. Qed.
+    Proof. break_innermost_match_hyps; cbv [ln2]; try solve [ t ]; exact _. Qed.
 
     #[export] Instance attn_only_out_Proper {A r batch zeroA coerZ addA subA mulA divA sqrtA expA default pos n_heads d_model d_head n_ctx use_split_qkv_input normalization_type W_Q W_K W_V W_O b_Q b_K b_V b_O eps ln1_w ln1_b}
       : Proper (Tensor.eqf ==> Tensor.eqf) (@attn_only_out A r batch zeroA coerZ addA subA mulA divA sqrtA expA default pos n_heads d_model d_head n_ctx use_split_qkv_input normalization_type W_Q W_K W_V W_O b_Q b_K b_V b_O eps ln1_w ln1_b).
@@ -255,8 +255,8 @@ Module HookedTransformer.
     Qed.
 
     #[export] Instance ln_final_Proper {A zeroA coerZ addA subA mulA divA sqrtA default d_model normalization_type eps ln_final_w ln_final_b r batch pos}
-      : Proper (Tensor.eqf ==> Tensor.eqf) (@ln_final A zeroA coerZ addA subA mulA divA sqrtA default d_model normalization_type eps ln_final_w ln_final_b r batch pos)
-      := _.
+      : Proper (Tensor.eqf ==> Tensor.eqf) (@ln_final A zeroA coerZ addA subA mulA divA sqrtA default d_model normalization_type eps ln_final_w ln_final_b r batch pos).
+    Proof. cbv [ln_final]; break_innermost_match; try solve [ t ]; exact _. Qed.
 
     #[export] Instance unembed_Proper {A zeroA addA mulA d_vocab_out d_model W_U b_U r batch pos}
       : Proper (Tensor.eqf ==> Tensor.eqf) (@unembed A zeroA addA mulA d_vocab_out d_model W_U b_U r batch pos)
