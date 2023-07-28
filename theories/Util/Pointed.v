@@ -9,3 +9,4 @@ Class pointed T := point : T.
 #[export] Instance default_list {A} : pointed (list A) := [].
 #[export] Instance default_array {A} {a : pointed A} : pointed (array A) := PArray.make 0 a.
 #[export] Instance default_float : pointed float := 0%float.
+#[export] Instance default_option {A} : pointed (option A) := None.

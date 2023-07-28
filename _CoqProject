@@ -5,7 +5,9 @@ theories/MaxOfTwoNumbers/Heuristics.v
 theories/MaxOfTwoNumbers/Model.v
 theories/MaxOfTwoNumbers/Parameters.v
 theories/MaxOfTwoNumbers/TheoremStatement.v
+theories/MaxOfTwoNumbers/Computed/AllAttnPattern.v
 theories/MaxOfTwoNumbers/Computed/AllLogits.v
+theories/MaxOfTwoNumbers/Computed/AllMaskedAttnScores.v
 theories/MaxOfTwoNumbers/Model/Instances.v
 theories/MaxOfTwoNumbers/Theorems/Attempt_01_BruteForce.v
 theories/MaxOfTwoNumbers/Theorems/Attempt_02_SplitAttention.v
@@ -13,7 +15,9 @@ theories/MaxOfTwoNumbersSimpler/Heuristics.v
 theories/MaxOfTwoNumbersSimpler/Model.v
 theories/MaxOfTwoNumbersSimpler/Parameters.v
 theories/MaxOfTwoNumbersSimpler/TheoremStatement.v
+theories/MaxOfTwoNumbersSimpler/Computed/AllAttnPattern.v
 theories/MaxOfTwoNumbersSimpler/Computed/AllLogits.v
+theories/MaxOfTwoNumbersSimpler/Computed/AllMaskedAttnScores.v
 theories/MaxOfTwoNumbersSimpler/Model/Instances.v
 theories/MaxOfTwoNumbersSimpler/Theorems/Attempt_01_BruteForce.v
 theories/MaxOfTwoNumbersSimpler/Theorems/Attempt_02_SplitAttention.v
