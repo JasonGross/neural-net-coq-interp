@@ -45,7 +45,7 @@ Module PrimFloat.
        end.
   Definition SF64fma := SFfma prec emax.
   Definition fmaf (x y z : float) : float
-    := SF2Prim (SF64fma (Prim2SF x) (Prim2SF y) (Prim2SF z)).
+    := (x * y + z).
 
   Notation mul_2p m e
     := (if Z.ltb e 0

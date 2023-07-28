@@ -11,7 +11,7 @@ Set NativeCompute Timing.
 (* expected: about 45 minutes in vm, about 19 minutes in native *)
 Time Local Definition all_tokens_logits_concrete_value := native_compute pre.
 
-Time Definition all_tokens_logits_concrete : PArray.concrete_tensor _ _ := (*Eval native_compute in pre *)(*Eval hnf in*) extract all_tokens_logits_concrete_value.
+Time Definition all_tokens_logits_concrete : PArray.concrete_tensor _ _ := (*Eval native_compute in pre *)Eval hnf in extract all_tokens_logits_concrete_value.
 Time Definition all_tokens_logits_concrete_eq : all_tokens_logits_concrete = prev := extract_eq all_tokens_logits_concrete_value. (*
 Proof. native_cast_no_check (eq_refl prev). Time Qed.*)
 

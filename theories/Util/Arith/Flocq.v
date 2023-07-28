@@ -101,7 +101,7 @@ End Binary.
 
 Local Existing Instances Hprec Hmax.
 
-Lemma fma_equiv x y z : Prim2B (PrimFloat.fmaf x y z) = Bfma mode_NE (Prim2B x) (Prim2B y) (Prim2B z).
+Lemma fma_equiv x y z : Prim2B (SF2Prim (PrimFloat.SF64fma (Prim2SF x) (Prim2SF y) (Prim2SF z))) = Bfma mode_NE (Prim2B x) (Prim2B y) (Prim2B z).
 Proof.
   cbv [PrimFloat.fmaf PrimFloat.SF64fma PrimFloat.SFfma Bfma Bfma_szero Bsign].
   cbv [Prim2B].
