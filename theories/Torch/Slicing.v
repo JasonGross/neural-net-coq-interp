@@ -55,7 +55,7 @@ Module FancySlicingNotations.
   Notation "start : stop" := (slice_index (@Build_Slice _ (Some start) (Some stop) None)) (in custom fancy_slice at level 59, start constr at level 59, stop constr at level 59, format "start : stop").
   Notation "start :" := (slice_index (@Build_Slice _ (Some start) None None)) (in custom fancy_slice at level 59, start constr at level 59, format "start :").
   Notation ": stop" := (slice_index (@Build_Slice _ None (Some stop) None)) (in custom fancy_slice at level 59, stop constr at level 59, format ": stop").
-  Notation "'None'" := broadcast_one_index (in custom fancy_slice at level 59).
+  Notation "'None'" := broadcast_one_index (in custom fancy_slice at level 0). (* need to avoid breaking Datatypes.None *)
   Notation "x" := x%sint63 (in custom fancy_slice at level 59, x constr at level 55).
 End FancySlicingNotations.
 

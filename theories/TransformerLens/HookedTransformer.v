@@ -272,6 +272,23 @@ Module TransformerBlock.
                  (ln1 key_input)
                  (ln1 value_input) in
           resid_pre + attn_out)%core.
+
+    (** convenience *)
+    Local Definition attn_masked_attn_scores : tensor A (batch ::' n_heads ::' pos ::' pos)
+      := Attention.masked_attn_scores
+           (n_ctx:=n_ctx)
+           W_Q W_K
+           b_Q b_K
+           (ln1 query_input)
+           (ln1 key_input).
+
+    Local Definition attn_pattern : tensor A (batch ::' n_heads ::' pos ::' pos)
+      := Attention.pattern
+           (n_ctx:=n_ctx)
+           W_Q W_K
+           b_Q b_K
+           (ln1 query_input)
+           (ln1 key_input).
   End __.
 End TransformerBlock.
 
@@ -359,19 +376,22 @@ Module HookedTransformer.
       Definition unembed (resid : tensor A resid_shape) : tensor A (s ::' d_vocab_out)
         := Unembed.forward W_U b_U resid.
 
-      Definition blocks_cps {T} (residual : tensor A resid_shape) (K : tensor A resid_shape -> T) : T
+      Definition blocks_cps {T} {n : with_default "blocks n" nat (List.length blocks)} (residual : tensor A resid_shape) (K : tensor A resid_shape -> T) : T
         := List.fold_right
              (fun block cont residual
               => let residual := PArray.checkpoint (block residual) in
                  cont residual)
              K
-             blocks
+             (List.firstn n blocks)
              residual.
 
-      Definition logits (tokens : tensor IndexType s) : tensor A (s ::' d_vocab_out)
+      Definition resid_postembed (tokens : tensor IndexType s) : tensor A resid_shape
         := (let embed          := embed tokens in
             let pos_embed      := pos_embed tokens in
-            let residual       := PArray.checkpoint (embed + pos_embed)%core in
+            PArray.checkpoint (embed + pos_embed)%core).
+
+      Definition logits (tokens : tensor IndexType s) : tensor A (s ::' d_vocab_out)
+        := (let residual       := resid_postembed tokens in
             blocks_cps
               residual
               (fun residual
@@ -381,6 +401,63 @@ Module HookedTransformer.
 
       Definition forward (tokens : tensor IndexType s) : tensor A (s ::' d_vocab_out)
         := logits tokens.
+
+      (** convenience *)
+      Local Definition blocks_attn_masked_attn_scores
+        : list (tensor A resid_shape -> tensor A (batch ::' n_heads ::' pos ::' pos))
+        := List.map
+             (fun '(W_Q, W_K, W_V, W_O,
+                    b_Q, b_K, b_V,
+                    b_O,
+                    ln1_w, ln1_b)
+              => TransformerBlock.attn_masked_attn_scores
+                   (n_ctx:=n_ctx)
+                   W_Q W_K
+                   b_Q b_K
+                   eps
+                   ln1_w ln1_b)
+             blocks_params.
+
+      Local Definition blocks_attn_pattern
+        : list (tensor A resid_shape -> tensor A (batch ::' n_heads ::' pos ::' pos))
+        := List.map
+             (fun '(W_Q, W_K, W_V, W_O,
+                    b_Q, b_K, b_V,
+                    b_O,
+                    ln1_w, ln1_b)
+              => TransformerBlock.attn_pattern
+                   (n_ctx:=n_ctx)
+                   W_Q W_K
+                   b_Q b_K
+                   eps
+                   ln1_w ln1_b)
+             blocks_params.
+
+      Local Definition masked_attn_scores (n : nat) (tokens : tensor IndexType s)
+        : option (tensor A (batch ::' n_heads ::' pos ::' pos))
+        := match List.nth_error blocks_attn_masked_attn_scores n with
+           | Some block_n_attn_masked_attn_scores
+             => Some (let residual       := resid_postembed tokens in
+                      blocks_cps
+                        (n:=Nat.pred n)
+                        residual
+                        (fun residual
+                         => PArray.checkpoint (block_n_attn_masked_attn_scores residual)))
+           | None => None
+           end.
+
+      Local Definition attn_pattern (n : nat) (tokens : tensor IndexType s)
+        : option (tensor A (batch ::' n_heads ::' pos ::' pos))
+        := match List.nth_error blocks_attn_pattern n with
+           | Some block_n_attn_pattern
+             => Some (let residual       := resid_postembed tokens in
+                      blocks_cps
+                        (n:=Nat.pred n)
+                        residual
+                        (fun residual
+                         => PArray.checkpoint (block_n_attn_pattern residual)))
+           | None => None
+           end.
     End with_batch.
   End __.
 End HookedTransformer.

@@ -54,6 +54,7 @@ theories/Util/Arith/ZArith.v
 theories/Util/Arith/FloatArith/Definitions.v
 theories/Util/Arith/FloatArith/Proofs.v
 theories/Util/List/Proofs.v
+theories/Util/List/Instances/NthError.v
 theories/Util/PArray/Instances.v
 theories/Util/PArray/Proofs.v
 theories/Util/Strings/Ascii.v

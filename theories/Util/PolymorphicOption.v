@@ -325,103 +325,114 @@ Ltac commute_option_rect_Let_In := (* pull let binders out side of option_rect p
   Lemma is_None_eq_None_iff {A x} : @is_None A x = true <-> x = None.
   Proof. destruct x; cbv; split; congruence. Qed.
 
-  Definition invert_Some {A} (x : option A) : match x with
-                                              | Some _ => A
-                                              | None => unit
-                                              end
+  Definition invert_Some {A} (x : option A)
+    : (if x then A else unit)
     := match x with
        | Some x' => x'
        | None => tt
        end.
 
-    Lemma invert_eq_Some {A x y} (p : Some x = Some y) : { pf : x = y | @option_eq_to_leq A (Some x) (Some y) pf = p }.
-    Proof.
-      refine (exist _ _ (option_leq_to_eq_to_leq _)).
-    Qed.
+  #[export] Instance invert_Some_Proper {A R}
+    : Proper (respectful_hetero (option A) (option A)
+                (fun x => if x then _ else _)
+                (fun x => if x then _ else _)
+                (option_eq R)
+                (fun x y => match x, y with
+                            | Some _, Some _ => R
+                            | None, None => fun _ _ => True
+                            | Some _, None | None, Some _ => fun _ _ => False
+                            end))
+        (@invert_Some A).
+  Proof. now cbv; intros [x|] [y|]. Qed.
 
-    Definition always_invert_Some {A} (x : option A) {pf : x <> None} : A
-      := match x return x <> None -> A with
-         | Some v => fun _ => v
-         | None => fun pf => False_rect _ (pf eq_refl)
-         end pf.
+  Lemma invert_eq_Some {A x y} (p : Some x = Some y) : { pf : x = y | @option_eq_to_leq A (Some x) (Some y) pf = p }.
+  Proof.
+    refine (exist _ _ (option_leq_to_eq_to_leq _)).
+  Qed.
 
-    Lemma push_always_invert_Some' {A B} (f : A -> B) (x : option A)
-      (pf : x <> None)
-      (pf' : option_map f x <> None)
-      : f (@always_invert_Some _ x pf) = @always_invert_Some _ (option_map f x) pf'.
-    Proof.
-      destruct x; [ reflexivity | congruence ].
-    Qed.
+  Definition always_invert_Some {A} (x : option A) {pf : x <> None} : A
+    := match x return x <> None -> A with
+       | Some v => fun _ => v
+       | None => fun pf => False_rect _ (pf eq_refl)
+       end pf.
 
-    Definition pull_always_invert_Some {A B} (f : A -> B) (x : option A)
-      (pf : option_map f x <> None)
-      : f (@always_invert_Some _ x (fun H => pf (f_equal (option_map f) H)))
-        = @always_invert_Some _ (option_map f x) pf
-      := push_always_invert_Some' f _ pf.
+  Lemma push_always_invert_Some' {A B} (f : A -> B) (x : option A)
+    (pf : x <> None)
+    (pf' : option_map f x <> None)
+    : f (@always_invert_Some _ x pf) = @always_invert_Some _ (option_map f x) pf'.
+  Proof.
+    destruct x; [ reflexivity | congruence ].
+  Qed.
 
-    Lemma option_map_neq_None_iff {A B} (f : A -> B) x
-      : x <> None <-> option_map f x <> None.
-    Proof. destruct x; cbn in *; split; congruence. Qed.
+  Definition pull_always_invert_Some {A B} (f : A -> B) (x : option A)
+    (pf : option_map f x <> None)
+    : f (@always_invert_Some _ x (fun H => pf (f_equal (option_map f) H)))
+      = @always_invert_Some _ (option_map f x) pf
+    := push_always_invert_Some' f _ pf.
 
-    Definition push_always_invert_Some {A B} (f : A -> B) (x : option A)
-      (pf : x <> None)
-      : f (@always_invert_Some _ x pf)
-        = @always_invert_Some _ (option_map f x)
-            (proj1 (option_map_neq_None_iff f x) pf)
-      := push_always_invert_Some' f pf _.
+  Lemma option_map_neq_None_iff {A B} (f : A -> B) x
+    : x <> None <-> option_map f x <> None.
+  Proof. destruct x; cbn in *; split; congruence. Qed.
 
-    Definition always_invert_Some_bind' {A B} (x : option A) (f : A -> option B)
-      pf pf' pf''
-      : @always_invert_Some _ (bind x f) pf
-        = @always_invert_Some _ (f (@always_invert_Some _ x pf')) pf''.
-    Proof.
-      destruct x as [x|]; cbn in *; [ destruct (f x); cbn in * | ];
-        congruence.
-    Qed.
+  Definition push_always_invert_Some {A B} (f : A -> B) (x : option A)
+    (pf : x <> None)
+    : f (@always_invert_Some _ x pf)
+      = @always_invert_Some _ (option_map f x)
+          (proj1 (option_map_neq_None_iff f x) pf)
+    := push_always_invert_Some' f pf _.
 
-    Lemma bind_neq_None_iff {A B} (x : option A) (f : A -> option B)
-      : (bind x f <> None) <-> (x <> None /\ forall pf, f (@always_invert_Some _ x pf) <> None).
-    Proof.
-      destruct x as [x|]; cbn; [ destruct (f x); cbn | ]; intuition congruence.
-    Qed.
+  Definition always_invert_Some_bind' {A B} (x : option A) (f : A -> option B)
+    pf pf' pf''
+    : @always_invert_Some _ (bind x f) pf
+      = @always_invert_Some _ (f (@always_invert_Some _ x pf')) pf''.
+  Proof.
+    destruct x as [x|]; cbn in *; [ destruct (f x); cbn in * | ];
+      congruence.
+  Qed.
 
-    Lemma bind_neq_None_iff' {A B} (x : option A) (f : A -> option B)
-      : (bind x f <> None) <-> (exists pf : x <> None, f (@always_invert_Some _ x pf) <> None).
-    Proof.
-      destruct x as [x|]; cbn; [ destruct (f x); cbn | ];
-        split; intros; destruct_head'_ex; try unshelve econstructor;
-        congruence.
-    Qed.
+  Lemma bind_neq_None_iff {A B} (x : option A) (f : A -> option B)
+    : (bind x f <> None) <-> (x <> None /\ forall pf, f (@always_invert_Some _ x pf) <> None).
+  Proof.
+    destruct x as [x|]; cbn; [ destruct (f x); cbn | ]; intuition congruence.
+  Qed.
 
-    Definition push_always_invert_Some_bind {A B} (x : option A) (f : A -> option B)
-      pf
-      (pf' := proj1 (proj1 (bind_neq_None_iff x f) pf))
-      (pf'' := proj2 (proj1 (bind_neq_None_iff x f) pf) pf')
-      : @always_invert_Some _ (bind x f) pf
-        = @always_invert_Some _ (f (@always_invert_Some _ x pf')) pf''
-      := always_invert_Some_bind' f _ _ _.
+  Lemma bind_neq_None_iff' {A B} (x : option A) (f : A -> option B)
+    : (bind x f <> None) <-> (exists pf : x <> None, f (@always_invert_Some _ x pf) <> None).
+  Proof.
+    destruct x as [x|]; cbn; [ destruct (f x); cbn | ];
+      split; intros; destruct_head'_ex; try unshelve econstructor;
+      congruence.
+  Qed.
 
-    Definition pull_always_invert_Some_bind {A B} (x : option A) (f : A -> option B)
-      pf pf'
-      (pf'' := proj2 (bind_neq_None_iff' x f) (ex_intro _ pf pf'))
-      : @always_invert_Some _ (f (@always_invert_Some _ x pf)) pf'
-        = @always_invert_Some _ (bind x f) pf''
-      := eq_sym (always_invert_Some_bind' f _ _ _).
+  Definition push_always_invert_Some_bind {A B} (x : option A) (f : A -> option B)
+    pf
+    (pf' := proj1 (proj1 (bind_neq_None_iff x f) pf))
+    (pf'' := proj2 (proj1 (bind_neq_None_iff x f) pf) pf')
+    : @always_invert_Some _ (bind x f) pf
+      = @always_invert_Some _ (f (@always_invert_Some _ x pf')) pf''
+    := always_invert_Some_bind' f _ _ _.
+
+  Definition pull_always_invert_Some_bind {A B} (x : option A) (f : A -> option B)
+    pf pf'
+    (pf'' := proj2 (bind_neq_None_iff' x f) (ex_intro _ pf pf'))
+    : @always_invert_Some _ (f (@always_invert_Some _ x pf)) pf'
+      = @always_invert_Some _ (bind x f) pf''
+    := eq_sym (always_invert_Some_bind' f _ _ _).
 
 
-    Ltac inversion_option_step :=
-      match goal with
-      | [ H : Some _ = Some _ |- _ ] => apply option_leq_to_eq in H; unfold option_eq in H
-      | [ H : Some _ = Some _ |- _ ]
-        => let H' := fresh in
-           rename H into H';
-           destruct (invert_eq_Some H') as [H ?]; subst H'
-      | [ H : None = Some _ |- _ ] => solve [ inversion H ]
-      | [ H : Some _ = None |- _ ] => solve [ inversion H ]
-      | [ H : None = None |- _ ] => clear H
-      | [ H : None = None |- _ ]
-        => assert (eq_refl = H) by apply UIP_None; subst H
-      end.
+  Ltac inversion_option_step :=
+    match goal with
+    | [ H : Some _ = Some _ |- _ ] => apply option_leq_to_eq in H; unfold option_eq in H
+    | [ H : Some _ = Some _ |- _ ]
+      => let H' := fresh in
+         rename H into H';
+         destruct (invert_eq_Some H') as [H ?]; subst H'
+    | [ H : None = Some _ |- _ ] => solve [ inversion H ]
+    | [ H : Some _ = None |- _ ] => solve [ inversion H ]
+    | [ H : None = None |- _ ] => clear H
+    | [ H : None = None |- _ ]
+      => assert (eq_refl = H) by apply UIP_None; subst H
+    end.
 
-    Ltac inversion_option := repeat inversion_option_step.
+  Ltac inversion_option := repeat inversion_option_step.
 End Option.

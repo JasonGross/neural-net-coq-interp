@@ -1,5 +1,5 @@
 From Coq Require Import Floats Sint63 Uint63 QArith Lia List PArray Morphisms RelationClasses.
-From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool.
+From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool Option.
 From NeuralNetInterp.Util Require Nat Wf_Uint63.
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer.
@@ -86,6 +86,37 @@ Section with_batch.
          W_U b_U
 
          tokens.
+
+  (** convenience *)
+  Definition masked_attn_scores (tokens : tensor IndexType s)
+    : tensor FLOAT (batch ::' cfg.n_heads ::' pos ::' pos)
+    := Option.invert_Some
+         (HookedTransformer.HookedTransformer.masked_attn_scores
+            (n_ctx:=cfg.n_ctx)
+            cfg.eps
+            W_E
+            W_pos
+
+            blocks_params
+
+            0
+
+            tokens).
+
+  Definition attn_pattern (tokens : tensor IndexType s)
+    : tensor FLOAT (batch ::' cfg.n_heads ::' pos ::' pos)
+    := Option.invert_Some
+         (HookedTransformer.HookedTransformer.attn_pattern
+            (n_ctx:=cfg.n_ctx)
+            cfg.eps
+            W_E
+            W_pos
+
+            blocks_params
+
+            0
+
+            tokens).
 End with_batch.
 
 Notation model := logits (only parsing).

@@ -1,22 +1,8 @@
 From Coq Require Import Morphisms RelationClasses.
-From NeuralNetInterp.Util Require Import Default (* Pointed PArray PArray.Instances Wf_Uint63.Instances List Notations Arith.Classes Arith.Instances Bool*) SolveProperEqRel.
-(*From NeuralNetInterp.Util.Tactics Require Import DestructHead.*)
-(*From NeuralNetInterp.Util Require Nat Wf_Uint63.*)
+From NeuralNetInterp.Util Require Import Default SolveProperEqRel Option.
 From NeuralNetInterp.Torch Require Import Tensor Tensor.Instances Slicing Slicing.Instances.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Instances.
 From NeuralNetInterp.MaxOfTwoNumbers Require Import Model.
-(*
-Import Util.Nat.Notations.
-Import Util.Wf_Uint63.LoopNotation.
-Import Util.Wf_Uint63.
-Import Util.Wf_Uint63.Reduction.
-Import Arith.Instances.Truncating.
-Local Open Scope float_scope.
-Local Open Scope list_scope.
-*)
-(*Import ListNotations.
-Local Open Scope raw_tensor_scope.
-#[local] Generalizable All Variables.*)
 
 Module Model.
   Export Model.
@@ -31,6 +17,29 @@ Module Model.
     := _.
   #[export] Instance logits_Proper {r batch pos} : Proper (Tensor.eqf ==> Tensor.eqf) (@logits r batch pos)
     := _.
+  #[export] Instance masked_attn_scores_Proper {r batch pos} : Proper (Tensor.eqf ==> Tensor.eqf) (@masked_attn_scores r batch pos).
+  Proof.
+    cbv [masked_attn_scores].
+    lazymatch goal with
+    | [ |- Proper (?R ==> _) (fun tokens => Option.invert_Some (?f ?n tokens)) ]
+      => pose proof (_ : Proper (eq ==> R ==> _) f) as H;
+         specialize (H n n eq_refl)
+    end.
+    intros x y Ht; specialize (H _ _ Ht).
+    refine (Option.invert_Some_Proper _ _ H).
+  Qed.
+  #[export] Instance attn_pattern_Proper {r batch pos} : Proper (Tensor.eqf ==> Tensor.eqf) (@attn_pattern r batch pos).
+  Proof.
+    cbv [attn_pattern].
+    lazymatch goal with
+    | [ |- Proper (?R ==> _) (fun tokens => Option.invert_Some (?f ?n tokens)) ]
+      => pose proof (_ : Proper (eq ==> R ==> _) f) as H;
+         specialize (H n n eq_refl)
+    end.
+    intros x y Ht; specialize (H _ _ Ht).
+    refine (Option.invert_Some_Proper _ _ H).
+  Qed.
+
   Notation model_Proper := logits_Proper (only parsing).
 
   #[export] Instance loss_fn_Proper {r batch return_per_token}

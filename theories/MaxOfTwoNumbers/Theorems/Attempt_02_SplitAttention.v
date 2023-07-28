@@ -79,7 +79,7 @@ Proof.
   cbv beta iota delta [logits] in *; let_bind_subst_shape ().
   cbv beta iota delta [HookedTransformer.logits] in *; let_bind_subst_shape ().
   cbv beta iota delta [blocks_params] in *.
-  cbv beta iota delta [HookedTransformer.blocks_cps fold_right HookedTransformer.blocks List.map] in *; let_bind_subst_shape ().
+  cbv beta iota delta [HookedTransformer.blocks_cps fold_right Datatypes.length List.firstn HookedTransformer.blocks List.map] in *; let_bind_subst_shape ().
   vm_compute Shape.tl in *.
   vm_compute of_Z in *.
   vm_compute SliceIndex.transfer_shape in *.

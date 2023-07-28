@@ -303,14 +303,25 @@ Definition is_Some {A} (x : option A) : bool
 Lemma is_None_eq_None_iff {A x} : @is_None A x = true <-> x = None.
 Proof. destruct x; cbv; split; congruence. Qed.
 
-Definition invert_Some {A} (x : option A) : match x with
-                                            | Some _ => A
-                                            | None => unit
-                                            end
+Definition invert_Some {A} (x : option A)
+  : (if x then A else unit)
   := match x with
      | Some x' => x'
      | None => tt
      end.
+
+#[export] Instance invert_Some_Proper {A R}
+  : Proper (respectful_hetero (option A) (option A)
+              (fun x => if x then _ else _)
+              (fun x => if x then _ else _)
+              (option_eq R)
+              (fun x y => match x, y with
+                          | Some _, Some _ => R
+                          | None, None => fun _ _ => True
+                          | Some _, None | None, Some _ => fun _ _ => False
+                          end))
+      (@invert_Some A).
+Proof. now cbv; intros [x|] [y|]. Qed.
 
 Lemma invert_eq_Some {A x y} (p : Some x = Some y) : { pf : x = y | @option_eq_to_leq A (Some x) (Some y) pf = p }.
 Proof.
