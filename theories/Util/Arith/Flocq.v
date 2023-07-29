@@ -40,6 +40,31 @@ Section Binary.
     all: try reflexivity.
   Qed.
 
+  Theorem Bleb_correct_full (x y : binary_float prec emax)
+    : Bleb x y = if is_finite x && is_finite y
+                 then Rle_bool (B2R x) (B2R y)
+                 else if is_nan x || is_nan y
+                      then false
+                      else if negb (Bool.eqb (Bsign x) (Bsign y))
+                           then Bsign x (* true iff x is neg *)
+                           else
+                             if negb (is_finite x) && negb (is_finite y)
+                             then true
+                             else xorb
+                                    (Bsign x) (* negb iff both are neg *)
+                                    (is_finite x) (* true iff x is finite, y is ∞ *).
+  Proof.
+    pose proof (Bleb_correct prec emax x y) as H.
+    cbv [andb orb Bool.eqb negb xorb]; break_innermost_match.
+    all: repeat specialize (H eq_refl).
+    all: repeat match goal with H : false = true -> _ |- _ => clear H end.
+    all: destruct_head'_and.
+    all: try assumption.
+    all: cbv [is_finite is_nan Bsign] in *.
+    all: break_innermost_match_hyps; subst; try congruence.
+    all: try reflexivity.
+  Qed.
+
   Theorem B2R_Bminus m x y
     : B2R (Bminus m x y)
       = if is_finite x && is_finite y
@@ -59,6 +84,27 @@ Section Binary.
     all: break_innermost_match_hyps; try congruence.
     all: try reflexivity.
     all: cbv [Bminus]; break_innermost_match; reflexivity.
+  Qed.
+
+  Theorem B2R_Bplus m x y
+    : B2R (Bplus m x y)
+      = if is_finite x && is_finite y
+        then if Rlt_bool (Rabs (round radix2 fexp (round_mode m) (B2R x + B2R y))) (bpow radix2 emax)
+             then round radix2 fexp (round_mode m) (B2R x + B2R y)
+             else SF2R radix2 (binary_overflow prec emax m (Bsign x))
+        else 0%R.
+  Proof using Type.
+    pose proof (Bplus_correct prec emax prec_gt_0_ prec_lt_emax_ m x y) as H.
+    cbv [andb]; break_innermost_match.
+    all: repeat specialize (H eq_refl).
+    all: repeat match goal with H : false = true -> _ |- _ => clear H end.
+    all: destruct_head'_and.
+    all: try assumption.
+    all: try now rewrite <- SF2R_B2SF; congruence.
+    all: cbv [is_finite] in *.
+    all: break_innermost_match_hyps; try congruence.
+    all: try reflexivity.
+    all: cbv [Bplus]; break_innermost_match; reflexivity.
   Qed.
 
   Theorem B2R_Bdiv m x y

@@ -1,6 +1,6 @@
 From Coq Require Import Floats Sint63 Uint63 QArith Lia List PArray Derive.
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
-From NeuralNetInterp.Util.Tactics Require Import IsFloat.
+From NeuralNetInterp.Util.Tactics Require Import IsFloat IsUint63 BreakMatch.
 From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Wf_Uint63.Instances SolveProperEqRel Default.
 From NeuralNetInterp.Util.Arith Require Import Classes Instances FloatArith.Definitions.
 From NeuralNetInterp.Torch Require Import Tensor.Instances Slicing.Instances.
@@ -72,6 +72,43 @@ Local Ltac Proper_Tensor_eqf_t_step _
      end.
 Local Ltac Proper_Tensor_eqf_t _ := repeat Proper_Tensor_eqf_t_step ().
 #[export] Hint Extern 1 (Proper (_ ==> _) (fun _ => _)) => progress Proper_Tensor_eqf_t () : typeclass_instances.
+Local Ltac setoid_rewrite_in_body R lem H :=
+  let rewrite_or_error lem :=
+    let rew _ := (rewrite lem) (* first [ rewrite lem | setoid_rewrite lem ] *) in
+    tryif rew ()
+    then idtac
+    else (match goal with
+          | [ |- ?G ]
+            => let lemo := open_constr:(lem) in
+               let T := type of lemo in
+               idtac "Could not rewrite" lem ":" T "in goal" G
+          end;
+          rew ()) in
+  let ty := open_constr:(_) in
+  let H' := fresh H in
+  rename H into H';
+  evar (H : ty);
+  let lemH := fresh in
+  assert (lemH : R H' H) by (subst H'; rewrite_or_error lem; subst H; reflexivity);
+  let rec do_rewrite _
+    := lazymatch goal with
+       | [ H'' := context[H'] |- _ ]
+         => setoid_rewrite_in_body R lemH H'';
+            do_rewrite ()
+       | _ => idtac
+       end in
+  do_rewrite ();
+  lazymatch goal with
+  | [ |- context[H'] ] => rewrite_or_error lemH
+  | _ => idtac
+  end;
+  clear lemH; clear H'.
+Tactic Notation "setoid_rewrite" "(" uconstr(R) ")" uconstr(lem) "in" "(" "value" "of" hyp(H) ")" := setoid_rewrite_in_body R lem H.
+
+#[local] Set Warnings Append "undeclared-scope".
+From Interval Require Import Tactic_float.
+#[local] Set Warnings Append "+undeclared-scope".
+
 Theorem good_accuracy : TheoremStatement.Accuracy.best (* (abs (real_accuracy - expected_accuracy) <? error)%float = true *).
 Proof.
   cbv [real_accuracy].
@@ -95,38 +132,6 @@ Proof.
   cbv beta iota delta [all_tokens] in true_maximum; let_bind_subst_shape ().
   set (all_toks_c := PArray.checkpoint _) in (value of true_maximum).
   set (out' := PArray.checkpoint _) in (value of out).
-  Local Ltac setoid_rewrite_in_body R lem H :=
-    let rewrite_or_error lem :=
-      let rew _ := (rewrite lem) (* first [ rewrite lem | setoid_rewrite lem ] *) in
-      tryif rew ()
-      then idtac
-      else (match goal with
-            | [ |- ?G ]
-              => let lemo := open_constr:(lem) in
-                 let T := type of lemo in
-                 idtac "Could not rewrite" lem ":" T "in goal" G
-            end;
-            rew ()) in
-    let ty := open_constr:(_) in
-    let H' := fresh H in
-    rename H into H';
-    evar (H : ty);
-    let lemH := fresh in
-    assert (lemH : R H' H) by (subst H'; rewrite_or_error lem; subst H; reflexivity);
-    let rec do_rewrite _
-      := lazymatch goal with
-         | [ H'' := context[H'] |- _ ]
-           => setoid_rewrite_in_body R lemH H'';
-              do_rewrite ()
-         | _ => idtac
-         end in
-    do_rewrite ();
-    lazymatch goal with
-    | [ |- context[H'] ] => rewrite_or_error lemH
-    | _ => idtac
-    end;
-    clear lemH; clear H'.
-  Tactic Notation "setoid_rewrite" "(" uconstr(R) ")" uconstr(lem) "in" "(" "value" "of" hyp(H) ")" := setoid_rewrite_in_body R lem H.
   do 8 lazymatch goal with
   | [ H := PArray.checkpoint _ |- _ ]
     => setoid_rewrite (Tensor.eqf) Tensor.PArray.checkpoint_correct_eqf in (value of H)
@@ -164,10 +169,135 @@ Proof.
   subst all_toks.
   cbv [RawIndex.item RawIndex.tl raw_get] in true_maximum.
   cbn [snd] in true_maximum.
-  From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
-  From NeuralNetInterp.Util.Arith Require Import Flocq.
-  rewrite Flocq.IEEE754.PrimFloat.ltb_equiv, Flocq.IEEE754.PrimFloat.abs_equiv, Flocq.IEEE754.PrimFloat.sub_equiv, Flocq.IEEE754.PrimFloat.div_equiv.
+  change PrimFloat.sub with (@Classes.sub float float float _).
+  change PrimFloat.ltb with (@Classes.ltb float _).
+  change PrimFloat.leb with (@Classes.leb float _).
+  lazymatch goal with
+  | [ |- ?ltb (abs (?x / ?y - ?z)%core) ?w = true ]
+    => cut (ltb (abs (x - y * z)%core) (w * y)%core = true)
+  end.
+  assert (H : forall x, (res x = 0 \/ res x = 1)%float)
+    by (subst res; intro; cbv beta; break_innermost_match; constructor; reflexivity).
+  clearbody res; clear -H.
+  { cbv [Classes.ltb Classes.leb Classes.abs Classes.div Classes.mul Classes.sub Classes.add Classes.int_div Classes.coer Classes.zero Classes.one float_has_leb float_has_ltb float_has_mul float_has_abs float_has_sub float_has_div int_has_sub int_has_one int_has_add int_has_mul int_div].
+    From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
+    From NeuralNetInterp.Util.Arith Require Import Flocq.
+  repeat match goal with
+         | [ |- context[?v] ]
+           => lazymatch v with
+              | (?x * ?y)%float => is_float x; is_float y
+              | (?x - ?y)%float => is_float x; is_float y
+              | (?x + ?y)%float => is_float x; is_float y
+              | (?x / ?y)%float => is_float x; is_float y
+              | (?x * ?y)%uint63 => is_uint63 x; is_uint63 y
+              | (?x - ?y)%uint63 => is_uint63 x; is_uint63 y
+              | (?x + ?y)%uint63 => is_uint63 x; is_uint63 y
+              | (?x / ?y)%uint63 => is_uint63 x; is_uint63 y
+              | PrimFloat.of_Z (Uint63.to_Z ?x) => is_uint63 x
+              end;
+              let v' := (eval cbv in v) in
+              change v with v'
+         end.
+  Local Ltac manual_rewrite lem :=
+    lazymatch type of lem with
+    | ?x = ?y
+      => let x' := fresh in
+         pose x as x';
+         assert (x' = y) by exact lem;
+         repeat match goal with
+           | [ |- context G[x] ] => let G' := context G[x'] in
+                                    change G'
+           end;
+         clearbody x'; subst x'
+    end.
+  About Reduction.sum.
+  repeat match goal with
+    | [ |- context[PrimFloat.ltb ?x ?y] ] => manual_rewrite (ltb_equiv x y)
+    | [ |- context[PrimFloat.leb ?x ?y] ] => manual_rewrite (leb_equiv x y)
+    | [ |- context[Prim2B (PrimFloat.abs ?x)] ] => manual_rewrite (abs_equiv x)
+    | [ |- context[Prim2B (PrimFloat.sub ?x ?y)] ] => manual_rewrite (sub_equiv x y)
+         | [ |- context[Prim2B (PrimFloat.div ?x ?y)] ] => manual_rewrite (div_equiv x y)
+         | [ |- context[Prim2B (@Reduction.sum ?A ?zeroA ?addA ?start ?stop ?step ?f)] ]
+           => manual_rewrite (@Reduction.sum_equiv _ _ Prim2B zeroA addA _ _ add_equiv eq_refl start stop step f)
+         end.
+  (*   Bleb
+    (Babs
+       (Bminus mode_NE (∑_(0≤x<4096)Prim2B (res (tt, of_Z (φ (x) mod φ (4096)))))
+          (Prim2B 4086.5))) (Prim2B 9.75) = true ->
+  Bleb
+    (Babs
+       (Bminus mode_NE
+          (Bdiv mode_NE (∑_(0≤x<4096)Prim2B (res (tt, of_Z (φ (x) mod φ (4096)))))
+             (Prim2B 4096)) (Prim2B 0.9976806640625))) (Prim2B 0.00238037109375) = true
+*)
+  repeat match goal with
+         | [ |- context[@Bleb ?prec ?emax ?x ?y] ] => manual_rewrite (@Bleb_correct_full prec emax x y)
+         | [ |- context[B2R (@Babs ?prec ?emax ?x)] ] => manual_rewrite (@B2R_Babs prec emax x)
+         | [ |- context[B2R (@Bminus ?prec ?emax ?prec_gt_0_ ?prec_lt_emax_ ?mode ?x ?y)] ] => manual_rewrite (@B2R_Bminus prec emax prec_gt_0_ prec_lt_emax_ mode x y)
+         | [ |- context[B2R (@Bplus ?prec ?emax ?prec_gt_0_ ?prec_lt_emax_ ?mode ?x ?y)] ] => manual_rewrite (@B2R_Bplus prec emax prec_gt_0_ prec_lt_emax_ mode x y)
+         | [ |- context[B2R (@Bdiv ?prec ?emax ?prec_gt_0_ ?prec_lt_emax_ ?mode ?x ?y)] ] => manual_rewrite (@B2R_Bdiv prec emax prec_gt_0_ prec_lt_emax_ mode x y)
+         | [ |- context[Bsign (@Babs ?prec ?emax ?x)] ] => manual_rewrite (@Bsign_Babs prec emax x)
+         | [ |- context[is_nan (@Babs ?prec ?emax ?x)] ] => manual_rewrite (@is_nan_Babs prec emax x)
+         | [ |- context[is_finite (@Babs ?prec ?emax ?x)] ] => manual_rewrite (@is_finite_Babs prec emax x)
+         | [ |- context[?b && false] ] => manual_rewrite (Bool.andb_false_r b)
+         | [ |- context[?b && true] ] => manual_rewrite (Bool.andb_true_r b)
+         | [ |- context[?b || false] ] => manual_rewrite (Bool.orb_false_r b)
+         | [ |- context[?b || true] ] => manual_rewrite (Bool.orb_true_r b)
+         | [ |- context[xorb ?b false] ] => manual_rewrite (Bool.xorb_false_r b)
+         | [ |- context[xorb ?b true] ] => manual_rewrite (Bool.xorb_true_r b)
+         | [ |- context[false && ?b] ] => manual_rewrite (Bool.andb_false_l b)
+         | [ |- context[true && ?b] ] => manual_rewrite (Bool.andb_true_l b)
+         | [ |- context[false || ?b] ] => manual_rewrite (Bool.orb_false_l b)
+         | [ |- context[true || ?b] ] => manual_rewrite (Bool.orb_true_l b)
+         | [ |- context[xorb false ?b] ] => manual_rewrite (Bool.xorb_false_l b)
+         | [ |- context[xorb true ?b] ] => manual_rewrite (Bool.xorb_true_l b)
+         | [ |- context[?v] ]
+           => lazymatch v with
+              | Bsign (Prim2B ?x) => is_float x
+              | is_nan (Prim2B ?x) => is_float x
+              | is_finite (Prim2B ?x) => is_float x
+              end;
+              let v' := (eval cbv in v) in
+              change v with v'
+         | _ => progress cbn [Bool.eqb negb]
+         end.
+  Search B2R Bplus.
+  Check B2R_Bplus.
+Abort. (*
+  lazymatch goal with
+  | [ |- context[B2R (@Reduction.sum ?A ?zeroA ?addA ?start ?stop ?step ?f)] ]
+    => epose (@Reduction.sum_equiv _ _ B2R zeroA addA _ _ (@B2R_Bplus _ _ _ _ _))
+  end.
+  eq_refl start stop step f)
+  end.
+
+  Check B2R_Badd
+  Check is_finite_Bm
+
+  match goal with
+  | [ |- context[?v] ]
+    => lazymatch v with
+       | Bsign (Prim2B ?x) => is_float x
+       end;
+       let v' := (eval cbv in v) in
+       change v with v'
+  end.
+  About B2R.
+  match goal with
+  end.
+  rewrite Bltb_correct_full.
+  Check Flocq.IEEE754.PrimFloat.abs_equiv.
+    =>
+  rewrite ?Flocq.IEEE754.PrimFloat.ltb_equiv, ?Flocq.IEEE754.PrimFloat.leb_equiv, Flocq.IEEE754.PrimFloat.abs_equiv , Flocq.IEEE754.PrimFloat.sub_equiv, Flocq.IEEE754.PrimFloat.div_equiv.
   rewrite Bltb_correct_full, B2R_Babs, B2R_Bminus, B2R_Bdiv, Bsign_Babs, is_nan_Babs, is_finite_Babs.
+    rewrite PrimFloat.leb_equiv.
+    Search PrimFloat.ltb.
+    interval.
+  destruct
+  clear.
+  Set Printing All.
+  pose (@Classes.ltb float _).
+  match goal with
   repeat match goal with
          | [ |- context[?f (Prim2B ?x)] ]
            => is_float x;
@@ -407,3 +537,4 @@ https://coq.zulipchat.com/#narrow/stream/237977-Coq-users/topic/Working.20with.2
 Qed.
 *)
 Abort.
+*)

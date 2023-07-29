@@ -172,7 +172,7 @@ End Uint63.
 
 Local Open Scope float_scope.
 #[export] Instance float_has_leb : has_leb float := eta2 PrimFloat.leb.
-#[export] Instance float_has_eqb : has_eqb float := eta2 PrimFloat.Leibniz.eqb.
+#[export] Instance float_has_ltb : has_ltb float := eta2 PrimFloat.ltb.
 #[export] Instance float_has_opp : has_opp float := eta1 PrimFloat.opp.
 #[export] Instance float_has_abs : has_abs float := eta1 PrimFloat.abs.
 #[export] Instance float_has_sqrt : has_sqrt float := eta1 PrimFloat.sqrt.
@@ -184,6 +184,16 @@ Local Open Scope float_scope.
 #[export] Instance float_has_one : has_one float := 1.
 #[export] Instance float_has_exp : has_exp float := eta1 PrimFloat.exp.
 #[export] Instance float_has_ln : has_ln float := eta1 PrimFloat.ln.
+
+Module Float.
+  Module IEEE754Eq.
+    #[export] Instance float_has_eqb : has_eqb float := eta2 PrimFloat.Leibniz.eqb.
+  End IEEE754Eq.
+
+  Module Leibniz.
+    #[export] Instance float_has_eqb : has_eqb float := eta2 PrimFloat.Leibniz.eqb.
+  End Leibniz.
+End Float.
 
 Module Truncating.
   #[export] Instance coer_Z_int : has_coer Z int := Uint63.of_Z.
