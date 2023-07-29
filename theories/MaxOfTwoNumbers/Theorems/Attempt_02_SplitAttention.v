@@ -198,6 +198,23 @@ Proof.
               let v' := (eval cbv in v) in
               change v with v'
          end.
+  cbv [tensor RawIndex RawIndexType tensor_of_rank] in *.
+  match goal with
+  | [ |- context[Reduction.sum _ _ _ ?f'] ]
+    => set (f := f')
+  end.
+  assert (H' : forall x, f x = 0%float \/ f x = 1%float).
+  { subst f; intro x; epose (H (tt, _)) as H'; destruct H' as [H'|H']; cbv beta.
+    all: rewrite H'; auto. }
+  clear H; clearbody f; clear res.
+  rename H' into H.
+(*   f : int -> float
+  H : forall x : int, f x = 0%float \/ f x = 1%float
+  ============================
+  (PrimFloat.abs (∑_(0≤i<4096)f i - 4086.5) <=? 9.75)%float = true ->
+  (PrimFloat.abs ((∑_(0≤i<4096)f i) / 4096 - 0.9976806640625) <=? 0.00238037109375)%float =
+  true
+*)
   Local Ltac manual_rewrite lem :=
     lazymatch type of lem with
     | ?x = ?y
@@ -220,13 +237,13 @@ Proof.
          | [ |- context[Prim2B (@Reduction.sum ?A ?zeroA ?addA ?start ?stop ?step ?f)] ]
            => manual_rewrite (@Reduction.sum_equiv _ _ Prim2B zeroA addA _ _ add_equiv eq_refl start stop step f)
          end.
-  cbv [tensor RawIndex RawIndexType tensor_of_rank] in *.
+  rename f into res.
   match goal with
   | [ |- context[Reduction.sum _ _ _ ?f'] ]
     => set (f := f')
   end.
   assert (H' : forall x, f x = Prim2B 0 \/ f x = Prim2B 1).
-  { subst f; intro x; epose (H (tt, _)) as H'; destruct H' as [H'|H']; cbv beta.
+  { subst f; intro x; epose (H _) as H'; destruct H' as [H'|H']; cbv beta.
     all: rewrite H'; auto. }
   clear H; clearbody f; clear res.
   rename H' into H.
