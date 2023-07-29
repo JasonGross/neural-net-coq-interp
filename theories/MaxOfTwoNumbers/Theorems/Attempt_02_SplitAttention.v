@@ -220,15 +220,24 @@ Proof.
          | [ |- context[Prim2B (@Reduction.sum ?A ?zeroA ?addA ?start ?stop ?step ?f)] ]
            => manual_rewrite (@Reduction.sum_equiv _ _ Prim2B zeroA addA _ _ add_equiv eq_refl start stop step f)
          end.
-  (*   Bleb
-    (Babs
-       (Bminus mode_NE (∑_(0≤x<4096)Prim2B (res (tt, of_Z (φ (x) mod φ (4096)))))
-          (Prim2B 4086.5))) (Prim2B 9.75) = true ->
+  cbv [tensor RawIndex RawIndexType tensor_of_rank] in *.
+  match goal with
+  | [ |- context[Reduction.sum _ _ _ ?f'] ]
+    => set (f := f')
+  end.
+  assert (H' : forall x, f x = Prim2B 0 \/ f x = Prim2B 1).
+  { subst f; intro x; epose (H (tt, _)) as H'; destruct H' as [H'|H']; cbv beta.
+    all: rewrite H'; auto. }
+  clear H; clearbody f; clear res.
+  rename H' into H.
+  (*  f : int -> binary_float prec emax
+  H : forall x : int, f x = Prim2B 0 \/ f x = Prim2B 1
+  ============================
+  Bleb (Babs (Bminus mode_NE (∑_(0≤i<4096)f i) (Prim2B 4086.5))) (Prim2B 9.75) = true ->
   Bleb
     (Babs
-       (Bminus mode_NE
-          (Bdiv mode_NE (∑_(0≤x<4096)Prim2B (res (tt, of_Z (φ (x) mod φ (4096)))))
-             (Prim2B 4096)) (Prim2B 0.9976806640625))) (Prim2B 0.00238037109375) = true
+       (Bminus mode_NE (Bdiv mode_NE (∑_(0≤i<4096)f i) (Prim2B 4096))
+          (Prim2B 0.9976806640625))) (Prim2B 0.00238037109375) = true
 *)
   repeat match goal with
          | [ |- context[@Bleb ?prec ?emax ?x ?y] ] => manual_rewrite (@Bleb_correct_full prec emax x y)
