@@ -54,16 +54,16 @@ Section with_batch.
     (s := (batch ::' pos)%shape)
     (resid_shape := (s ::' cfg.d_model)%shape).
 
-  Definition embed (tokens : tensor IndexType s) : tensor FLOAT resid_shape
+  Definition embed (tokens : tensor s IndexType) : tensor resid_shape FLOAT
     := HookedTransformer.embed W_E tokens.
 
-  Definition pos_embed (tokens : tensor IndexType s) : tensor FLOAT resid_shape
+  Definition pos_embed (tokens : tensor s IndexType) : tensor resid_shape FLOAT
     := HookedTransformer.pos_embed (n_ctx:=cfg.n_ctx) W_pos tokens.
 
-  Definition ln_final (resid : tensor FLOAT resid_shape) : tensor FLOAT resid_shape
+  Definition ln_final (resid : tensor resid_shape FLOAT) : tensor resid_shape FLOAT
     := HookedTransformer.ln_final cfg.eps ln_final_w ln_final_b resid.
 
-  Definition unembed (resid : tensor FLOAT resid_shape) : tensor FLOAT (s ::' cfg.d_vocab_out)
+  Definition unembed (resid : tensor resid_shape FLOAT) : tensor (s ::' cfg.d_vocab_out) FLOAT
     := HookedTransformer.unembed W_U b_U resid.
 
   Definition blocks_params : list _
@@ -72,7 +72,7 @@ Section with_batch.
           L0_attn_b_O,
           L0_ln1_w, L0_ln1_b)].
 
-  Definition logits (tokens : tensor IndexType s) : tensor FLOAT (s ::' cfg.d_vocab_out)
+  Definition logits (tokens : tensor s IndexType) : tensor (s ::' cfg.d_vocab_out) FLOAT
     := HookedTransformer.logits
          (n_ctx:=cfg.n_ctx)
          cfg.eps
@@ -88,8 +88,8 @@ Section with_batch.
          tokens.
 
   (** convenience *)
-  Definition masked_attn_scores (tokens : tensor IndexType s)
-    : tensor FLOAT (batch ::' cfg.n_heads ::' pos ::' pos)
+  Definition masked_attn_scores (tokens : tensor s IndexType)
+    : tensor (batch ::' cfg.n_heads ::' pos ::' pos) FLOAT
     := Option.invert_Some
          (HookedTransformer.HookedTransformer.masked_attn_scores
             (n_ctx:=cfg.n_ctx)
@@ -103,8 +103,8 @@ Section with_batch.
 
             tokens).
 
-  Definition attn_pattern (tokens : tensor IndexType s)
-    : tensor FLOAT (batch ::' cfg.n_heads ::' pos ::' pos)
+  Definition attn_pattern (tokens : tensor s IndexType)
+    : tensor (batch ::' cfg.n_heads ::' pos ::' pos) FLOAT
     := Option.invert_Some
          (HookedTransformer.HookedTransformer.attn_pattern
             (n_ctx:=cfg.n_ctx)
@@ -122,38 +122,38 @@ End with_batch.
 Notation model := logits (only parsing).
 
 Definition loss_fn {r} {batch : Shape r} {return_per_token : with_default "return_per_token" bool false}
-  (logits : tensor FLOAT (batch ::' cfg.n_ctx ::' cfg.d_vocab_out))
-  (tokens : tensor IndexType (batch ::' cfg.n_ctx))
-  : tensor FLOAT (if return_per_token return Shape (if return_per_token then _ else _) then Shape.squeeze batch else [])
-  := (let logits : tensor FLOAT (batch ::' _)
+  (logits : tensor (batch ::' cfg.n_ctx ::' cfg.d_vocab_out) FLOAT)
+  (tokens : tensor (batch ::' cfg.n_ctx) IndexType)
+  : tensor (if return_per_token return Shape (if return_per_token then _ else _) then Shape.squeeze batch else []) FLOAT
+  := (let logits : tensor (batch ::' _) FLOAT
         := PArray.checkpoint (logits.[…, -1, :]) in
-      let true_maximum : tensor IndexType (batch ::' 1)
+      let true_maximum : tensor (batch ::' 1) IndexType
         := reduce_axis_m1 (keepdim:=true) Reduction.max tokens in
       let log_probs
         := log_softmax_dim_m1 logits in
       let correct_log_probs
         := PArray.checkpoint (gather_dim_m1 log_probs true_maximum) in
-      if return_per_token return (tensor FLOAT (if return_per_token return Shape (if return_per_token then _ else _) then _ else _))
+      if return_per_token return (tensor (if return_per_token return Shape (if return_per_token then _ else _) then _ else _) FLOAT)
       then -Tensor.squeeze correct_log_probs
       else -Tensor.mean correct_log_probs)%core.
 
 Definition acc_fn {r} {batch : Shape r} {return_per_token : with_default "return_per_token" bool false}
-  (logits : tensor FLOAT (batch ::' cfg.n_ctx ::' cfg.d_vocab_out))
-  (tokens : tensor IndexType (batch ::' cfg.n_ctx))
-  : tensor FLOAT (if return_per_token return Shape (if return_per_token then _ else _) then batch else [])
-  := (let pred_logits : tensor FLOAT (batch ::' _)
+  (logits : tensor (batch ::' cfg.n_ctx ::' cfg.d_vocab_out) FLOAT)
+  (tokens : tensor (batch ::' cfg.n_ctx) IndexType)
+  : tensor (if return_per_token return Shape (if return_per_token then _ else _) then batch else []) FLOAT
+  := (let pred_logits : tensor (batch ::' _) FLOAT
         := PArray.checkpoint (logits.[…, -1, :]) in
-      let pred_tokens : tensor IndexType batch
+      let pred_tokens : tensor batch IndexType
         := reduce_axis_m1 (keepdim:=false) Reduction.argmax pred_logits in
-      let true_maximum : tensor IndexType batch
+      let true_maximum : tensor batch IndexType
         := reduce_axis_m1 (keepdim:=false) Reduction.max tokens in
-      let res : tensor FLOAT _
+      let res : tensor _ FLOAT
         := PArray.checkpoint (Tensor.of_bool (Tensor.map2 eqb pred_tokens true_maximum)) in
-      if return_per_token return (tensor FLOAT (if return_per_token return Shape (if return_per_token then _ else _) then _ else _))
+      if return_per_token return (tensor (if return_per_token return Shape (if return_per_token then _ else _) then _ else _) FLOAT)
       then res
       else Tensor.mean res)%core.
 
-Definition all_tokens : tensor RawIndexType [(cfg.d_vocab ^ cfg.n_ctx)%core : N; 2]
+Definition all_tokens : tensor [(cfg.d_vocab ^ cfg.n_ctx)%core : N; 2] RawIndexType
   := let all_toks := Tensor.arange (start:=0) (Uint63.of_Z cfg.d_vocab) in
      PArray.checkpoint (Tensor.cartesian_prod all_toks all_toks).
 
@@ -418,6 +418,6 @@ Time Timeout 5 Compute PArray.concretize (logits (tensor_of_list [0; 1]%uint63))
 Compute PArray.concrete_tensor
 
 Compute PArray.concretize (embed (tensor_of_list [0; 1]%uint63)).
-Compute PArray.concretize (pos_embed (tensor_of_list [[0; 1]]%uint63) : tensor FLOAT [1; cfg.n_ctx; cfg.d_model]).
+Compute PArray.concretize (pos_embed (tensor_of_list [[0; 1]]%uint63) : tensor [1; cfg.n_ctx; cfg.d_model] FLOAT).
 *)
 *)*)

@@ -5,13 +5,13 @@ From NeuralNetInterp.Util.Tactics Require Import DestructHead BreakMatch.
 Set Implicit Arguments.
 
 Definition invert_FancyIndexType {r s ri ro} (x : @FancyIndexType r s ri ro)
-  : (tensor IndexType s * (ri = 1 /\ ro = 0)) + (SliceIndexType ri ro)
+  : (tensor s IndexType * (ri = 1 /\ ro = 0)) + (SliceIndexType ri ro)
   := match x with
      | tensor_index t => inl (t, (conj eq_refl eq_refl))
      | normal_index s => inr s
      end.
 
-Definition uninvert_FancyIndexType {r s ri ro} (x : (tensor IndexType s * (ri = 1 /\ ro = 0)) + (SliceIndexType ri ro)) : @FancyIndexType r s ri ro
+Definition uninvert_FancyIndexType {r s ri ro} (x : (tensor s IndexType * (ri = 1 /\ ro = 0)) + (SliceIndexType ri ro)) : @FancyIndexType r s ri ro
   := match x with
      | inr s => normal_index s
      | inl (t, pf)

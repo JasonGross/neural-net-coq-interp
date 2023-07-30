@@ -23,9 +23,9 @@ Notation tensor_of_list ls := (Tensor.PArray.abstract (Tensor.PArray.concretize 
 Module Embed.
   Section __.
     Context {A d_vocab d_model}
-      (W_E : tensor A [d_vocab; d_model]).
+      (W_E : tensor [d_vocab; d_model] A).
 
-    Definition forward {r} {s : Shape r} (tokens : tensor IndexType s) : tensor A (s ::' d_model)
+    Definition forward {r} {s : Shape r} (tokens : tensor s IndexType) : tensor (s ::' d_model) A
       := (W_E.[tokens, :])%fancy_raw_tensor.
   End __.
 End Embed.
@@ -34,17 +34,17 @@ Module Unembed.
   Section __.
     Context {A} {addA : has_add A} {mulA : has_mul A} {zeroA : has_zero A}
       {d_model d_vocab_out}
-      (W_U : tensor A [d_model; d_vocab_out])
-      (b_U : tensor A [d_vocab_out]).
+      (W_U : tensor [d_model; d_vocab_out] A)
+      (b_U : tensor [d_vocab_out] A).
 
-    Definition forward {r} {batch_pos : Shape r} (residual : tensor A (batch_pos ::' d_model))
-      : tensor A (batch_pos ::' d_vocab_out)
+    Definition forward {r} {batch_pos : Shape r} (residual : tensor (batch_pos ::' d_model) A)
+      : tensor (batch_pos ::' d_vocab_out) A
       := (Tensor.map'
-            (fun residual : tensor A [d_model]
+            (fun residual : tensor [d_model] A
              => weaksauce_einsum {{{ {{ d_model, d_model vocab -> vocab }}
                         , residual
                         , W_U }}}
-               : tensor A [d_vocab_out])
+               : tensor [d_vocab_out] A)
             residual
           + broadcast b_U)%core.
   End __.
@@ -55,11 +55,11 @@ Module PosEmbed.
     Context {A d_model}
       {n_ctx:N}
       (n_ctx' : int := n_ctx)
-      (W_pos : tensor A [n_ctx'; d_model]).
+      (W_pos : tensor [n_ctx'; d_model] A).
 
-    Definition forward {r} {batch : Shape r} {tokens_length} (tokens : tensor IndexType (batch ::' tokens_length))
-      : tensor A (batch ::' tokens_length ::' d_model)
-      := repeat (W_pos.[:tokens_length, :]) batch.
+    Definition forward {r} {batch : Shape r} {tokens_length} (tokens : tensor (batch ::' tokens_length) IndexType)
+      : tensor (batch ::' tokens_length ::' d_model) A
+      := repeat batch (W_pos.[:tokens_length, :]).
   End __.
 End PosEmbed.
 
@@ -67,27 +67,27 @@ Module LayerNorm.
   Section __.
     Context {r A} {s : Shape r} {d_model}
       {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A} {sqrtA : has_sqrt A} {zeroA : has_zero A} {coerZ : has_coer Z A} {default : pointed A}
-      (eps : A) (w b : tensor A [d_model]).
+      (eps : A) (w b : tensor [d_model] A).
 
-    Definition linpart (x : tensor A (s ::' d_model))
-      : tensor A (s ::' d_model)
+    Definition linpart (x : tensor (s ::' d_model) A)
+      : tensor (s ::' d_model) A
       := (x - reduce_axis_m1 (keepdim:=true) mean x)%core.
 
-    Definition scale (x : tensor A (s ::' d_model))
-      : tensor A (s ::' 1)
+    Definition scale (x : tensor (s ::' d_model) A)
+      : tensor (s ::' 1) A
       := (√(reduce_axis_m1 (keepdim:=true) mean (x ²) + broadcast' eps))%core.
 
-    Definition rescale (x : tensor A (s ::' d_model))
-      (scale : tensor A (s ::' 1))
-      : tensor A (s ::' d_model)
+    Definition rescale (x : tensor (s ::' d_model) A)
+      (scale : tensor (s ::' 1) A)
+      : tensor (s ::' d_model) A
       := (x / scale)%core.
 
-    Definition postrescale (x : tensor A (s ::' d_model))
-      : tensor A (s ::' d_model)
+    Definition postrescale (x : tensor (s ::' d_model) A)
+      : tensor (s ::' d_model) A
       := (x * broadcast w + broadcast b)%core.
 
-    Definition forward (x : tensor A (s ::' d_model))
-      : tensor A (s ::' d_model)
+    Definition forward (x : tensor (s ::' d_model) A)
+      : tensor (s ::' d_model) A
       := let x := PArray.checkpoint (linpart x) in
          let scale := scale x in
          let x := rescale x scale in
@@ -101,14 +101,14 @@ Module Attention.
       {sqrtA : has_sqrt A} {coerZ : has_coer Z A} {addA : has_add A} {zeroA : has_zero A} {mulA : has_mul A} {divA : has_div A} {expA : has_exp A} {defaultA : pointed A}
       {pos n_heads d_model d_head} {n_ctx:N}
       {use_split_qkv_input : with_default "use_split_qkv_input" bool false}
-      (W_Q W_K W_V W_O : tensor A [n_heads; d_model; d_head])
-      (b_Q b_K b_V : tensor A [n_heads; d_head])
-      (b_O : tensor A [d_model])
+      (W_Q W_K W_V W_O : tensor [n_heads; d_model; d_head] A)
+      (b_Q b_K b_V : tensor [n_heads; d_head] A)
+      (b_O : tensor [d_model] A)
       (IGNORE : A := coerZ (-1 * 10 ^ 5)%Z)
       (attn_scale : A := √(coer (Uint63.to_Z d_head)))
       (maybe_n_heads := fun b : bool => (if b return Shape (if b then _ else _) then [n_heads] else [])%shape)
-      (query_input key_input value_input : tensor A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model)))
-      (mask : tensor bool [n_ctx; n_ctx] := to_bool (tril (A:=bool) (ones [n_ctx; n_ctx]))).
+      (query_input key_input value_input : tensor ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model)) A)
+      (mask : tensor [n_ctx; n_ctx] bool := to_bool (tril (A:=bool) (ones [n_ctx; n_ctx]))).
 
     (*         if self.cfg.use_split_qkv_input:
             qkv_einops_string = "batch pos head_index d_model"
@@ -125,11 +125,11 @@ Module Attention.
             + self.b_Q
         )  # [batch, pos, head_index, d_head]*)
     Definition einsum_input
-      (input : tensor A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model)))
-      (W : tensor A [n_heads; d_model; d_head])
-      : tensor A ((batch ::' pos) ++' [n_heads; d_head])
+      (input : tensor ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model)) A)
+      (W : tensor [n_heads; d_model; d_head] A)
+      : tensor ((batch ::' pos) ++' [n_heads; d_head]) A
       := Tensor.map'
-           (if use_split_qkv_input return tensor A (maybe_n_heads use_split_qkv_input ::' d_model) -> tensor A [n_heads; d_head]
+           (if use_split_qkv_input return tensor (maybe_n_heads use_split_qkv_input ::' d_model) A -> tensor [n_heads; d_head] A
             then fun input => weaksauce_einsum {{{ {{ head_index d_model,
                                           head_index d_model d_head
                                           -> head_index d_head }}
@@ -142,65 +142,65 @@ Module Attention.
                                       , W }}})
            input.
 
-    Definition q : tensor A (batch ++' [pos; n_heads; d_head])
+    Definition q : tensor (batch ++' [pos; n_heads; d_head]) A
       := PArray.checkpoint (einsum_input query_input W_Q + broadcast b_Q)%core.
-    Definition k : tensor A (batch ++' [pos; n_heads; d_head])
+    Definition k : tensor (batch ++' [pos; n_heads; d_head]) A
       := PArray.checkpoint (einsum_input key_input W_K + broadcast b_K)%core.
-    Definition v : tensor A (batch ++' [pos; n_heads; d_head])
+    Definition v : tensor (batch ++' [pos; n_heads; d_head]) A
       := PArray.checkpoint (einsum_input value_input W_V + broadcast b_V)%core.
 
-    Definition attn_scores : tensor A (batch ::' n_heads ::' pos ::' pos)
-      := (let qk : tensor A (batch ++' [n_heads; pos; pos])
+    Definition attn_scores : tensor (batch ::' n_heads ::' pos ::' pos) A
+      := (let qk : tensor (batch ++' [n_heads; pos; pos]) A
             := Tensor.map2'
-                 (fun q k : tensor A [pos; n_heads; d_head]
+                 (fun q k : tensor [pos; n_heads; d_head] A
                   => weaksauce_einsum
                        {{{ {{ query_pos head_index d_head ,
                                  key_pos head_index d_head
                                  -> head_index query_pos key_pos }}
                              , q
                              , k }}}
-                    : tensor A [n_heads; pos; pos])
+                    : tensor [n_heads; pos; pos] A)
                  q
                  k in
           PArray.checkpoint (qk / broadcast' attn_scale))%core.
 
-    Definition apply_causal_mask (attn_scores : tensor A (batch ::' n_heads ::' pos ::' pos))
-      : tensor A (batch ::' n_heads ::' pos ::' pos)
+    Definition apply_causal_mask (attn_scores : tensor (batch ::' n_heads ::' pos ::' pos) A)
+      : tensor (batch ::' n_heads ::' pos ::' pos) A
       := Tensor.map'
-           (fun attn_scores : tensor A [pos; pos]
+           (fun attn_scores : tensor [pos; pos] A
             => Tensor.where_ mask.[:pos,:pos] attn_scores (broadcast' IGNORE))
            attn_scores.
 
-    Definition masked_attn_scores : tensor A (batch ::' n_heads ::' pos ::' pos)
+    Definition masked_attn_scores : tensor (batch ::' n_heads ::' pos ::' pos) A
       := apply_causal_mask attn_scores.
 
-    Definition pattern : tensor A (batch ::' n_heads ::' pos ::' pos)
+    Definition pattern : tensor (batch ::' n_heads ::' pos ::' pos) A
       := PArray.checkpoint (softmax_dim_m1 masked_attn_scores).
 
-    Definition z : tensor A (batch ::' pos ::' n_heads ::' d_head)
+    Definition z : tensor (batch ::' pos ::' n_heads ::' d_head) A
       := PArray.checkpoint
            (Tensor.map2'
-              (fun (v : tensor A [pos; n_heads; d_head])
-                   (pattern : tensor A [n_heads; pos; pos])
+              (fun (v : tensor [pos; n_heads; d_head] A)
+                   (pattern : tensor [n_heads; pos; pos] A)
                => weaksauce_einsum {{{ {{  key_pos head_index d_head,
                               head_index query_pos key_pos ->
                               query_pos head_index d_head }}
                           , v
                           , pattern }}}
-                 : tensor A [pos; n_heads; d_head])
+                 : tensor [pos; n_heads; d_head] A)
               v
               pattern).
 
-    Definition attn_out : tensor A (batch ::' pos ::' d_model)
+    Definition attn_out : tensor (batch ::' pos ::' d_model) A
       := (let out
             := Tensor.map'
-                 (fun z : tensor A [pos; n_heads; d_head]
+                 (fun z : tensor [pos; n_heads; d_head] A
                   => weaksauce_einsum {{{ {{ pos head_index d_head,
                                  head_index d_head d_model ->
                                  pos d_model }}
                              , z
                              , W_O }}}
-                    : tensor A [pos; d_model])
+                    : tensor [pos; d_model] A)
                  z in
           PArray.checkpoint (out + broadcast b_O))%core.
   End __.
@@ -218,32 +218,32 @@ Module TransformerBlock.
       {pos n_heads d_model d_head} {n_ctx:N}
       {use_split_qkv_input : with_default "use_split_qkv_input" bool false}
       {normalization_type : with_default "normalization_type" (option NormalizationType) (Some LN)}
-      (W_Q W_K W_V W_O : tensor A [n_heads; d_model; d_head])
-      (b_Q b_K b_V : tensor A [n_heads; d_head])
-      (b_O : tensor A [d_model])
+      (W_Q W_K W_V W_O : tensor [n_heads; d_model; d_head] A)
+      (b_Q b_K b_V : tensor [n_heads; d_head] A)
+      (b_O : tensor [d_model] A)
       (eps : A)
       (ln1_w ln1_b ln2_w ln2_b : match normalization_type with
-                                 | Some LN => tensor A [d_model]
+                                 | Some LN => tensor [d_model] A
                                  | Datatypes.None => with_default "()" True I
                                  end)
-      (resid_pre : tensor A ((batch ::' pos) ++' [d_model]))
+      (resid_pre : tensor ((batch ::' pos) ++' [d_model]) A)
       (maybe_n_heads := fun b : bool => (if b return Shape (if b then _ else _) then [n_heads] else [])%shape).
 
     Definition add_head_dimension
-      (resid_pre : tensor A ((batch ::' pos) ++' [d_model]))
-      : tensor A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model))
-      := if use_split_qkv_input return tensor A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model))
+      (resid_pre : tensor ((batch ::' pos) ++' [d_model]) A)
+      : tensor ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model)) A
+      := if use_split_qkv_input return tensor ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model)) A
          then Tensor.map'
-                (fun resid_pre : tensor A [d_model]
-                 => Tensor.repeat resid_pre [n_heads]
-                   : tensor A [n_heads; d_model])
+                (fun resid_pre : tensor [d_model] A
+                 => Tensor.repeat [n_heads] resid_pre
+                   : tensor [n_heads; d_model] A)
                 resid_pre
          else resid_pre.
-    Definition query_input : tensor A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model))
+    Definition query_input : tensor ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model)) A
       := add_head_dimension resid_pre.
-    Definition key_input : tensor A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model))
+    Definition key_input : tensor ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model)) A
       := add_head_dimension resid_pre.
-    Definition value_input : tensor A ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model))
+    Definition value_input : tensor ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model)) A
       := add_head_dimension resid_pre.
 
     #[local] Notation LayerNorm_forward
@@ -257,13 +257,13 @@ Module TransformerBlock.
           end)
            (only parsing).
 
-    Definition ln1 {r} {s : Shape r} (t : tensor A (s ::' d_model)) : tensor A (s ::' d_model)
+    Definition ln1 {r} {s : Shape r} (t : tensor (s ::' d_model) A) : tensor (s ::' d_model) A
       := LayerNorm_forward ln1_w ln1_b t.
-    Definition ln2 {r} {s : Shape r} (t : tensor A (s ::' d_model)) : tensor A (s ::' d_model)
+    Definition ln2 {r} {s : Shape r} (t : tensor (s ::' d_model) A) : tensor (s ::' d_model) A
       := LayerNorm_forward ln2_w ln2_b t.
 
-    Definition attn_only_out : tensor A (batch ++ [pos; d_model])
-      := (let attn_out : tensor A (batch ++ [pos; d_model])
+    Definition attn_only_out : tensor (batch ++ [pos; d_model]) A
+      := (let attn_out : tensor (batch ++ [pos; d_model]) A
             := Attention.attn_out
                  (n_ctx:=n_ctx)
                  W_Q W_K W_V W_O
@@ -274,7 +274,7 @@ Module TransformerBlock.
           resid_pre + attn_out)%core.
 
     (** convenience *)
-    Local Definition attn_masked_attn_scores : tensor A (batch ::' n_heads ::' pos ::' pos)
+    Local Definition attn_masked_attn_scores : tensor (batch ::' n_heads ::' pos ::' pos) A
       := Attention.masked_attn_scores
            (n_ctx:=n_ctx)
            W_Q W_K
@@ -282,7 +282,7 @@ Module TransformerBlock.
            (ln1 query_input)
            (ln1 key_input).
 
-    Local Definition attn_pattern : tensor A (batch ::' n_heads ::' pos ::' pos)
+    Local Definition attn_pattern : tensor (batch ::' n_heads ::' pos ::' pos) A
       := Attention.pattern
            (n_ctx:=n_ctx)
            W_Q W_K
@@ -304,33 +304,33 @@ Module HookedTransformer.
       {normalization_type : with_default "normalization_type" (option NormalizationType) (Some LN)}
       (eps : A)
 
-      (W_E : tensor A [d_vocab; d_model])
-      (W_pos : tensor A [n_ctx; d_model])
+      (W_E : tensor [d_vocab; d_model] A)
+      (W_pos : tensor [n_ctx; d_model] A)
 
       (blocks_params
-        : list ((* (W_Q W_K W_V W_O : tensor A [n_heads; d_model; d_head])
-      (b_Q b_K b_V : tensor A [n_heads; d_head])
-      (b_O : tensor A [d_model])
-      (ln1_w ln1_b : tensor A [d_model]) *)
-              tensor A [n_heads; d_model; d_head] * tensor A [n_heads; d_model; d_head] * tensor A [n_heads; d_model; d_head] * tensor A [n_heads; d_model; d_head]
-              * tensor A [n_heads; d_head] * tensor A [n_heads; d_head] * tensor A [n_heads; d_head]
-              * tensor A [d_model]
+        : list ((* (W_Q W_K W_V W_O : tensor [n_heads; d_model; d_head] A)
+      (b_Q b_K b_V : tensor [n_heads; d_head] A)
+      (b_O : tensor [d_model] A)
+      (ln1_w ln1_b : tensor [d_model] A) *)
+              tensor [n_heads; d_model; d_head] A * tensor [n_heads; d_model; d_head] A * tensor [n_heads; d_model; d_head] A * tensor [n_heads; d_model; d_head] A
+              * tensor [n_heads; d_head] A * tensor [n_heads; d_head] A * tensor [n_heads; d_head] A
+              * tensor [d_model] A
               * match normalization_type with
-                | Some LN => tensor A [d_model]
+                | Some LN => tensor [d_model] A
                 | Datatypes.None => with_default "()" True I
                 end
               * match normalization_type with
-                | Some LN => tensor A [d_model]
+                | Some LN => tensor [d_model] A
                 | Datatypes.None => with_default "()" True I
                 end))
 
       (ln_final_w ln_final_b
         : match normalization_type with
-          | Some LN => tensor A [d_model]
+          | Some LN => tensor [d_model] A
           | Datatypes.None => with_default "()" True I
           end)
 
-      (W_U : tensor A [d_model; d_vocab_out]) (b_U : tensor A [d_vocab_out])
+      (W_U : tensor [d_model; d_vocab_out] A) (b_U : tensor [d_vocab_out] A)
     .
 
     Section with_batch.
@@ -338,13 +338,13 @@ Module HookedTransformer.
         (s := (batch ::' pos)%shape)
         (resid_shape := (s ::' d_model)%shape).
 
-      Definition embed (tokens : tensor IndexType s) : tensor A resid_shape
+      Definition embed (tokens : tensor s IndexType) : tensor resid_shape A
         := Embed.forward W_E tokens.
 
-      Definition pos_embed (tokens : tensor IndexType s) : tensor A resid_shape
+      Definition pos_embed (tokens : tensor s IndexType) : tensor resid_shape A
         := PosEmbed.forward W_pos tokens.
 
-      Definition blocks : list (tensor A resid_shape -> tensor A resid_shape)
+      Definition blocks : list (tensor resid_shape A -> tensor resid_shape A)
         := List.map
              (fun '(W_Q, W_K, W_V, W_O,
                     b_Q, b_K, b_V,
@@ -370,13 +370,13 @@ Module HookedTransformer.
           end)
            (only parsing).
 
-      Definition ln_final (resid : tensor A resid_shape) : tensor A resid_shape
+      Definition ln_final (resid : tensor resid_shape A) : tensor resid_shape A
         := LayerNorm_forward ln_final_w ln_final_b resid.
 
-      Definition unembed (resid : tensor A resid_shape) : tensor A (s ::' d_vocab_out)
+      Definition unembed (resid : tensor resid_shape A) : tensor (s ::' d_vocab_out) A
         := Unembed.forward W_U b_U resid.
 
-      Definition blocks_cps {T} {n : with_default "blocks n" nat (List.length blocks)} (residual : tensor A resid_shape) (K : tensor A resid_shape -> T) : T
+      Definition blocks_cps {T} {n : with_default "blocks n" nat (List.length blocks)} (residual : tensor resid_shape A) (K : tensor resid_shape A -> T) : T
         := List.fold_right
              (fun block cont residual
               => let residual := PArray.checkpoint (block residual) in
@@ -385,12 +385,12 @@ Module HookedTransformer.
              (List.firstn n blocks)
              residual.
 
-      Definition resid_postembed (tokens : tensor IndexType s) : tensor A resid_shape
+      Definition resid_postembed (tokens : tensor s IndexType) : tensor resid_shape A
         := (let embed          := embed tokens in
             let pos_embed      := pos_embed tokens in
             PArray.checkpoint (embed + pos_embed)%core).
 
-      Definition logits (tokens : tensor IndexType s) : tensor A (s ::' d_vocab_out)
+      Definition logits (tokens : tensor s IndexType) : tensor (s ::' d_vocab_out) A
         := (let residual       := resid_postembed tokens in
             blocks_cps
               residual
@@ -399,12 +399,12 @@ Module HookedTransformer.
                   let logits   := PArray.checkpoint (unembed residual) in
                   logits)).
 
-      Definition forward (tokens : tensor IndexType s) : tensor A (s ::' d_vocab_out)
+      Definition forward (tokens : tensor s IndexType) : tensor (s ::' d_vocab_out) A
         := logits tokens.
 
       (** convenience *)
       Local Definition blocks_attn_masked_attn_scores
-        : list (tensor A resid_shape -> tensor A (batch ::' n_heads ::' pos ::' pos))
+        : list (tensor resid_shape A -> tensor (batch ::' n_heads ::' pos ::' pos) A)
         := List.map
              (fun '(W_Q, W_K, W_V, W_O,
                     b_Q, b_K, b_V,
@@ -419,7 +419,7 @@ Module HookedTransformer.
              blocks_params.
 
       Local Definition blocks_attn_pattern
-        : list (tensor A resid_shape -> tensor A (batch ::' n_heads ::' pos ::' pos))
+        : list (tensor resid_shape A -> tensor (batch ::' n_heads ::' pos ::' pos) A)
         := List.map
              (fun '(W_Q, W_K, W_V, W_O,
                     b_Q, b_K, b_V,
@@ -433,8 +433,8 @@ Module HookedTransformer.
                    ln1_w ln1_b)
              blocks_params.
 
-      Local Definition masked_attn_scores (n : nat) (tokens : tensor IndexType s)
-        : option (tensor A (batch ::' n_heads ::' pos ::' pos))
+      Local Definition masked_attn_scores (n : nat) (tokens : tensor s IndexType)
+        : option (tensor (batch ::' n_heads ::' pos ::' pos) A)
         := match List.nth_error blocks_attn_masked_attn_scores n with
            | Some block_n_attn_masked_attn_scores
              => Some (let residual       := resid_postembed tokens in
@@ -446,8 +446,8 @@ Module HookedTransformer.
            | None => None
            end.
 
-      Local Definition attn_pattern (n : nat) (tokens : tensor IndexType s)
-        : option (tensor A (batch ::' n_heads ::' pos ::' pos))
+      Local Definition attn_pattern (n : nat) (tokens : tensor s IndexType)
+        : option (tensor (batch ::' n_heads ::' pos ::' pos) A)
         := match List.nth_error blocks_attn_pattern n with
            | Some block_n_attn_pattern
              => Some (let residual       := resid_postembed tokens in

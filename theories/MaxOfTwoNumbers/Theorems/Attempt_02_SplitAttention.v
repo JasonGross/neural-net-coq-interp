@@ -35,7 +35,7 @@ Local Ltac let_bind_subst_shape _ :=
 #[export] Existing Instance reflexive_eq_dom_reflexive.
 #[local] Hint Constants Opaque : typeclass_instances.
 #[local] Typeclasses Transparent
-  relation fst snd
+  relation Hetero.relation fst snd
   Classes.max Instances.Uint63.max has_default_max_leb
   Classes.leb Instances.Uint63.leb
   Classes.one

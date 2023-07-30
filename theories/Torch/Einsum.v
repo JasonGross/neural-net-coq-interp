@@ -214,31 +214,31 @@ Import RawIndex.UncurryNotation.
 Declare Custom Entry einsum_args.
 (*TODO: use Ltac/Ltac2 just to strip off the unused einsums, and to push the einsums under the Tensor.uncurry.  Use Gallina to introduce einsums for all shapes.*)
 Notation "{{{ {{ i1 .. i_ , j1 .. j_ -> k1 .. k_ }} , t1 , t2 }}}"
-  := (match t1%tensor, t2%tensor, _ as A, _ as B, _ as C, _ as r1, _ as r2, _ as r3, _ as s1, _ as s2, _ as s3 return @tensor _ C s3 with
+  := (match t1%tensor, t2%tensor, _ as A, _ as B, _ as C, _ as r1, _ as r2, _ as r3, _ as s1, _ as s2, _ as s3 return @tensor _ s3 C with
       | t1', t2', A, B, C, r1, r2, r3, s1, s2, s3
-        => match t1' : @tensor r1 A s1, t2' : @tensor r2 B s2 return @tensor r3 C s3 with
+        => match t1' : @tensor r1 s1 A, t2' : @tensor r2 s2 B return @tensor r3 s3 C with
            | t1', t2'
              => match (* for typing *)
                  unify_rank_from_idxs r1 @ i1 .. i_,
                  unify_rank_from_idxs r2 @ j1 .. j_,
                  unify_rank_from_idxs r3 @ k1 .. k_
-                   return @tensor r3 C s3
+                   return @tensor r3 s3 C
                  with
                | _, _, _
                  => @with_shape
-                      r1 (tensor C s3) s1
+                      r1 s1 (tensor s3 C)
                       (λ i1 .. i_ ,
                         @with_shape
-                          r2 (tensor C s3) s2
+                          r2 s2 (tensor s3 C)
                           (λ j1 .. j_ ,
                             (match
                                 (Shape.snoc .. (Shape.snoc Shape.nil i1) .. i_),
                                 (Shape.snoc .. (Shape.snoc Shape.nil j1) .. j_)
-                                return @tensor r3 C s3
+                                return @tensor r3 s3 C
                               with
                               | __I_SHAPE, __J_SHAPE
                                 => @Tensor.uncurry
-                                     r3 C s3
+                                     r3 s3 C
                                      (λ k1 .. k_ ,
                                        match @Arith.Classes.mul
                                                A B C try_tc
@@ -270,5 +270,5 @@ Notation "'weaksauce_einsum' x"
 Set Printing Implicit.
 Check (weaksauce_einsum {{{ {{ query_pos head_index d_head,
                    key_pos head_index d_head
-                   -> head_index query_pos key_pos }}, (_:tensor _ [2;1;5]), (_:tensor _ [2;1;5]) }}} : tensor _ [1; 2; 2]).
+                   -> head_index query_pos key_pos }}, (_:tensor [2;1;5] _), (_:tensor [2;1;5] _) }}} : tensor [1; 2; 2] _).
 *)

@@ -517,15 +517,15 @@ Definition tensor_of_rank@{a r} (A : Type@{a}) (r : Rank)
 Definition tensor@{a r} {r : Rank} (A : Type@{a}) (s : Shape@{r} r)
   := tensor_of_rank@{a r} A r.
 *)
-Monomorphic Definition tensor_of_rank (A : Type) (r : Rank) : Type
+Monomorphic Definition tensor_of_rank (r : Rank) (A : Type) : Type
   := RawIndex r -> A.
-Monomorphic Definition tensor {r : Rank} (A : Type) (s : Shape r) : Type
-  := tensor_of_rank A r.
+Monomorphic Definition tensor {r : Rank} (s : Shape r) (A : Type) : Type
+  := tensor_of_rank r A.
 
-Monomorphic Definition tensor_dep {r A s} (P : A -> Type) (x : @tensor r A s)
+Monomorphic Definition tensor_dep {r s A} (P : A -> Type) (x : @tensor r s A)
   := forall i : RawIndex r, P (x i).
 
-Definition tensor_undep {r A s P x} (t : @tensor_dep r A s (fun _ => P) x) : @tensor r P s
+Definition tensor_undep {r s A P x} (t : @tensor_dep r s A (fun _ => P) x) : @tensor r s P
   := t.
 
 Declare Scope tensor_scope.
@@ -536,16 +536,16 @@ Bind Scope tensor_scope with tensor_of_rank.
 Bind Scope tensor_scope with tensor.
 Local Open Scope tensor_scope.
 
-#[export] Instance empty_of_rank {A r} {default : pointed A} : pointed (tensor_of_rank A r)
+#[export] Instance empty_of_rank {r A} {default : pointed A} : pointed (tensor_of_rank r A)
   := fun _ => default.
-#[export] Instance empty {r A} {default : pointed A} {s : Shape r} : pointed (tensor A s)
+#[export] Instance empty {r A} {default : pointed A} {s : Shape r} : pointed (tensor s A)
   := empty_of_rank.
 
 #[export] Typeclasses Opaque Index.
 
 Ltac get_shape val :=
   lazymatch type of val with
-  | tensor _ ?shape => shape
+  | tensor ?shape _ => shape
   | list ?x
     => let len := (eval cbv in (Uint63.of_Z (Z.of_N (N.of_nat (List.length val))))) in
        let rest := lazymatch (eval hnf in val) with
@@ -561,50 +561,50 @@ Ltac get_shape val :=
   | _ => constr:(Shape.nil)
   end.
 Notation shape_of x := (match x return _ with y => ltac:(let s := get_shape y in exact s) end) (only parsing).
-Class compute_shape_of {A r} (x : A) := get_shape_of : Shape r.
+Class compute_shape_of {r A} (x : A) := get_shape_of : Shape r.
 #[global] Hint Extern 0 (compute_shape_of ?x) => let s := get_shape x in exact s : typeclass_instances.
 
 Module PArray.
-  Fixpoint concrete_tensor_of_rank (A : Type) (r : Rank) : Type
+  Fixpoint concrete_tensor_of_rank (r : Rank) (A : Type) : Type
     := match r with
        | O => A
-       | S r => concrete_tensor_of_rank (array A) r
+       | S r => concrete_tensor_of_rank r (array A)
        end.
-  Definition concrete_tensor {r : Rank} (A : Type) (s : Shape r) : Type
-    := concrete_tensor_of_rank A r.
+  Definition concrete_tensor {r : Rank} (s : Shape r) (A : Type) : Type
+    := concrete_tensor_of_rank r A.
   #[global] Strategy 100 [tensor_of_rank tensor concrete_tensor concrete_tensor_of_rank].
 
   Module Tensor.
-    Fixpoint map {r A B} (f : A -> B) : forall {s}, @concrete_tensor r A s -> @concrete_tensor r B s
-      := match r return forall {s}, @concrete_tensor r A s -> @concrete_tensor r B s with
+    Fixpoint map {r s A B} (f : A -> B) : @concrete_tensor r s A -> @concrete_tensor r s B
+      := match r return forall {s}, @concrete_tensor r s A -> @concrete_tensor r s B with
          | O => fun _ => f
-         | S r => fun s t => @map r _ _ (PArray.map f) (Shape.hd s) t
-         end.
-    Definition copy {r A s} t := @map r A A (fun x => x) s t.
+         | S r => fun s t => @map r (Shape.hd s) _ _ (PArray.map f) t
+         end s.
+    Definition copy {r s A} t := @map r s A A (fun x => x) t.
   End Tensor.
 
-  Fixpoint concretize {r : Rank} {A : Type} {default : pointed A} {struct r} : forall {s : Shape r} (t : tensor A s), concrete_tensor A s
-    := match r with
+  Fixpoint concretize {r : Rank} {s : Shape r} {A : Type} {default : pointed A} {struct r} : forall (t : tensor s A), concrete_tensor s A
+    := match r return forall (s : Shape r) (t : tensor s A), concrete_tensor s A with
        | 0%nat => fun _tt f => f tt
        | S r
          => fun '(s, len) f
             => concretize (r:=r) (A:=array A) (s:=s) (fun idxs => PArray.init_default len (fun idx => f (idxs, idx)))
-       end.
+       end s.
   Fixpoint abstract_of_rank {r : Rank} {A : Type} {struct r}
-    : concrete_tensor_of_rank A r -> tensor_of_rank A r
+    : concrete_tensor_of_rank r A -> tensor_of_rank r A
     := match r with
        | O => fun v _tt => v
        | S r => fun t '(idxs, idx) => PArray.get (@abstract_of_rank r (array A) t idxs) idx
        end.
-  Definition abstract {r : Rank} {A : Type} {s : Shape r} : concrete_tensor A s -> tensor A s
+  Definition abstract {r : Rank} {s : Shape r} {A : Type} : concrete_tensor s A -> tensor s A
     := abstract_of_rank.
 
-  Notation to_tensor t := (@abstract _ _ (shape_of t%array) t%array) (only parsing).
+  Notation to_tensor t := (@abstract _ (shape_of t%array) _ t%array) (only parsing).
 
-  Lemma abstract_concretize {r A default} {s : Shape r} {t} {idxs : RawIndex r}
+  Lemma abstract_concretize {r} {s : Shape r} {A default} {t} {idxs : RawIndex r}
     (in_bounds : is_true (match r with O => true | _ => idxs <? s end)%core)
     (in_max_bounds : is_true (match r with O => true | _ => idxs <? RawIndex.repeat PArray.max_length r end)%core)
-    : abstract (@concretize r A default s t) idxs = t idxs.
+    : abstract (@concretize r s A default t) idxs = t idxs.
   Proof.
     cbv [abstract].
     revert A default idxs t in_bounds in_max_bounds; induction r as [|r IH]; cbn [abstract_of_rank concretize]; intros.
@@ -622,7 +622,7 @@ Module PArray.
       reflexivity. }
   Qed.
 
-  Definition reabstract {r : Rank} {A s} (t_ : unit -> @tensor r A s) (t : @concrete_tensor r A s) : @tensor r A s
+  Definition reabstract {r s A} (t_ : unit -> @tensor r s A) (t : @concrete_tensor r s A) : @tensor r s A
     := let t := abstract t in
        fun idxs
        => if ((idxs <? s) && (idxs <? RawIndex.repeat PArray.max_length r))%core%bool
@@ -634,7 +634,7 @@ Module PArray.
           (in_bounds : is_true (match r with O => true | _ => idxs <? s end)%core)
           (in_max_bounds : is_true (match r with O => true | _ => idxs <? RawIndex.repeat PArray.max_length r end)%core),
           abstract t idxs = t_ tt idxs)
-      -> @reabstract r A s t_ t idxs = t_ tt idxs.
+      -> @reabstract r s A t_ t idxs = t_ tt idxs.
   Proof.
     cbv [reabstract].
     cbv [andb].
@@ -644,60 +644,60 @@ Module PArray.
     all: discriminate.
   Qed.
 
-  Lemma reabstract_ext_correct {r A default} {s : Shape r} {t_ t}
-    : t = @concretize r A default s (t_ tt) -> forall idxs, @reabstract r A s t_ t idxs = t_ tt idxs.
+  Lemma reabstract_ext_correct {r s A default} {t_ t}
+    : t = @concretize r s A default (t_ tt) -> forall idxs, @reabstract r s A t_ t idxs = t_ tt idxs.
   Proof. intros; subst; apply reabstract_correct, abstract_concretize. Qed.
 
-  Definition checkpoint {r : Rank} {A default s} t : @tensor r A s
+  Definition checkpoint {r s A default} t : @tensor r s A
     := let t_ _ := t in
-       let t := @concretize r A default s t in
+       let t := @concretize r s A default t in
        reabstract t_ t.
 
-  Lemma checkpoint_correct {r A default} {s : Shape r} {t} {idxs : RawIndex r}
-    : @checkpoint r A default s t idxs = t idxs.
+  Lemma checkpoint_correct {r s A default t} {idxs : RawIndex r}
+    : @checkpoint r s A default t idxs = t idxs.
   Proof. cbv [checkpoint]; erewrite reabstract_ext_correct; reflexivity. Qed.
 End PArray.
 
 Module List.
-  Fixpoint concrete_tensor_of_rank (A : Type) (r : Rank) : Type
+  Fixpoint concrete_tensor_of_rank (r : Rank) (A : Type) : Type
     := match r with
        | O => A
-       | S r => concrete_tensor_of_rank (list A) r
+       | S r => concrete_tensor_of_rank r (list A)
        end.
-  Definition concrete_tensor {r : Rank} (A : Type) (s : Shape r) : Type
-    := concrete_tensor_of_rank A r.
+  Definition concrete_tensor {r : Rank} (s : Shape r) (A : Type) : Type
+    := concrete_tensor_of_rank r A.
   #[global] Strategy 100 [tensor_of_rank tensor concrete_tensor concrete_tensor_of_rank].
 
   Module Tensor.
-    Fixpoint map {r A B} (f : A -> B) : forall {s}, @concrete_tensor r A s -> @concrete_tensor r B s
-      := match r return forall {s}, @concrete_tensor r A s -> @concrete_tensor r B s with
+    Fixpoint map {r s A B} (f : A -> B) : @concrete_tensor r s A -> @concrete_tensor r s B
+      := match r return forall {s : Shape r}, @concrete_tensor r s A -> @concrete_tensor r s B with
          | O => fun _ => f
-         | S r => fun s t => @map r _ _ (List.map f) (Shape.hd s) t
-         end.
-    Definition copy {r A s} t := @map r A A (fun x => x) s t.
+         | S r => fun s t => @map r (Shape.hd s) _ _ (List.map f) t
+         end s.
+    Definition copy {r s A} t := @map r s A A (fun x => x) t.
   End Tensor.
 
-  Fixpoint concretize {r : Rank} {A : Type} {struct r} : forall {s : Shape r} (t : tensor A s), concrete_tensor A s
-    := match r return forall {s : Shape r} (t : tensor A s), concrete_tensor A s with
+  Fixpoint concretize {r : Rank} {s : Shape r} {A : Type} {struct r} : forall (t : tensor s A), concrete_tensor s A
+    := match r return forall {s : Shape r} (t : tensor s A), concrete_tensor s A with
        | 0%nat => fun _tt f => f tt
        | S r
          => fun '(s, len) f
             => concretize (r:=r) (A:=list A) (s:=s) (fun idxs => List.map (fun idx => f (idxs, Uint63.of_Z (Z.of_nat idx))) (List.seq 0 (Z.to_nat (Uint63.to_Z len))))
-       end.
+       end s.
   Fixpoint abstract_of_rank {r : Rank} {A : Type} {default : pointed A} {struct r}
-    : concrete_tensor_of_rank A r -> tensor_of_rank A r
-    := match r return concrete_tensor_of_rank A r -> tensor_of_rank A r with
+    : concrete_tensor_of_rank r A -> tensor_of_rank r A
+    := match r return concrete_tensor_of_rank r A -> tensor_of_rank r A with
        | O => fun v _tt => v
        | S r => fun t '(idxs, idx) => nth_default default (@abstract_of_rank r (list A) _ t idxs) (Z.to_nat (Uint63.to_Z idx))
        end.
-  Definition abstract {r : Rank} {A : Type} {default : pointed A} {s : Shape r} : concrete_tensor A s -> tensor A s
+  Definition abstract {r : Rank} {s : Shape r} {A : Type} {default : pointed A} : concrete_tensor s A -> tensor s A
     := abstract_of_rank.
 
-  Notation to_tensor t := (@abstract _ _ _ (shape_of t%list) t%list) (only parsing).
+  Notation to_tensor t := (@abstract _ (shape_of t%list) _ _ t%list) (only parsing).
 
-  Lemma abstract_concretize {r A} {default : pointed A} {s : Shape r} {t} {idxs : RawIndex r}
+  Lemma abstract_concretize {r s A} {default : pointed A} {t} {idxs : RawIndex r}
     (in_bounds : is_true (match r with O => true | _ => idxs <? s end)%core)
-    : abstract (@concretize r A s t) idxs = t idxs.
+    : abstract (@concretize r s A t) idxs = t idxs.
   Proof.
     cbv [abstract].
     revert A default idxs t in_bounds; induction r as [|r IH]; cbn [abstract_of_rank concretize]; intros.
@@ -721,18 +721,18 @@ Module List.
       all: first [ reflexivity | lia ]. }
   Qed.
 
-  Definition reabstract {r : Rank} {A default s} (t_ : unit -> @tensor r A s) (t : @concrete_tensor r A s) : @tensor r A s
-    := let t := @abstract r A default s t in
+  Definition reabstract {r s A default} (t_ : unit -> @tensor r s A) (t : @concrete_tensor r s A) : @tensor r s A
+    := let t := @abstract r s A default t in
        fun idxs
        => if (idxs <? s)%core
           then t idxs
           else t_ tt idxs.
 
-  Lemma reabstract_correct {r A default} {s : Shape r} {t_} {t} {idxs : RawIndex r}
+  Lemma reabstract_correct {r s A default} {t_} {t} {idxs : RawIndex r}
     : (forall
           (in_bounds : is_true (match r with O => true | _ => idxs <? s end)%core),
           abstract t idxs = t_ tt idxs)
-      -> @reabstract r A default s t_ t idxs = t_ tt idxs.
+      -> @reabstract r s A default t_ t idxs = t_ tt idxs.
   Proof.
     cbv [reabstract].
     repeat match goal with |- context[match ?x with _ => _ end] => destruct x eqn:? end.
@@ -740,16 +740,16 @@ Module List.
   Qed.
 
   Lemma reabstract_ext_correct {r A default} {s : Shape r} {t_ t}
-    : t = @concretize r A s (t_ tt) -> forall idxs, @reabstract r A default s t_ t idxs = t_ tt idxs.
+    : t = @concretize r s A (t_ tt) -> forall idxs, @reabstract r s A default t_ t idxs = t_ tt idxs.
   Proof. intros; subst; apply reabstract_correct, abstract_concretize. Qed.
 
-  Definition checkpoint {r : Rank} {A default s} t : @tensor r A s
+  Definition checkpoint {r : Rank} {s A default} t : @tensor r s A
     := let t_ _ := t in
-       let t := @concretize r A s t in
-       @reabstract r A default s t_ t.
+       let t := @concretize r s A t in
+       @reabstract r s A default t_ t.
 
-  Lemma checkpoint_correct {r A default} {s : Shape r} {t} {idxs : RawIndex r}
-    : @checkpoint r A default s t idxs = t idxs.
+  Lemma checkpoint_correct {r s A default} {t} {idxs : RawIndex r}
+    : @checkpoint r s A default t idxs = t idxs.
   Proof. cbv [checkpoint]; erewrite reabstract_ext_correct; reflexivity. Qed.
 End List.
 
@@ -759,82 +759,82 @@ Definition adjust_index_for (s : ShapeType) : Index.IndexType -> RawIndex.IndexT
 Definition adjust_indices_for {r} (s : Shape r) : Index r -> RawIndex r
   := Index.map2 adjust_index_for s.
 
-Definition with_shape {r A} (s : Shape r) : @Shape.curriedT r A -> A
+Definition with_shape {r} (s : Shape r) {A} : @Shape.curriedT r A -> A
   := fun f => Shape.uncurry f s.
 
 Notation of_array ls := (PArray.to_tensor ls) (only parsing).
 Notation of_list ls := (List.to_tensor ls) (only parsing).
 
-Definition repeat' {r A} (x : A) {s : Shape r} : tensor A s
+Definition repeat' {r} {s : Shape r} {A} (x : A) : tensor s A
   := fun _ => x.
-Definition ones {r} {A} {one : has_one A} (s : Shape r) : tensor A s
+Definition ones {r} (s : Shape r) {A} {one : has_one A} : tensor s A
   := repeat' one.
-Definition zeros {r} {A} {zero : has_zero A} (s : Shape r) : tensor A s
+Definition zeros {r} (s : Shape r) {A} {zero : has_zero A} : tensor s A
   := repeat' zero.
 
-Definition raw_get {r A} {s : Shape r} (t : tensor A s) (idxs : RawIndex r) : A
+Definition raw_get {r} {s : Shape r} {A} (t : tensor s A) (idxs : RawIndex r) : A
   := t idxs.
-Definition get {r A} {s : Shape r} (t : tensor A s) (idxs : Index r) : A
+Definition get {r} {s : Shape r} {A} (t : tensor s A) (idxs : Index r) : A
   := raw_get t (adjust_indices_for s idxs).
-Definition item {A} (t : tensor A []) : A := raw_get t tt.
+Definition item {A} (t : tensor [] A) : A := raw_get t tt.
 
 Notation "x .[ y ]" := (get x y) : tensor_scope.
 Notation "x .[ y ]" := (raw_get x y) : raw_tensor_scope.
 
-Definition curried_raw_get {r A} {s : Shape r} (t : tensor A s) : @RawIndex.curriedT r A
+Definition curried_raw_get {r} {s : Shape r} {A} (t : tensor s A) : @RawIndex.curriedT r A
   := RawIndex.curry (fun idxs => raw_get t idxs).
-Definition curried_get {r A} {s : Shape r} (t : tensor A s) : @Index.curriedT r A
+Definition curried_get {r} {s : Shape r} {A} (t : tensor s A) : @Index.curriedT r A
   := Index.curry (fun idxs => get t idxs).
 
-Definition map {r A B} {s : Shape r} (f : A -> B) (t : tensor A s) : tensor B s
+Definition map {r} {s : Shape r} {A B} (f : A -> B) (t : tensor s A) : tensor s B
   := fun i => f (t i).
-Definition map2 {r A B C} {sA sB : Shape r} (f : A -> B -> C) (tA : tensor A sA) (tB : tensor B sB) : tensor C (Shape.broadcast2 sA sB)
+Definition map2 {r} {sA sB : Shape r} {A B C} (f : A -> B -> C) (tA : tensor sA A) (tB : tensor sB B) : tensor (Shape.broadcast2 sA sB) C
   := fun i => f (tA i) (tB i).
-Definition map3 {r A B C D} {sA sB sC : Shape r} (f : A -> B -> C -> D) (tA : tensor A sA) (tB : tensor B sB) (tC : tensor C sC) : tensor D (Shape.broadcast3 sA sB sC)
+Definition map3 {r} {sA sB sC : Shape r} {A B C D} (f : A -> B -> C -> D) (tA : tensor sA A) (tB : tensor sB B) (tC : tensor sC C) : tensor (Shape.broadcast3 sA sB sC) D
   := fun i => f (tA i) (tB i) (tC i).
 
-Definition map_dep {r A B} {s : Shape r} (f : forall a : A, B a) (t : tensor A s) : tensor_dep B t
+Definition map_dep {r} {s : Shape r} {A B} (f : forall a : A, B a) (t : tensor s A) : tensor_dep B t
   := fun i => f (t i).
 
 
-Definition where_ {r A} {sA : Shape r} {sB : Shape r} {sC : Shape r} (condition : tensor bool sA) (input : tensor A sB) (other : tensor A sC) : tensor A (Shape.broadcast3 sA sB sC)
+Definition where_ {r} {sA sB sC : Shape r} {A} (condition : tensor sA bool) (input : tensor sB A) (other : tensor sC A) : tensor (Shape.broadcast3 sA sB sC) A
   := map3 Bool.where_ condition input other.
 
 (* TODO: autobroadcast initial *)
-#[export] Instance tensor_add {r} {sA sB : Shape r} {A B C} {addA : has_add_with A B C} : has_add_with (tensor A sA) (tensor B sB) (tensor C (Shape.broadcast2 sA sB)) := map2 add.
-#[export] Instance tensor_sub {r} {sA sB : Shape r} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor A sA) (tensor B sB) (tensor C (Shape.broadcast2 sA sB)) := map2 sub.
-#[export] Instance tensor_mul {r} {sA sB : Shape r} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor A sA) (tensor B sB) (tensor C (Shape.broadcast2 sA sB)) := map2 mul.
-#[export] Instance tensor_div_by {r} {sA sB : Shape r} {A B C} {div_byAB : has_div_by A B C} : has_div_by (tensor A sA) (tensor B sB) (tensor C (Shape.broadcast2 sA sB)) := map2 div.
-#[export] Instance tensor_sqrt {r} {s : Shape r} {A} {sqrtA : has_sqrt A} : has_sqrt (tensor A s) := map sqrt.
-#[export] Instance tensor_opp {r} {s : Shape r} {A} {oppA : has_opp A} : has_opp (tensor A s) := map opp.
-#[export] Instance add'1 {r} {s : Shape r} {a b} {A B C} {addA : has_add_with A B C} : has_add_with (tensor A (s ::' a)) (tensor B (s ::' b)) (tensor C (s ::' max a b)) | 10 := tensor_add.
-#[export] Instance sub'1 {r} {s : Shape r} {a b} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor A (s ::' a)) (tensor B (s ::' b)) (tensor C (s ::' max a b)) | 10 := tensor_sub.
-#[export] Instance mul'1 {r} {s : Shape r} {a b} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor A (s ::' a)) (tensor B (s ::' b)) (tensor C (s ::' max a b)) | 10 := tensor_mul.
-#[export] Instance div_by'1 {r} {s : Shape r} {a b} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor A (s ::' a)) (tensor B (s ::' b)) (tensor C (s ::' max a b)) | 10 := tensor_div_by.
-#[export] Instance add'1s_r {r} {s : Shape r} {A B C} {addA : has_add_with A B C} : has_add_with (tensor A s) (tensor B (@Shape.ones r)) (tensor C s) | 10 := tensor_add.
-#[export] Instance add'1s_l {r} {s : Shape r} {A B C} {addA : has_add_with A B C} : has_add_with (tensor A (@Shape.ones r)) (tensor B s) (tensor C s) | 10 := tensor_add.
-#[export] Instance sub'1s_r {r} {s : Shape r} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor A s) (tensor B (@Shape.ones r)) (tensor C s) | 10 := tensor_sub.
-#[export] Instance sub'1s_l {r} {s : Shape r} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor A (@Shape.ones r)) (tensor B s) (tensor C s) | 10 := tensor_sub.
-#[export] Instance mul'1s_r {r} {s : Shape r} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor A s) (tensor B (@Shape.ones r)) (tensor C s) | 10 := tensor_mul.
-#[export] Instance mul'1s_l {r} {s : Shape r} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor A (@Shape.ones r)) (tensor B s) (tensor C s) | 10 := tensor_mul.
-#[export] Instance div_by'1s_r {r} {s : Shape r} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor A s) (tensor B (@Shape.ones r)) (tensor C s) | 10 := tensor_div_by.
-#[export] Instance div_by'1s_l {r} {s : Shape r} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor A (@Shape.ones r)) (tensor B s) (tensor C s) | 10 := tensor_div_by.
-#[export] Instance add'1s_r'1_same {r} {s : Shape r} {a} {A B C} {addA : has_add_with A B C} : has_add_with (tensor A (s ::' a)) (tensor B (@Shape.ones r ::' a)) (tensor C (s ::' a)) | 10 := tensor_add.
-#[export] Instance add'1s_l'1_same {r} {s : Shape r} {a} {A B C} {addA : has_add_with A B C} : has_add_with (tensor A (@Shape.ones r ::' a)) (tensor B (s ::' a)) (tensor C (s ::' a)) | 10 := tensor_add.
-#[export] Instance sub'1s_r'1_same {r} {s : Shape r} {a} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor A (s ::' a)) (tensor B (@Shape.ones r ::' a)) (tensor C (s ::' a)) | 10 := tensor_sub.
-#[export] Instance sub'1s_l'1_same {r} {s : Shape r} {a} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor A (@Shape.ones r ::' a)) (tensor B (s ::' a)) (tensor C (s ::' a)) | 10 := tensor_sub.
-#[export] Instance mul'1s_r'1_same {r} {s : Shape r} {a} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor A (s ::' a)) (tensor B (@Shape.ones r ::' a)) (tensor C (s ::' a)) | 10 := tensor_mul.
-#[export] Instance mul'1s_l'1_same {r} {s : Shape r} {a} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor A (@Shape.ones r ::' a)) (tensor B (s ::' a)) (tensor C (s ::' a)) | 10 := tensor_mul.
-#[export] Instance div_by'1s_r'1_same {r} {s : Shape r} {a} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor A (s ::' a)) (tensor B (@Shape.ones r ::' a)) (tensor C (s ::' a)) | 10 := tensor_div_by.
-#[export] Instance div_by'1s_l'1_same {r} {s : Shape r} {a} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor A (@Shape.ones r ::' a)) (tensor B (s ::' a)) (tensor C (s ::' a)) | 10 := tensor_div_by.
-#[export] Instance add'1s_r'1_same_app {r r'} {s : Shape r} {s' : Shape r'} {A B C} {addA : has_add_with A B C} : has_add_with (tensor A (s ++' s')) (tensor B (@Shape.ones r ++' s')) (tensor C (s ++' s')) | 10 := tensor_add.
-#[export] Instance add'1s_l'1_same_app {r r'} {s : Shape r} {s' : Shape r'} {A B C} {addA : has_add_with A B C} : has_add_with (tensor A (@Shape.ones r ++' s')) (tensor B (s ++' s')) (tensor C (s ++' s')) | 10 := tensor_add.
-#[export] Instance sub'1s_r'1_same_app {r r'} {s : Shape r} {s' : Shape r'} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor A (s ++' s')) (tensor B (@Shape.ones r ++' s')) (tensor C (s ++' s')) | 10 := tensor_sub.
-#[export] Instance sub'1s_l'1_same_app {r r'} {s : Shape r} {s' : Shape r'} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor A (@Shape.ones r ++' s')) (tensor B (s ++' s')) (tensor C (s ++' s')) | 10 := tensor_sub.
-#[export] Instance mul'1s_r'1_same_app {r r'} {s : Shape r} {s' : Shape r'} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor A (s ++' s')) (tensor B (@Shape.ones r ++' s')) (tensor C (s ++' s')) | 10 := tensor_mul.
-#[export] Instance mul'1s_l'1_same_app {r r'} {s : Shape r} {s' : Shape r'} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor A (@Shape.ones r ++' s')) (tensor B (s ++' s')) (tensor C (s ++' s')) | 10 := tensor_mul.
-#[export] Instance div_by'1s_r'1_same_app {r r'} {s : Shape r} {s' : Shape r'} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor A (s ++' s')) (tensor B (@Shape.ones r ++' s')) (tensor C (s ++' s')) | 10 := tensor_div_by.
-#[export] Instance div_by'1s_l'1_same_app {r r'} {s : Shape r} {s' : Shape r'} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor A (@Shape.ones r ++' s')) (tensor B (s ++' s')) (tensor C (s ++' s')) | 10 := tensor_div_by.
+#[export] Instance tensor_add {r} {sA sB : Shape r} {A B C} {addA : has_add_with A B C} : has_add_with (tensor sA A) (tensor sB B) (tensor (Shape.broadcast2 sA sB) C) := map2 add.
+#[export] Instance tensor_sub {r} {sA sB : Shape r} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor sA A) (tensor sB B) (tensor (Shape.broadcast2 sA sB) C) := map2 sub.
+#[export] Instance tensor_mul {r} {sA sB : Shape r} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor sA A) (tensor sB B) (tensor (Shape.broadcast2 sA sB) C) := map2 mul.
+#[export] Instance tensor_div_by {r} {sA sB : Shape r} {A B C} {div_byAB : has_div_by A B C} : has_div_by (tensor sA A) (tensor sB B) (tensor (Shape.broadcast2 sA sB) C) := map2 div.
+#[export] Instance tensor_sqrt {r} {s : Shape r} {A} {sqrtA : has_sqrt A} : has_sqrt (tensor s A) := map sqrt.
+#[export] Instance tensor_opp {r} {s : Shape r} {A} {oppA : has_opp A} : has_opp (tensor s A) := map opp.
+#[export] Instance add'1 {r} {s : Shape r} {a b} {A B C} {addA : has_add_with A B C} : has_add_with (tensor (s ::' a) A) (tensor (s ::' b) B) (tensor (s ::' max a b) C) | 10 := tensor_add.
+#[export] Instance sub'1 {r} {s : Shape r} {a b} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor (s ::' a) A) (tensor (s ::' b) B) (tensor (s ::' max a b) C) | 10 := tensor_sub.
+#[export] Instance mul'1 {r} {s : Shape r} {a b} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor (s ::' a) A) (tensor (s ::' b) B) (tensor (s ::' max a b) C) | 10 := tensor_mul.
+#[export] Instance div_by'1 {r} {s : Shape r} {a b} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor (s ::' a) A) (tensor (s ::' b) B) (tensor (s ::' max a b) C) | 10 := tensor_div_by.
+#[export] Instance add'1s_r {r} {s : Shape r} {A B C} {addA : has_add_with A B C} : has_add_with (tensor s A) (tensor (@Shape.ones r) B) (tensor s C) | 10 := tensor_add.
+#[export] Instance add'1s_l {r} {s : Shape r} {A B C} {addA : has_add_with A B C} : has_add_with (tensor (@Shape.ones r) A) (tensor s B) (tensor s C) | 10 := tensor_add.
+#[export] Instance sub'1s_r {r} {s : Shape r} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor s A) (tensor (@Shape.ones r) B) (tensor s C) | 10 := tensor_sub.
+#[export] Instance sub'1s_l {r} {s : Shape r} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor (@Shape.ones r) A) (tensor s B) (tensor s C) | 10 := tensor_sub.
+#[export] Instance mul'1s_r {r} {s : Shape r} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor s A) (tensor (@Shape.ones r) B) (tensor s C) | 10 := tensor_mul.
+#[export] Instance mul'1s_l {r} {s : Shape r} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor (@Shape.ones r) A) (tensor s B) (tensor s C) | 10 := tensor_mul.
+#[export] Instance div_by'1s_r {r} {s : Shape r} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor s A) (tensor (@Shape.ones r) B) (tensor s C) | 10 := tensor_div_by.
+#[export] Instance div_by'1s_l {r} {s : Shape r} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor (@Shape.ones r) A) (tensor s B) (tensor s C) | 10 := tensor_div_by.
+#[export] Instance add'1s_r'1_same {r} {s : Shape r} {a} {A B C} {addA : has_add_with A B C} : has_add_with (tensor (s ::' a) A) (tensor (@Shape.ones r ::' a) B) (tensor (s ::' a) C) | 10 := tensor_add.
+#[export] Instance add'1s_l'1_same {r} {s : Shape r} {a} {A B C} {addA : has_add_with A B C} : has_add_with (tensor (@Shape.ones r ::' a) A) (tensor (s ::' a) B) (tensor (s ::' a) C) | 10 := tensor_add.
+#[export] Instance sub'1s_r'1_same {r} {s : Shape r} {a} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor (s ::' a) A) (tensor (@Shape.ones r ::' a) B) (tensor (s ::' a) C) | 10 := tensor_sub.
+#[export] Instance sub'1s_l'1_same {r} {s : Shape r} {a} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor (@Shape.ones r ::' a) A) (tensor (s ::' a) B) (tensor (s ::' a) C) | 10 := tensor_sub.
+#[export] Instance mul'1s_r'1_same {r} {s : Shape r} {a} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor (s ::' a) A) (tensor (@Shape.ones r ::' a) B) (tensor (s ::' a) C) | 10 := tensor_mul.
+#[export] Instance mul'1s_l'1_same {r} {s : Shape r} {a} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor (@Shape.ones r ::' a) A) (tensor (s ::' a) B) (tensor (s ::' a) C) | 10 := tensor_mul.
+#[export] Instance div_by'1s_r'1_same {r} {s : Shape r} {a} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor (s ::' a) A) (tensor (@Shape.ones r ::' a) B) (tensor (s ::' a) C) | 10 := tensor_div_by.
+#[export] Instance div_by'1s_l'1_same {r} {s : Shape r} {a} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor (@Shape.ones r ::' a) A) (tensor (s ::' a) B) (tensor (s ::' a) C) | 10 := tensor_div_by.
+#[export] Instance add'1s_r'1_same_app {r r'} {s : Shape r} {s' : Shape r'} {A B C} {addA : has_add_with A B C} : has_add_with (tensor (s ++' s') A) (tensor (@Shape.ones r ++' s') B) (tensor (s ++' s') C) | 10 := tensor_add.
+#[export] Instance add'1s_l'1_same_app {r r'} {s : Shape r} {s' : Shape r'} {A B C} {addA : has_add_with A B C} : has_add_with (tensor (@Shape.ones r ++' s') A) (tensor (s ++' s') B) (tensor (s ++' s') C) | 10 := tensor_add.
+#[export] Instance sub'1s_r'1_same_app {r r'} {s : Shape r} {s' : Shape r'} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor (s ++' s') A) (tensor (@Shape.ones r ++' s') B) (tensor (s ++' s') C) | 10 := tensor_sub.
+#[export] Instance sub'1s_l'1_same_app {r r'} {s : Shape r} {s' : Shape r'} {A B C} {subA : has_sub_with A B C} : has_sub_with (tensor (@Shape.ones r ++' s') A) (tensor (s ++' s') B) (tensor (s ++' s') C) | 10 := tensor_sub.
+#[export] Instance mul'1s_r'1_same_app {r r'} {s : Shape r} {s' : Shape r'} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor (s ++' s') A) (tensor (@Shape.ones r ++' s') B) (tensor (s ++' s') C) | 10 := tensor_mul.
+#[export] Instance mul'1s_l'1_same_app {r r'} {s : Shape r} {s' : Shape r'} {A B C} {mulA : has_mul_with A B C} : has_mul_with (tensor (@Shape.ones r ++' s') A) (tensor (s ++' s') B) (tensor (s ++' s') C) | 10 := tensor_mul.
+#[export] Instance div_by'1s_r'1_same_app {r r'} {s : Shape r} {s' : Shape r'} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor (s ++' s') A) (tensor (@Shape.ones r ++' s') B) (tensor (s ++' s') C) | 10 := tensor_div_by.
+#[export] Instance div_by'1s_l'1_same_app {r r'} {s : Shape r} {s' : Shape r'} {A B C} {div_byA : has_div_by A B C} : has_div_by (tensor (@Shape.ones r ++' s') A) (tensor (s ++' s') B) (tensor (s ++' s') C) | 10 := tensor_div_by.
 
 (*
 Fixpoint extend_app_nil_l {P : Size -> Type} {s : Size} : P s -> P ([] ++' s)
@@ -849,139 +849,97 @@ Fixpoint contract_app_nil_l {P : Size -> Type} {s : Size} : P ([] ++' s) -> P s
      end.
  *)
 
-Definition reshape_app_split' {A r1 r2 s1 s2} : @tensor (r1 +' r2) A (s1 ++' s2) -> tensor (tensor A s2) s1
+Definition reshape_app_split' {r1 r2 s1 s2 A} : @tensor (r1 +' r2) (s1 ++' s2) A -> tensor s1 (tensor s2 A)
   := RawIndex.curry_radd.
-Definition reshape_app_combine' {A r1 r2 s1 s2} : tensor (tensor A s2) s1 -> @tensor (r1 +' r2) A (s1 ++' s2)
+Definition reshape_app_combine' {r1 r2 s1 s2 A} : tensor s1 (tensor s2 A) -> @tensor (r1 +' r2) (s1 ++' s2) A
   := RawIndex.uncurry_radd.
 (* infer s1 s2 from the conclusion *)
-#[global] Arguments reshape_app_combine' A & r1 r2 s1 s2 _.
-#[global] Arguments reshape_app_split' A & r1 r2 s1 s2 _.
-Definition reshape_app_split {A r1 r2 s1 s2} : @tensor (r1 +' r2) A (s1 ++' s2) -> tensor (tensor A s2) s1
+#[global] Arguments reshape_app_combine' & r1 r2 s1 s2 A _.
+#[global] Arguments reshape_app_split' & r1 r2 s1 s2 A _.
+Definition reshape_app_split {r1 r2 s1 s2 A} : @tensor (r1 +' r2) (s1 ++' s2) A -> tensor s1 (tensor s2 A)
   := reshape_app_split'.
-Definition reshape_app_combine {A r1 r2 s1 s2} : tensor (tensor A s2) s1 -> @tensor (r1 +' r2) A (s1 ++' s2)
+Definition reshape_app_combine {r1 r2 s1 s2 A} : tensor s1 (tensor s2 A) -> @tensor (r1 +' r2) (s1 ++' s2) A
   := reshape_app_combine'.
-Definition reshape_snoc_split {A r s1 s2} : @tensor (r +' 1) A (s1 ::' s2) -> tensor (tensor A [s2]) s1
+Definition reshape_snoc_split {r s1 s2 A} : @tensor (r +' 1) (s1 ::' s2) A -> tensor s1 (tensor [s2] A)
   := RawIndex.curry_radd.
-Definition reshape_snoc_combine {A r s1 s2} : tensor (tensor A [s2]) s1 -> @tensor (r +' 1) A (s1 ::' s2)
+Definition reshape_snoc_combine {r s1 s2 A} : tensor s1 (tensor [s2] A) -> @tensor (r +' 1) (s1 ::' s2) A
   := RawIndex.uncurry_radd.
-Definition uncurry {r A} {s : Shape r} : @RawIndex.curriedT r A -> tensor A s
+Definition uncurry {r} {s : Shape r} {A} : @RawIndex.curriedT r A -> tensor s A
   := RawIndex.uncurry.
-Definition curry {r A} {s : Shape r} : tensor A s -> @RawIndex.curriedT r A
+Definition curry {r} {s : Shape r} {A} : tensor s A -> @RawIndex.curriedT r A
   := RawIndex.curry.
 
-Definition map' {ra1 ra2 rb A B} {sa1 : Shape ra1} {sa2 : Shape ra2} {sb : Shape rb} (f : tensor A sa2 -> tensor B sb) (t : tensor A (sa1 ++' sa2)) : tensor B (sa1 ++' sb)
+Definition map' {ra1 ra2 rb A B} {sa1 : Shape ra1} {sa2 : Shape ra2} {sb : Shape rb} (f : tensor sa2 A -> tensor sb B) (t : tensor (sa1 ++' sa2) A) : tensor (sa1 ++' sb) B
   := reshape_app_combine (map f (reshape_app_split t)).
-Definition map2' {ri1 ri2 ro A B C} {sA1 sB1 : Shape ri1} {sA2 sB2 : Shape ri2} {so : Shape ro} (f : tensor A sA2 -> tensor B sB2 -> tensor C so) (tA : tensor A (sA1 ++' sA2)) (tB : tensor B (sB1 ++' sB2)) : tensor C (Shape.broadcast2 sA1 sB1 ++' so)
+Definition map2' {ri1 ri2 ro} {sA1 sB1 : Shape ri1} {sA2 sB2 : Shape ri2} {so : Shape ro} {A B C} (f : tensor sA2 A -> tensor sB2 B -> tensor so C) (tA : tensor (sA1 ++' sA2) A) (tB : tensor (sB1 ++' sB2) B) : tensor (Shape.broadcast2 sA1 sB1 ++' so) C
   := reshape_app_combine (map2 f (reshape_app_split tA) (reshape_app_split tB)).
 
-(*
-Definition reshape_S_fun_combine {I A} {r : Rank} : (I -> tensor_fun_of_rank I A r) -> tensor_fun_of_rank I A (1 +' r)
-  := match reshape_app_combine_gen (r1:=1) (r2:=r) with x => x end.
-Definition reshape_S_fun_split {I A} {r : Rank} : tensor_fun_of_rank I A (1 +' r) -> (I -> tensor_fun_of_rank I A r)
-  := match reshape_app_split_gen (r1:=1) (r2:=r) with x => x end.
-*)
-(*
-Require Import Program . Obligation Tactic := cbn; intros.
-Fixpoint broadcast_map_ {A B} {s1 s2 : Size} {keepdim : with_default bool false} (f : A -> tensor_of_shape B s2) {struct s1} : tensor_of_shape A s1 -> tensor_of_shape (tensor_of_shape B (s1 ++' (if keepdim then [1] else []) ++' s2) s1.
-refine match s1, keepdim return tensor_of_shape A s1 -> tensor_of_shape B (s1 ++' (if keepdim then [1] else []) ++' s2) with
-     | [], true => fun x => reshape_app_combine (s1:=[1]) (PArray.make 1 (f x))
-     | [], false => fun x => reshape_app_combine (s1:=[]) (f x)
-     | s1 ::' _, keepdim
-       => fun x => _ (*(broadcast_map (keepdim:=keepdim) (s1:=s1)) (* _(*PArray.map f*))*)*)
-       end; cbn in *.
-epose (@broadcast_map _ _ s1 _ keepdim _ x).
-epose (@broadcast_map _ _ s1 _ keepdim (fun a => reshape_app_combine (s1:=[1])).
-Next Obligation.
-  pose (
- pose (broa
-
-Fixpoint extended_broadcast_map {A B} {s1 s1' s2 : Size} (f : tensor_of_shape A s1' -> tensor_of_shape B s2) {struct s1} : tensor_of_shape A (s1 ++ s1') -> tensor_of_shape B (s1 ++ s2)
-  := match s1 with
-     | [] => f
-     | s :: s1
-       => PArray.map (extended_broadcast_map f)
-     end.
- *)
-
-(*
-Definition broadcast_m1 {A s} n : tensor_of_shape A s -> tensor_of_shape A (s ::' n)
-  := tensor_map (PArray.make n).
-Definition broadcast_0 {A s} n : tensor_of_shape A s -> tensor_of_shape A ([n] ++' s)
-  := fun x => reshape_app_combine (PArray.make n x).
-#[global] Arguments broadcast_m1 A & s n _.
-#[global] Arguments broadcast_0 A & s n _.
-Definition slice_none_m1 {A s} : tensor_of_shape A s -> tensor_of_shape A (s ::' 1)
-  := broadcast_m1 1.
-Definition slice_none_0 {A s} : tensor_of_shape A s -> tensor_of_shape A ([1] ++' s)
-  := broadcast_0 1.
-*)
-
-Definition broadcast' {A} (x : A) {r : Rank} : tensor A (@Shape.ones r)
+Definition broadcast' {r : Rank} {A} (x : A) : tensor (@Shape.ones r) A
   := repeat' x.
-Definition broadcast {r A} {s : Shape r} (x : tensor A s) {r' : Rank} : tensor A (@Shape.ones r' ++' s)
+Definition broadcast {r r'} {s : Shape r} {A} (x : tensor s A) : tensor (@Shape.ones r' ++' s) A
   := reshape_app_combine (broadcast' x).
-Definition repeat {r A} {s : Shape r} (x : tensor A s) {r' : Rank} (s' : Shape r') : tensor A (s' ++' s)
+Definition repeat {r r'} {s : Shape r} (s' : Shape r') {A} (x : tensor s A) : tensor (s' ++' s) A
   := reshape_app_combine (repeat' x (s:=s')).
 
-Definition keepdim_gen {r} {s : Shape r} {A B} (f : A -> tensor B s) : A -> tensor B ([1] ++' s)
+Definition keepdim_gen {r} {s : Shape r} {A B} (f : A -> tensor s B) : A -> tensor ([1] ++' s) B
   := fun a => broadcast (f a).
-Definition keepdim {A B} (f : A -> B) : A -> tensor B [1] := keepdim_gen (s:=[]) (fun a 'tt => f a).
+Definition keepdim {A B} (f : A -> B) : A -> tensor [1] B := keepdim_gen (s:=[]) (fun a 'tt => f a).
 #[local] Notation keepdimf := keepdim (only parsing).
 
-Definition reduce_axis_m1' {r A B} {s1 : Shape r} {s2}
+Definition reduce_axis_m1' {r} {s1 : Shape r} {s2} {A B}
   (reduction : forall (start stop step : RawIndexType), (RawIndexType -> A) -> B)
-  (t : tensor A (s1 ::' s2))
-  : tensor B s1
+  (t : tensor (s1 ::' s2) A)
+  : tensor s1 B
   := map (fun v => reduction 0 s2 1 (fun i => raw_get v [i])) (reshape_snoc_split t).
 
-Definition reduce_axis_m1 {r A B} {s1 : Shape r} {s2} {keepdim : with_default "keepdim" bool false}
+Definition reduce_axis_m1 {r} {s1 : Shape r} {s2} {A B} {keepdim : with_default "keepdim" bool false}
   (reduction : forall (start stop step : RawIndexType), (RawIndexType -> A) -> B)
-  : tensor A (s1 ::' s2) -> tensor B (s1 ++' if keepdim return Shape (if keepdim then _ else _) then [1] else [])
+  : tensor (s1 ::' s2) A -> tensor (s1 ++' if keepdim return Shape (if keepdim then _ else _) then [1] else []) B
   := if keepdim
-          return tensor A (s1 ::' s2) -> tensor B (s1 ++' if keepdim return Shape (if keepdim then _ else _) then [1] else [])
+          return tensor (s1 ::' s2) A -> tensor (s1 ++' if keepdim return Shape (if keepdim then _ else _) then [1] else []) B
      then fun t idxs => reduce_axis_m1' reduction t (RawIndex.hd idxs)
      else reduce_axis_m1' reduction.
 
-Definition softmax_dim_m1 {r A B C} {addB : has_add B} {expA : has_exp_to A B} {zeroB : has_zero B} {divB : has_div_by B B C} {s0 : Shape r} {s'} (s:=(s0 ::' s')%shape) (t : tensor A s) : tensor C s
-  := (let exp_t : tensor B s := map exp t in
-      let sum_exp_t : tensor B s := reduce_axis_m1 (keepdim:=true) sum exp_t in
+Definition softmax_dim_m1 {r} {s0 : Shape r} {s'} (s:=(s0 ::' s')%shape) {A B C} {addB : has_add B} {expA : has_exp_to A B} {zeroB : has_zero B} {divB : has_div_by B B C} (t : tensor s A) : tensor s C
+  := (let exp_t : tensor s B := map exp t in
+      let sum_exp_t : tensor s B := reduce_axis_m1 (keepdim:=true) sum exp_t in
       exp_t / sum_exp_t)%core.
 
-Definition log_softmax_dim_m1 {r A B C D} {addB : has_add B} {lnA : has_ln_to B C} {expA : has_exp_to A B} {zeroB : has_zero B} {divB : has_div_by A C D} {s0 : Shape r} {s'} (s:=(s0 ::' s')%shape) (t : tensor A s) : tensor D s
-  := (let exp_t : tensor B s := map exp t in
-      let sum_exp_t : tensor B s := reduce_axis_m1 (keepdim:=true) sum exp_t in
-      let ln_sum_exp_t : tensor C s := map ln sum_exp_t in
+Definition log_softmax_dim_m1 {r} {s0 : Shape r} {s'} (s:=(s0 ::' s')%shape) {A B C D} {addB : has_add B} {lnA : has_ln_to B C} {expA : has_exp_to A B} {zeroB : has_zero B} {divB : has_div_by A C D} (t : tensor s A) : tensor s D
+  := (let exp_t : tensor s B := map exp t in
+      let sum_exp_t : tensor s B := reduce_axis_m1 (keepdim:=true) sum exp_t in
+      let ln_sum_exp_t : tensor s C := map ln sum_exp_t in
       t / ln_sum_exp_t)%core.
 
-Definition unsqueeze_dim_m1 {A r} {s : Shape r} (t : tensor A s) : tensor A (s ::' 1)
+Definition unsqueeze_dim_m1 {r} {s : Shape r} {A} (t : tensor s A) : tensor (s ::' 1) A
   := fun idxs => raw_get t (RawIndex.hd idxs).
 
-Definition gather_dim_m1 {A r} {ssinput ssindex : Shape r} {sinput' sindex'}
+Definition gather_dim_m1 {r} {ssinput ssindex : Shape r} {sinput' sindex'} {A}
   (sinput := (ssinput ::' sinput')%shape) (sindex := (ssindex ::' sindex')%shape)
-  (input : tensor A sinput)
-  (index : tensor IndexType sindex)
-  : tensor A sindex
+  (input : tensor sinput A)
+  (index : tensor sindex IndexType)
+  : tensor sindex A
   := fun idx => raw_get input (RawIndex.hd idx ::' adjust_index_for sinput' (raw_get index idx))%raw_index.
 
-Definition squeeze {r A} {s : Shape r} (t : tensor A s) : tensor A (Shape.squeeze s)
+Definition squeeze {r} {s : Shape r} {A} (t : tensor s A) : tensor (Shape.squeeze s) A
   := fun idx => raw_get t (RawIndex.unsqueeze idx).
 
-Definition reshape_m1 {A r} {s : Shape r} (t : tensor A s) : tensor A (Shape.reshape s)
+Definition reshape_m1 {r} {s : Shape r} {A} (t : tensor s A) : tensor (Shape.reshape s) A
   := fun idx => raw_get t (RawIndex.unreshape s idx).
-Definition unreshape_m1 {A r} {s : Shape r} (t : tensor A (Shape.reshape s)) : tensor A s
+Definition unreshape_m1 {r} {s : Shape r} {A} (t : tensor (Shape.reshape s) A) : tensor s A
   := fun idx => raw_get t (RawIndex.reshape s idx).
 (*
-Definition reshape {A r1 r2} {s1 : Shape r1} (t : tensor A s1) (s2 : Shape r2) : tensor A s2
-  := unreshape_m1 (reshape_m1 t : tensor A (Shape.reshape s2)).
+Definition reshape {A r1 r2} {s1 : Shape r1} (t : tensor s1 A) (s2 : Shape r2) : tensor s2 A
+  := unreshape_m1 (reshape_m1 t : tensor (Shape.reshape s2) A).
  *)
 
-Definition to_bool {A} {zero : has_zero A} {eqb : has_eqb A} {r} {s : Shape r} (xs : tensor A s) : tensor bool s
+Definition to_bool {r} {s : Shape r} {A} {zero : has_zero A} {eqb : has_eqb A} (xs : tensor s A) : tensor s bool
   := map (fun x => x ≠? 0)%core xs.
 
-Definition of_bool {A} {zero : has_zero A} {one : has_one A} {r} {s : Shape r} (xs : tensor bool s) : tensor A s
+Definition of_bool {r} {s : Shape r} {A} {zero : has_zero A} {one : has_one A} (xs : tensor s bool) : tensor s A
   := map (fun x:bool => if x then 1 else 0)%core xs.
 
-Definition mean {r A} {s : Shape r} {B C} {zero : has_zero A} {add : has_add A} {div_by : has_div_by A B C} {coer : has_coer Z B} (t : tensor A s) : tensor C []
+Definition mean {r} {s : Shape r} {A} {B C} {zero : has_zero A} {add : has_add A} {div_by : has_div_by A B C} {coer : has_coer Z B} (t : tensor s A) : tensor [] C
   := reduce_axis_m1 Reduction.mean (reshape_m1 t).
 (*
 Definition arange {A B} {START STOP STEP IDX} {oneA : has_one A} {zeroStart : has_zero START} {oneStep : has_one STEP} {sub : has_sub_with STOP START A} {subA : has_sub A} {div : has_int_div_by A STEP B} {coerZ : has_coer B Z} {coerIDX : has_coer int IDX} {add : has_add_with START C D} {mul : has_mul_with STEP IDX C}
@@ -991,7 +949,7 @@ Definition arange {A B} {START STOP STEP IDX} {oneA : has_one A} {zeroStart : ha
                 (start + idx * step)%uint63.
 *)
 Definition arange {start : with_default "start" int 0%uint63} (stop : int) {step : with_default "step" int 1%uint63}
-  : tensor int [(1 + (stop - start - 1) / step)%uint63]
+  : tensor [(1 + (stop - start - 1) / step)%uint63] int
   := fun idx => let idx := RawIndex.item idx in
                 (start + idx * step)%uint63.
 
@@ -999,9 +957,9 @@ Definition arange {start : with_default "start" int 0%uint63} (stop : int) {step
 #[global] Arguments arange {_} _ {_}, _ _ {_}, _ _ _.
 
 (* TODO: nary *)
-Definition tupleify {A B s1 s2} (t1 : tensor A [s1]) (t2 : tensor B [s2]) : tensor (A * B) [s1; s2]
+Definition tupleify {s1 s2 A B} (t1 : tensor [s1] A) (t2 : tensor [s2] B) : tensor [s1; s2] (A * B)
   := fun '((tt, a), b) => (raw_get t1 [a], raw_get t2 [b]).
-Definition cartesian_prod {A s1 s2} (t1 : tensor A [s1]) (t2 : tensor A [s2]) : tensor A [s1 * s2; 2]
+Definition cartesian_prod {s1 s2 A} (t1 : tensor [s1] A) (t2 : tensor [s2] A) : tensor [s1 * s2; 2] A
   := fun '((tt, idx), tuple_idx)
      => let '(a, b) := raw_get (reshape_m1 (tupleify t1 t2)) [idx] in
         nth_default a [a; b] (Z.to_nat (Uint63.to_Z (tuple_idx mod 2))).
@@ -1024,14 +982,14 @@ main diagonal, and similarly a negative value excludes just as many
 diagonals below the main diagonal. The main diagonal are the set of
 indices {(i,i)} for i ∈ [0,min{d₁,d₂}−1] where d₁,d₂ are the
 dimensions of the matrix. *)
-Definition tril {A} {zero : has_zero A} {rnk} {s : Shape rnk} {r c}
-  {diagonal : with_default "diagonal" int 0%int63} (input : tensor A (s ++' [r; c]))
-  : tensor A (s ++' [r; c])
+Definition tril {rnk} {s : Shape rnk} {A} {zero : has_zero A} {r c}
+  {diagonal : with_default "diagonal" int 0%int63} (input : tensor (s ++' [r; c]) A)
+  : tensor (s ++' [r; c]) A
   := fun '(((_, i), j) as idxs)
      => if ((0 ≤? i) && (i <? r) && (Sint63.max 0 (1 + i + diagonal) ≤? j) && (j <? c))%bool
         then 0%core
         else input idxs.
-#[global] Arguments tril {A%type_scope zero rnk%nat s%shape} {r c}%uint63 {diagonal}%sint63 input%tensor.
+#[global] Arguments tril {rnk%nat s%shape} {A%type_scope zero} {r c}%uint63 {diagonal}%sint63 input%tensor.
 (** Quoting https://pytorch.org/docs/stable/generated/torch.triu.html
 
 torch.triu(input, diagonal=0, *, out=None) → Tensor
@@ -1050,11 +1008,11 @@ main diagonal, and similarly a negative value includes just as many
 diagonals below the main diagonal. The main diagonal are the set of
 indices {(i,i)} for i ∈ [0,min{d₁,d₂}−1] where d₁,d₂ are the
 dimensions of the matrix. *)
-Definition triu {A} {zero : has_zero A} {rnk} {s : Shape rnk} {r c}
-  {diagonal : with_default "diagonal" int 0%int63} (input : tensor A (s ++' [r; c]))
-  : tensor A (s ++' [r; c])
+Definition triu {rnk} {s : Shape rnk} {A} {zero : has_zero A} {r c}
+  {diagonal : with_default "diagonal" int 0%int63} (input : tensor (s ++' [r; c]) A)
+  : tensor (s ++' [r; c]) A
   := fun '(((_, i), j) as idxs)
      => if ((0 ≤? i) && (i <? r) && (0 ≤? j) && (j <? Sint63.max 0 (i + diagonal)))%bool
         then 0%core
         else input idxs.
-#[global] Arguments triu {A%type_scope zero rnk%nat s%shape} {r c}%uint63 {diagonal}%sint63 input%tensor.
+#[global] Arguments triu {rnk%nat s%shape} {A%type_scope zero} {r c}%uint63 {diagonal}%sint63 input%tensor.

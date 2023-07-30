@@ -19,7 +19,7 @@ Inductive SliceIndexType : Rank -> Rank -> Type :=
 | single_index (i : IndexType) : SliceIndexType 1 0
 .
 Inductive FancyIndexType {r} (s : Shape r) : Rank -> Rank -> Type :=
-| tensor_index (_ : tensor IndexType s) : FancyIndexType s 1 0
+| tensor_index (_ : tensor s IndexType) : FancyIndexType s 1 0
 (*| bool_tensor_index {s'} (_ : tensor IndexType (s ::' s')) : FancyIndexType s 1 1*)
 | normal_index {ri ro} (_ : SliceIndexType ri ro) : FancyIndexType s ri ro
 .
@@ -93,12 +93,12 @@ Module SliceIndex.
            => transfer_shape_single_index transfer_shape_idxs
          end.
 
-    Definition slice {A ris ros ri ro}
+    Definition slice {ris ros ri ro A}
       (transfer_shape_idxs : Shape ris -> Shape ros)
-      (slice_idxs : forall {s : Shape ris}, tensor A s -> tensor A (transfer_shape_idxs s))
+      (slice_idxs : forall {s : Shape ris}, tensor s A -> tensor (transfer_shape_idxs s) A)
       (idx : SliceIndexType ri ro)
-      : forall {s : Shape (ris +' ri)}, tensor A s -> tensor A (transfer_shape transfer_shape_idxs idx s)
-      := match idx in Slicing.SliceIndexType ri ro return forall s : Shape (ris +' ri), tensor A s -> tensor A (transfer_shape transfer_shape_idxs idx s) with
+      : forall {s : Shape (ris +' ri)}, tensor s A -> tensor (transfer_shape transfer_shape_idxs idx s) A
+      := match idx in Slicing.SliceIndexType ri ro return forall s : Shape (ris +' ri), tensor s A -> tensor (transfer_shape transfer_shape_idxs idx s) A with
          | slice_index sl
            => fun s t idxs' (* adjust slice at last index *)
               => let idx := RawIndex.tl idxs' in
@@ -149,8 +149,8 @@ Module SliceIndex.
        | idxs ::' idx => SliceIndexType.transfer_shape (transfer_shape idxs) idx
        end.
 
-  Fixpoint slice {A ri ro} (idxs : t ri ro) : forall {s : Shape ri}, tensor A s -> tensor A (transfer_shape idxs s)
-    := match idxs in t ri ro return forall {s : Shape ri}, tensor A s -> tensor A (transfer_shape idxs s) with
+  Fixpoint slice {A ri ro} (idxs : t ri ro) : forall {s : Shape ri}, tensor s A -> tensor (transfer_shape idxs s) A
+    := match idxs in t ri ro return forall {s : Shape ri}, tensor s A -> tensor (transfer_shape idxs s) A with
        | [] => fun _s t idxs' => t tt
        | … => fun _s t idxs' => t idxs'
        | idxs ::' idx
@@ -186,7 +186,7 @@ Module FancyIndex.
   Module FancyIndexType.
     Definition t {r} := @FancyIndexType r.
     Notation IndexType := t.
-    Definition broadcast {rb} {s_broadcast : Shape rb} {ri ro} (idx : @t rb s_broadcast ri ro) : tensor (SliceIndex.IndexType ri ro) s_broadcast
+    Definition broadcast {rb} {s_broadcast : Shape rb} {ri ro} (idx : @t rb s_broadcast ri ro) : tensor s_broadcast (SliceIndex.IndexType ri ro)
       := match idx with
          | tensor_index idx
            => Tensor.map single_index idx
@@ -203,71 +203,6 @@ Module FancyIndex.
          | tensor_index _
            => SliceIndex.SliceIndexType.transfer_shape_single_index transfer_inner_shape_idxs
          end.
-    (*
-    Definition slice {A} {rb} {s_broadcast : Shape rb} {ris ros ri ro}
-      (transfer_inner_shape_idxs : Shape ris -> Shape ros)
-      (slice_idxs : forall {s : Shape ris}, tensor A s -> tensor A (s_broadcast ++' transfer_inner_shape_idxs s))
-      (idx : @t rb s_broadcast ri ro)
-      : forall {s : Shape (ris +' ri)}, tensor A s -> tensor A (s_broadcast ++' transfer_inner_shape transfer_inner_shape_idxs idx s).
-      refine match idx with
-             | normal_index idx
-               => fun _s t
-                => _
-
-             | tensor_index idx
-               => _
-             end.
-        cbn.
-     *)(*
-    Fixpoint reshape_slice_
-      {A} {rb} {s_broadcast : Shape rb} {ris ros ri ro}
-      (broadcast_idxs : tensor (SliceIndex.t ris ros) s_broadcast)
-      (transfer_inner_shape_idxs : Shape ris -> Shape ros)
-      (reshape_slice__idxs : forall {P} {s : Shape ris} (i : RawIndex rb), tensor A (SliceIndex.transfer_shape (broadcast_idxs i) s) -> tensor A (transfer_inner_shape_idxs s))
-      (idx : @t rb s_broadcast ri ro)
-      : forall {s : Shape (ris +' ri)} (i : RawIndex rb), tensor A (SliceIndex.transfer_shape (Tensor.map2 SliceIndex.snoc broadcast_idxs (broadcast idx) i) s) -> tensor A (transfer_inner_shape transfer_inner_shape_idxs idx s).
-      refine match idx with
-             | tensor_index idx
-               => fun _s => @reshape_slice__idxs _
-             | normal_index idx
-               => _
-             end; cbn.
-      cbv [SliceIndex.SliceIndexType.transfer_shape].
-      2: {
-      cbv [SliceIndex.SliceIndexType.transfer_shape_single_index].
-      reffine (
-    refine match idxs with
-           | [] => fun _s i t => t
-           | … => fun _s i t => t
-           | idxs ::' idx
-             => _
-           end; cbn.
-
-Tensor.map2
-              (fun idxs idx => idxs ::' idx)%slice_index
-              (@broadcast _ _ _ _ idxs)
-              (FancyIndexType.broadcast idx)
-
-      forall (s : Shape (r +' r1)) (i : RawIndex rb),
-  tensor A
-    (SliceIndex.SliceIndexType.transfer_shape (SliceIndex.transfer_shape (broadcast idxs i))
-       (FancyIndexType.broadcast idx i) s) ->
-  tensor A (FancyIndexType.transfer_inner_shape (transfer_inner_shape idxs) idx s)
-        *)
-    (*
-  Definition reshape_slice_
-      {A} {rb} {s_broadcast : Shape rb} {ris ros ri ro}
-      (broadcast_idxs : tensor (SliceIndex.t ris ros) s_broadcast)
-      (transfer_inner_shape_idxs : Shape ris -> Shape ros)
-      (reshape_slice__idxs : forall {s : Shape ris} (x : tensor A s),
-          tensor_dep (fun i => tensor A (SliceIndex.transfer_shape i s)) broadcast_idxs
-          -> tensor (tensor A (transfer_inner_shape_idxs s)) s_broadcast)
-      (idx : @t rb s_broadcast ri ro)
-    : forall {s : Shape (ris +' ri)} (x : tensor A s),
-      tensor_dep (fun i => tensor A (SliceIndex.transfer_shape i s)) (Tensor.map2 SliceIndex.snoc broadcast_idxs (broadcast idx))
-      -> tensor (tensor A (transfer_inner_shape transfer_inner_shape_idxs idx s)) s_broadcast
-    := fun _ _ x => x.
-  *)
   End FancyIndexType.
   Notation IndexType := FancyIndexType.t.
   Notation FancyIndexType := FancyIndexType.t.
@@ -309,7 +244,7 @@ Tensor.map2
   Definition transfer_shape {rb sb ri ro} (idxs : @t rb sb ri ro) (s : Shape ri) : Shape (rb +' ro)
     := sb ++' transfer_inner_shape idxs s.
 
-  Fixpoint broadcast {rb} {s_broadcast : Shape rb} {ri ro} (idxs : @t rb s_broadcast ri ro) : tensor (SliceIndex.t ri ro) s_broadcast
+  Fixpoint broadcast {rb} {s_broadcast : Shape rb} {ri ro} (idxs : @t rb s_broadcast ri ro) : tensor s_broadcast (SliceIndex.t ri ro)
     := match idxs with
        | [] => Tensor.repeat' []%slice_index
        | … => Tensor.repeat' …%slice_index
@@ -320,13 +255,13 @@ Tensor.map2
               (FancyIndexType.broadcast idx)
        end.
 
-  Definition slice_ {A} {rb} {s_broadcast : Shape rb} {ri ro} (idxs : @t rb s_broadcast ri ro) {s : Shape ri} (x : tensor A s)
-    : tensor_dep (fun i => tensor A (SliceIndex.transfer_shape i s)) (broadcast idxs)
+  Definition slice_ {A} {rb} {s_broadcast : Shape rb} {ri ro} (idxs : @t rb s_broadcast ri ro) {s : Shape ri} (x : tensor s A)
+    : tensor_dep (fun i => tensor (SliceIndex.transfer_shape i s) A) (broadcast idxs)
     := Tensor.map_dep (fun i => SliceIndex.slice i x) (broadcast idxs).
 
   Definition slice
-    {A} {rb} {s_broadcast : Shape rb} {ri ro} (idxs : @t rb s_broadcast ri ro) {s : Shape ri} (x : tensor A s)
-    : tensor A (transfer_shape idxs s)
+    {A} {rb} {s_broadcast : Shape rb} {ri ro} (idxs : @t rb s_broadcast ri ro) {s : Shape ri} (x : tensor s A)
+    : tensor (transfer_shape idxs s) A
     := reshape_app_combine' (slice_ idxs x).
 
   Module Import FancyIndexNotations.
@@ -362,5 +297,17 @@ Export FancyIndex.FancyIndexNotations.
 
 (*
 Local Open Scope tensor_scope.
+Eval cbn in  _.[1:-1:1].
+Eval cbn in  _.[1:-1:1,1:-1:1].
+Eval cbn in  _.[1:-1].
+Eval cbn in  _.[:-1].
+Eval cbn in  _.[1:].
+Eval cbn in  _.[1::1].
+Eval cbn in  _.[1::1,:1].
+Eval cbn in  _.[1::1,1:].
+Eval cbn in  _.[1::1,1].
+Eval cbn in  _.[1:-1:1, None, 0].
 Eval cbn in  _.[:, None, 0].
+Eval cbn in  _.[:1, None, 0].
+Eval cbn in  _.[:-1:1, None, 0].
 *)

@@ -61,6 +61,7 @@ theories/Util/List/Proofs.v
 theories/Util/List/Instances/NthError.v
 theories/Util/PArray/Instances.v
 theories/Util/PArray/Proofs.v
+theories/Util/Relations/Relation_Definitions/Hetero.v
 theories/Util/Strings/Ascii.v
 theories/Util/Strings/Byte.v
 theories/Util/Strings/String.v
