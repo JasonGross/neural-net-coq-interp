@@ -2,15 +2,19 @@ From Coq.Structures Require Import Equalities.
 From Coq Require Import ZArith Sint63 Uint63 List PArray Lia Setoid Morphisms.
 From NeuralNetInterp.Util Require Nat.
 From NeuralNetInterp.Util Require Import Wf_Uint63 Wf_Uint63.Instances PArray.Proofs PArray.Instances List.Proofs Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool (*PrimitiveProd*).
-From NeuralNetInterp.Util.Relations Require Relation_Definitions.Hetero.
+From NeuralNetInterp.Util.Relations Require Relation_Definitions.Hetero Relation_Definitions.Dependent.
+From NeuralNetInterp.Util.Classes Require Morphisms.Dependent.
 From NeuralNetInterp.Torch Require Import Tensor.
+Import Dependent.ProperNotations.
 
 Module Tensor.
-  Definition eqfR_rank {r A B} (R : Hetero.relation A B) : Hetero.relation (@tensor_of_rank r A) (@tensor_of_rank r B)
-    := fun x y => forall i, R (x i) (y i).
+  Definition eqfR_rank {r} : Dependent.relation (@tensor_of_rank r)
+    := fun A B R x y => forall i, R (x i) (y i).
+  #[global] Arguments eqfR_rank {r} [A B] R x y.
   Notation eqf_rank := (eqfR_rank eq).
-  Definition eqfR {r s A B} R : Hetero.relation (@tensor r s A) (@tensor r s B)
-    := eqfR_rank R.
+  Definition eqfR {r s} : Dependent.relation (@tensor r s)
+    := eqfR_rank.
+  #[global] Arguments eqfR {r s} [A B] R x y.
   Notation eqf := (eqfR eq).
 
   #[export] Instance eqf_Reflexive {r s A R} {_ : Reflexive R} : Reflexive (@eqfR r s A A R).
@@ -37,6 +41,7 @@ Module Tensor.
     : Proper (Tensor.eqf ==> Tensor.eqf ==> Basics.impl) (@Tensor.eqfR r s A A eq)
     := _.
 
+  Locate Proper.
   Module PArray.
     Import Tensor.PArray.
     #[export] Instance concretize_Proper {r s A default} : Proper (eqf ==> eq) (@concretize r s A default).
@@ -54,8 +59,11 @@ Module Tensor.
     #[export] Instance checkpoint_Proper {r s A default} : Proper (eqf ==> eqf) (@checkpoint r s A default).
     Proof. cbv [checkpoint]; repeat intro; subst; apply reabstract_Proper; try apply concretize_Proper; repeat intro; auto. Qed.
 
-    Definition checkpoint_correct_eqf {r s A default t} : eqf (@checkpoint r s A default t) t
+    Definition checkpoint_correct_eqf {r s A default} t : eqf (@checkpoint r s A default t) t
       := fun idxs => checkpoint_correct.
+
+    #[export] Instance checkpoint_Proper_dep {r s} : Dependent.Proper (Dependent.idR ==> eqfR ==> eqfR) (@checkpoint r s).
+    Proof. repeat intro; rewrite !checkpoint_correct_eqf; auto. Qed.
   End PArray.
   Export (hints) PArray.
 
@@ -78,13 +86,22 @@ Module Tensor.
 
     Definition checkpoint_correct_eqf {r s A default t} : eqf (@checkpoint r s A default t) t
       := fun idxs => checkpoint_correct.
+
+    #[export] Instance checkpoint_Proper_dep {r s} : Dependent.Proper (Dependent.idR ==> eqfR ==> eqfR) (@checkpoint r s).
+    Proof. repeat intro; rewrite !checkpoint_correct_eqf; auto. Qed.
   End List.
   Export (hints) List.
 
-  #[export] Instance raw_get_Proper {r s A} : Proper (eqf ==> eq ==> eq) (@raw_get r s A).
+  #[export] Instance raw_get_Proper_dep {r s} : Dependent.Proper (eqfR ==> Dependent.const eq ==> Dependent.idR) (@raw_get r s).
   Proof. cbv -[tensor RawIndex]; intros; subst; eauto. Qed.
-  #[export] Instance get_Proper {r s A} : Proper (eqf ==> eq ==> eq) (@get r s A).
+  #[export] Instance raw_get_Proper {r s A} : Proper (eqf ==> eq ==> eq) (@raw_get r s A).
+  Proof. apply raw_get_Proper_dep. Qed.
+  #[export] Instance get_Proper_dep {r s} : Dependent.Proper (eqfR ==> Dependent.const eq ==> Dependent.idR) (@get r s).
   Proof. cbv -[tensor RawIndex adjust_indices_for]; intros; subst; eauto. Qed.
+  #[export] Instance get_Proper {r s A} : Proper (eqf ==> eq ==> eq) (@get r s A).
+  Proof. apply get_Proper_dep. Qed.
+  #[export] Instance item_Proper_dep : Dependent.Proper (eqfR ==> Dependent.idR) (@item).
+  Proof. cbv [item]; repeat intro; apply raw_get_Proper_dep; eauto. Qed.
   #[export] Instance item_Proper {A} : Proper (eqf ==> eq) (@item A) := _.
   (*
 Definition curried_raw_get {r A} {s : Shape r} (t : tensor A s) : @RawIndex.curriedT r A
@@ -106,7 +123,9 @@ Definition curried_get {r A} {s : Shape r} (t : tensor A s) : @Index.curriedT r 
             end ].
   Local Ltac t := repeat t_step.
 
-  #[export] Instance map_Proper_R {r s A B RA RB} : Proper ((RA ==> RB) ==> eqfR RA ==> eqfR RB) (@map r s A B).
+  Goal True.
+    epose (fun r s => Dependent.Proper2 ((Dependent.id2R1 ==> RB) ==> eqfR RA ==> eqfR RB) (@map r s)
+  #[export] Instance map_Proper_dep {r s} : Dependent.Proper2 ((Dependent.id2R1 ==> RB) ==> eqfR RA ==> eqfR RB) (@map r s).
   Proof. cbv -[tensor RawIndex]; t. Qed.
   #[export] Instance map2_Proper_R {r sA sB A B C RA RB RC} : Proper ((RA ==> RB ==> RC) ==> eqfR RA ==> eqfR RB ==> eqfR RC) (@map2 r sA sB A B C).
   Proof. cbv -[tensor RawIndex]; t. Qed.
