@@ -4,9 +4,10 @@ From NeuralNetInterp.Util Require Nat.
 From NeuralNetInterp.Util Require Import Wf_Uint63 Wf_Uint63.Instances PArray.Proofs PArray.Instances List.Proofs Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool (*PrimitiveProd*).
 From NeuralNetInterp.Util.Tactics Require Import BreakMatch.
 From NeuralNetInterp.Util.Relations Require Relation_Definitions.Hetero Relation_Definitions.Dependent.
-From NeuralNetInterp.Util.Classes Require Morphisms.Dependent.
+From NeuralNetInterp.Util.Classes Require Morphisms.Dependent RelationClasses.Dependent.
 From NeuralNetInterp.Torch Require Import Tensor.
 Import Dependent.ProperNotations.
+Import (hints) Morphisms.Dependent RelationClasses.Dependent.
 
 Module Tensor.
   Definition eqfR_rank {r} : Dependent.relation (@tensor_of_rank r)
@@ -18,10 +19,16 @@ Module Tensor.
   #[global] Arguments eqfR {r s} [A B] R x y.
   Notation eqf := (eqfR eq).
 
-  #[export] Instance eqf_Reflexive {r s A R} {_ : Reflexive R} : Reflexive (@eqfR r s A A R).
+  #[export] Instance eqf_Reflexive_dep {r s} : Dependent.Reflexive (@eqfR r s).
   Proof. repeat intro; subst; reflexivity. Qed.
+  #[export] Instance eqf_Reflexive {r s A R} {_ : Reflexive R} : Reflexive (@eqfR r s A A R)
+    := _.
+  #[export] Instance eqf_Symmetric_dep {r s} : Dependent.Symmetric (@eqfR r s).
+  Proof. cbv; repeat intro; eauto. Qed.
   #[export] Instance eqf_Symmetric {r s A R} {_ : Symmetric R} : Symmetric (@eqfR r s A A R).
   Proof. cbv; repeat intro; subst; symmetry; auto. Qed.
+  #[export] Instance eqf_Transitive_dep {r s} : Dependent.Transitive (@eqfR r s).
+  Proof. intros A B C RAB RBC RAC HT x y z H1 H2; repeat intro; subst; eauto. Qed.
   #[export] Instance eqf_Transitive {r s A R} {_ : Transitive R} : Transitive (@eqfR r s A A R).
   Proof. intros x y z H1 H2; repeat intro; subst; etransitivity; [ eapply H1 | eapply H2 ]; reflexivity. Qed.
 

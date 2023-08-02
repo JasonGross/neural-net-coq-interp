@@ -1,15 +1,49 @@
 From Coq Require Import Relations.Relation_Definitions.
+From NeuralNetInterp.Util.Program Require Import Basics.Dependent.
 From NeuralNetInterp.Util.Relations Require Import Relation_Definitions.Hetero.
 #[local] Set Implicit Arguments.
 
-Definition relation (F : Type -> Type)
+Declare Scope dependent_signature_scope.
+Declare Scope dependent2_signature_scope.
+Declare Scope dependent3_signature_scope.
+Declare Scope dependent4_signature_scope.
+
+Definition relation (F : type_function)
   := forall A B, Hetero.relation A B -> Hetero.relation (F A) (F B).
-Definition relation2 (F : Type -> Type -> Type)
+#[global] Arguments relation F%type_function.
+Definition relation2 (F : type_function2)
   := forall A B, Hetero.relation A B -> forall A' B', Hetero.relation A' B' -> Hetero.relation (F A A') (F B B').
-Definition relation3 (F : Type -> Type -> Type -> Type)
+#[global] Arguments relation2 F%type_function2.
+Definition relation3 (F : type_function3)
   := forall A B, Hetero.relation A B -> forall A' B', Hetero.relation A' B' -> forall A'' B'', Hetero.relation A'' B'' -> Hetero.relation (F A A' A'') (F B B' B'').
-Definition relation4 (F : Type -> Type -> Type -> Type -> Type)
+#[global] Arguments relation3 F%type_function3.
+Definition relation4 (F : type_function4)
   := forall A B, Hetero.relation A B -> forall A' B', Hetero.relation A' B' -> forall A'' B'', Hetero.relation A'' B'' -> forall A''' B''', Hetero.relation A''' B''' -> Hetero.relation (F A A' A'' A''') (F B B' B'' B''').
+#[global] Arguments relation4 F%type_function4.
+
+Definition lift_comp {F} (R : relation F) {G} (R' : relation G) : relation (F ∘ G)
+  := fun A B RAB => R _ _ (R' _ _ RAB).
+
+Module Export RelationsNotations.
+
+  Delimit Scope dependent_signature_scope with dependent_signature.
+  Delimit Scope dependent_signature_scope with signatureD.
+  Bind Scope dependent_signature_scope with relation.
+
+  Delimit Scope dependent2_signature_scope with dependent2_signature.
+  Delimit Scope dependent2_signature_scope with signatureD2.
+  Bind Scope dependent2_signature_scope with relation2.
+
+  Delimit Scope dependent3_signature_scope with dependent3_signature.
+  Delimit Scope dependent3_signature_scope with signatureD3.
+  Bind Scope dependent3_signature_scope with relation3.
+
+  Delimit Scope dependent4_signature_scope with dependent4_signature.
+  Delimit Scope dependent4_signature_scope with signatureD4.
+  Bind Scope dependent4_signature_scope with relation4.
+
+  Notation "R ∘ R'" := (fun (A B : Type) (RAB : Hetero.relation A B) => R%dependent_signature _ _ (R'%dependent_signature A B RAB)) : dependent_signature_scope.
+End RelationsNotations.
 
 Definition lift2_1 {F} (R : relation F) : relation2 (fun A _ => F A)
   := fun _ _ R' _ _ _ => R _ _ R'.
@@ -58,7 +92,7 @@ Definition lift4_234 {F} (R : relation3 F) : relation4 (fun _ A B C => F A B C)
 
 Section Relation_Definition.
 
-  Variable F : Type -> Type.
+  Variable F : type_function.
 
 
   (*

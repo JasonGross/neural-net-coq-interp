@@ -238,7 +238,7 @@ Module Reduction.
   Proof. repeat intro; eapply mean_Proper_dep; cbv in *; intros; try reflexivity; subst; try reflexivity; subst; eauto. Qed.
   #[export] Instance mean_Proper {A B C zeroA addA div_byABC coerB start stop step} : Proper (pointwise_relation _ eq ==> eq) (@mean A B C zeroA addA div_byABC coerB start stop step).
   Proof. apply mean_Proper_pointwise. Qed.
-  Print var.
+
   #[export] Instance var_Proper_dep
     : Dependent.Proper2
         (Dependent.lift2_1 Dependent.idR

@@ -306,13 +306,13 @@ Module HookedTransformer.
       {r} {batch : Shape r} {pos}
       (s := (batch ::' pos)%shape)
       (resid_shape := (s ::' d_model)%shape)
+      {normalization_type : with_default "normalization_type" (option NormalizationType) (Some LN)}
       {A}
       {zeroA : has_zero A} {coerZ : has_coer Z A}
       {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
       {sqrtA : has_sqrt A} {expA : has_exp A}
       {default : pointed A}
       (*{use_split_qkv_input : with_default "use_split_qkv_input" bool false}*)
-      {normalization_type : with_default "normalization_type" (option NormalizationType) (Some LN)}
       (eps : A)
 
       (W_E : tensor [d_vocab; d_model] A)

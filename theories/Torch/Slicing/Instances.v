@@ -55,8 +55,6 @@ Module SliceIndex.
   Module SliceIndexType.
     Export SliceIndexType.
 
-    Print slice.
-
     #[export] Instance slice_Proper_dep {ris ros ri ro transfer_shape_idxs slice_idxs idx s}
       {slice_idxs_Proper_dep : forall {s}, Dependent.Proper (Tensor.eqfR ==> Tensor.eqfR) (@slice_idxs s)}
       : Dependent.Proper (Tensor.eqfR ==> Tensor.eqfR)

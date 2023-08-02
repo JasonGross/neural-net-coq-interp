@@ -1,6 +1,7 @@
 From Coq.Program Require Import Basics Tactics.
 From Coq.Classes Require Import Morphisms RelationClasses.
 From NeuralNetInterp.Util.Relations Require Relation_Definitions.Dependent.
+Export Relation_Definitions.Dependent.RelationsNotations.
 (*From NeuralNetInterp.Util.Classes Require Export RelationClasses.Hetero.*)
 
 Generalizable Variables A eqA B C D R RA RB RC m f x y.
@@ -60,23 +61,21 @@ Definition pointwise_relation A {B} (R : relation B) : relation (A -> B) :=
  *)
 
 (** Notations reminiscent of the old syntax for declaring morphisms. *)
-Declare Scope dependent_signature_scope.
-Delimit Scope dependent_signature_scope with dependent_signature.
-Delimit Scope dependent_signature_scope with signatureD.
 
-Declare Scope dependent2_signature_scope.
-Delimit Scope dependent2_signature_scope with dependent2_signature.
-Delimit Scope dependent2_signature_scope with signatureD2.
+Module Export ProperNotations.
+  Export Relation_Definitions.Dependent.RelationsNotations.
 
-Declare Scope dependent3_signature_scope.
-Delimit Scope dependent3_signature_scope with dependent3_signature.
-Delimit Scope dependent3_signature_scope with signatureD3.
+  Delimit Scope dependent_signature_scope with dependent_signature.
+  Delimit Scope dependent_signature_scope with signatureD.
 
-Declare Scope dependent4_signature_scope.
-Delimit Scope dependent4_signature_scope with dependent4_signature.
-Delimit Scope dependent4_signature_scope with signatureD4.
+  Delimit Scope dependent2_signature_scope with dependent2_signature.
+  Delimit Scope dependent2_signature_scope with signatureD2.
 
-Module ProperNotations.
+  Delimit Scope dependent3_signature_scope with dependent3_signature.
+  Delimit Scope dependent3_signature_scope with signatureD3.
+
+  Delimit Scope dependent4_signature_scope with dependent4_signature.
+  Delimit Scope dependent4_signature_scope with signatureD4.
 
   Notation " R ++> R' " := (@respectful _ _ (R%dependent_signature) (R'%dependent_signature))
     (right associativity, at level 55) : dependent_signature_scope.
@@ -141,8 +140,6 @@ Arguments Proper3 {F}%type R%dependent3_signature m.
 Arguments respectful3 {A B}%type (R R')%dependent3_signature (_ _)%type _ _.
 Arguments Proper4 {F}%type R%dependent4_signature m.
 Arguments respectful4 {A B}%type (R R')%dependent4_signature (_ _)%type _ _.
-
-Export ProperNotations.
 
 Local Open Scope dependent_signature_scope.
 (*
