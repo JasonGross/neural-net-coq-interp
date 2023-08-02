@@ -2,6 +2,7 @@ From Coq.Structures Require Import Equalities.
 From Coq Require Import ZArith Sint63 Uint63 List PArray Lia Setoid Morphisms.
 From NeuralNetInterp.Util Require Nat.
 From NeuralNetInterp.Util Require Import Wf_Uint63 Wf_Uint63.Instances PArray.Proofs PArray.Instances List.Proofs Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool (*PrimitiveProd*).
+From NeuralNetInterp.Util.Tactics Require Import BreakMatch.
 From NeuralNetInterp.Util.Relations Require Relation_Definitions.Hetero Relation_Definitions.Dependent.
 From NeuralNetInterp.Util.Classes Require Morphisms.Dependent.
 From NeuralNetInterp.Torch Require Import Tensor.
@@ -41,7 +42,6 @@ Module Tensor.
     : Proper (Tensor.eqf ==> Tensor.eqf ==> Basics.impl) (@Tensor.eqfR r s A A eq)
     := _.
 
-  Locate Proper.
   Module PArray.
     Import Tensor.PArray.
     #[export] Instance concretize_Proper {r s A default} : Proper (eqf ==> eq) (@concretize r s A default).
@@ -123,85 +123,117 @@ Definition curried_get {r A} {s : Shape r} (t : tensor A s) : @Index.curriedT r 
             end ].
   Local Ltac t := repeat t_step.
 
-  Goal True.
-    epose (fun r s => Dependent.Proper2 ((Dependent.id2R1 ==> RB) ==> eqfR RA ==> eqfR RB) (@map r s)
-  #[export] Instance map_Proper_dep {r s} : Dependent.Proper2 ((Dependent.id2R1 ==> RB) ==> eqfR RA ==> eqfR RB) (@map r s).
+  #[export] Instance map_Proper_dep {r s} : Dependent.Proper2 ((Dependent.lift2_1 Dependent.idR ==> Dependent.lift2_2 Dependent.idR) ==> Dependent.lift2_1 eqfR ==> Dependent.lift2_2 eqfR) (@map r s).
   Proof. cbv -[tensor RawIndex]; t. Qed.
-  #[export] Instance map2_Proper_R {r sA sB A B C RA RB RC} : Proper ((RA ==> RB ==> RC) ==> eqfR RA ==> eqfR RB ==> eqfR RC) (@map2 r sA sB A B C).
+  #[export] Instance map2_Proper_dep {r sA sB} : Dependent.Proper3 ((Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_3 Dependent.idR) ==> Dependent.lift3_1 eqfR ==> Dependent.lift3_2 eqfR ==> Dependent.lift3_3 eqfR) (@map2 r sA sB).
   Proof. cbv -[tensor RawIndex]; t. Qed.
-  #[export] Instance map3_Proper_R {r sA sB sC A B C D RA RB RC RD} : Proper ((RA ==> RB ==> RC ==> RD) ==> eqfR RA ==> eqfR RB ==> eqfR RC ==> eqfR RD) (@map3 r sA sB sC A B C D).
+  #[export] Instance map3_Proper_dep {r sA sB sC} : Dependent.Proper4 ((Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_3 Dependent.idR ==> Dependent.lift4_4 Dependent.idR) ==> Dependent.lift4_1 eqfR ==> Dependent.lift4_2 eqfR ==> Dependent.lift4_3 eqfR ==> Dependent.lift4_4 eqfR) (@map3 r sA sB sC).
   Proof. cbv -[tensor RawIndex]; t. Qed.
 
   #[export] Instance map_Proper {r s A B RB} : Proper (pointwise_relation _ RB ==> eqf ==> eqfR RB) (@map r s A B).
-  Proof. repeat intro; eapply map_Proper_R; try eassumption; repeat intro; subst; eauto. Qed.
+  Proof. repeat intro; eapply map_Proper_dep; try eassumption; repeat intro; hnf in *; subst; eauto. Qed.
   #[export] Instance map2_Proper {r sA sB A B C R} : Proper (pointwise_relation _ (pointwise_relation _ R) ==> eqf ==> eqf ==> eqfR R) (@map2 r sA sB A B C).
-  Proof. repeat intro; eapply map2_Proper_R; try eassumption; repeat intro; subst; cbv [pointwise_relation] in *; eauto. Qed.
+  Proof. repeat intro; eapply map2_Proper_dep; try eassumption; repeat intro; hnf in *; subst; cbv [pointwise_relation] in *; eauto. Qed.
   #[export] Instance map3_Proper {r sA sB sC A B C D R} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ R)) ==> eqf ==> eqf ==> eqf ==> eqfR R) (@map3 r sA sB sC A B C D).
-  Proof. repeat intro; eapply map3_Proper_R; try eassumption; repeat intro; subst; cbv [pointwise_relation] in *; eauto. Qed.
+  Proof. repeat intro; eapply map3_Proper_dep; try eassumption; repeat intro; hnf in *; subst; cbv [pointwise_relation] in *; eauto. Qed.
   (*
 Definition map_dep {r A B} {s : Shape r} (f : forall a : A, B a) (t : tensor A s) : tensor_dep B t
   := fun i => f (t i).
    *)
+  #[export] Instance where__Proper_dep {r sA sB sC} : Dependent.Proper (Dependent.const eqf ==> eqfR ==> eqfR ==> eqfR) (@where_ r sA sB sC).
+  Proof. intros ???; cbv [where_ Bool.where_]; apply map3_Proper_dep; repeat intro; hnf in *; subst; break_innermost_match; assumption. Qed.
+
   #[export] Instance where__Proper {r sA sB sC A} : Proper (eqf ==> eqf ==> eqf ==> eqf) (@where_ r sA sB sC A).
-  Proof. apply map3_Proper; repeat intro; reflexivity. Qed.
+  Proof. apply where__Proper_dep. Qed.
 
+  #[export] Instance tensor_add_Proper_dep {r sA sB} : Dependent.Proper3 ((Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_3 Dependent.idR) ==> Dependent.lift3_1 eqfR ==> Dependent.lift3_2 eqfR ==> Dependent.lift3_3 eqfR) (@tensor_add r sA sB).
+  Proof. cbv [tensor_add add]; apply map2_Proper_dep. Qed.
   #[export] Instance tensor_add_Proper {r sA sB A B C addA RA RB RC} {_ : Proper (RA ==> RB ==> RC) addA} : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@tensor_add r sA sB A B C addA).
-  Proof. cbv [tensor_add add]; repeat intro; eapply map2_Proper_R; eassumption. Qed.
-  #[export] Instance tensor_sub_Proper {r sA sB A B C subA RA RB RC} {_ : Proper (RA ==> RB ==> RC) subA} : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@tensor_sub r sA sB A B C subA).
-  Proof. cbv [tensor_sub sub]; repeat intro; eapply map2_Proper_R; eassumption. Qed.
-  #[export] Instance tensor_mul_Proper {r sA sB A B C mulA RA RB RC} {_ : Proper (RA ==> RB ==> RC) mulA} : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@tensor_mul r sA sB A B C mulA).
-  Proof. cbv [tensor_mul mul]; repeat intro; eapply map2_Proper_R; eassumption. Qed.
-  #[export] Instance tensor_div_by_Proper {r sA sB A B C div_byA RA RB RC} {_ : Proper (RA ==> RB ==> RC) div_byA} : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@tensor_div_by r sA sB A B C div_byA).
-  Proof. cbv [tensor_div_by div]; repeat intro; eapply map2_Proper_R; eassumption. Qed.
-  #[export] Instance tensor_sqrt_Proper {r s A sqrtA R} {_ : Proper (R ==> R) sqrtA} : Proper (eqfR R ==> eqfR R) (@tensor_sqrt r s A sqrtA).
-  Proof. cbv [tensor_sqrt sqrt]; repeat intro; eapply map_Proper_R; eassumption. Qed.
-  #[export] Instance tensor_opp_Proper {r s A oppA R} {_ : Proper (R ==> R) oppA} : Proper (eqfR R ==> eqfR R) (@tensor_opp r s A oppA).
-  Proof. cbv [tensor_opp opp]; repeat intro; eapply map_Proper_R; eassumption. Qed.
-
+  Proof. apply tensor_add_Proper_dep; assumption. Qed.
   #[export] Instance add_Proper {r sA sB A B C addA RA RB RC} {_ : Proper (RA ==> RB ==> RC) addA} : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@Classes.add _ _ _ (@tensor_add r sA sB A B C addA))
     := _.
+  #[export] Instance tensor_sub_Proper_dep {r sA sB} : Dependent.Proper3 ((Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_3 Dependent.idR) ==> Dependent.lift3_1 eqfR ==> Dependent.lift3_2 eqfR ==> Dependent.lift3_3 eqfR) (@tensor_sub r sA sB).
+  Proof. cbv [tensor_sub sub]; apply map2_Proper_dep. Qed.
+  #[export] Instance tensor_sub_Proper {r sA sB A B C subA RA RB RC} {_ : Proper (RA ==> RB ==> RC) subA} : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@tensor_sub r sA sB A B C subA).
+  Proof. apply tensor_sub_Proper_dep; assumption. Qed.
   #[export] Instance sub_Proper {r sA sB A B C subA RA RB RC} {_ : Proper (RA ==> RB ==> RC) subA} : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@Classes.sub _ _ _ (@tensor_sub r sA sB A B C subA))
     := _.
+  #[export] Instance tensor_mul_Proper_dep {r sA sB} : Dependent.Proper3 ((Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_3 Dependent.idR) ==> Dependent.lift3_1 eqfR ==> Dependent.lift3_2 eqfR ==> Dependent.lift3_3 eqfR) (@tensor_mul r sA sB).
+  Proof. cbv [tensor_mul mul]; apply map2_Proper_dep. Qed.
+  #[export] Instance tensor_mul_Proper {r sA sB A B C mulA RA RB RC} {_ : Proper (RA ==> RB ==> RC) mulA} : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@tensor_mul r sA sB A B C mulA).
+  Proof. apply tensor_mul_Proper_dep; assumption. Qed.
   #[export] Instance mul_Proper {r sA sB A B C mulA RA RB RC} {_ : Proper (RA ==> RB ==> RC) mulA} : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@Classes.mul _ _ _ (@tensor_mul r sA sB A B C mulA))
     := _.
+  #[export] Instance tensor_div_by_Proper_dep {r sA sB} : Dependent.Proper3 ((Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_3 Dependent.idR) ==> Dependent.lift3_1 eqfR ==> Dependent.lift3_2 eqfR ==> Dependent.lift3_3 eqfR) (@tensor_div_by r sA sB).
+  Proof. cbv [tensor_div_by div]; apply map2_Proper_dep. Qed.
+  #[export] Instance tensor_div_by_Proper {r sA sB A B C div_byA RA RB RC} {_ : Proper (RA ==> RB ==> RC) div_byA} : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@tensor_div_by r sA sB A B C div_byA).
+  Proof. apply tensor_div_by_Proper_dep; assumption. Qed.
   #[export] Instance div_Proper {r sA sB A B C div_byA RA RB RC} {_ : Proper (RA ==> RB ==> RC) div_byA} : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@Classes.div _ _ _ (@tensor_div_by r sA sB A B C div_byA))
     := _.
+
+  #[export] Instance tensor_sqrt_Proper_dep {r s} : Dependent.Proper ((Dependent.idR ==> Dependent.idR) ==> eqfR ==> eqfR) (@tensor_sqrt r s).
+  Proof. intros ???; cbv [tensor_sqrt sqrt]; apply map_Proper_dep. Qed.
+  #[export] Instance tensor_sqrt_Proper {r s A sqrtA R} {_ : Proper (R ==> R) sqrtA} : Proper (eqfR R ==> eqfR R) (@tensor_sqrt r s A sqrtA).
+  Proof. apply tensor_sqrt_Proper_dep; assumption. Qed.
   #[export] Instance sqrt_Proper {r s A sqrtA R} {_ : Proper (R ==> R) sqrtA} : Proper (eqfR R ==> eqfR R) (@Classes.sqrt _ (@tensor_sqrt r s A sqrtA))
     := _.
+  #[export] Instance tensor_opp_Proper_dep {r s} : Dependent.Proper ((Dependent.idR ==> Dependent.idR) ==> eqfR ==> eqfR) (@tensor_opp r s).
+  Proof. intros ???; cbv [tensor_opp opp]; apply map_Proper_dep. Qed.
+  #[export] Instance tensor_opp_Proper {r s A oppA R} {_ : Proper (R ==> R) oppA} : Proper (eqfR R ==> eqfR R) (@tensor_opp r s A oppA).
+  Proof. apply tensor_opp_Proper_dep; assumption. Qed.
   #[export] Instance opp_Proper {r s A oppA R} {_ : Proper (R ==> R) oppA} : Proper (eqfR R ==> eqfR R) (@Classes.opp _ (@tensor_opp r s A oppA))
     := _.
 
-  #[export] Instance reshape_app_split'_Proper_rank {r1 r2 A R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank R ==> eqfR_rank (eqfR_rank R)) (fun s1 s2 => @reshape_app_split' r1 r2 s1 s2 A).
+  #[export] Instance reshape_app_split'_Proper_rank_dep {r1 r2} : Dependent.Proper (Dependent.const (fun _ _ => True) ==> Dependent.const (fun _ _ => True) ==> eqfR_rank ==> fun _ _ R => eqfR_rank (eqfR_rank R)) (fun A s1 s2 => @reshape_app_split' r1 r2 s1 s2 A).
   Proof.
     cbv [reshape_app_split' RawIndex.curry_radd].
     repeat intro; eauto.
   Qed.
-  #[export] Instance reshape_app_combine'_Proper_rank {r1 r2 A R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank (eqfR_rank R) ==> eqfR_rank R) (fun s1 s2 => @reshape_app_combine' r1 r2 s1 s2 A).
-  Proof.
+  #[export] Instance reshape_app_split'_Proper_rank {r1 r2 A R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank R ==> eqfR_rank (eqfR_rank R)) (fun s1 s2 => @reshape_app_split' r1 r2 s1 s2 A).
+  Proof. apply reshape_app_split'_Proper_rank_dep. Qed.
+  #[export] Instance reshape_app_combine'_Proper_rank_dep {r1 r2} : Dependent.Proper (Dependent.const (fun _ _ => True) ==> Dependent.const (fun _ _ => True) ==> (fun _ _ R => eqfR_rank (eqfR_rank R)) ==> eqfR_rank) (fun A s1 s2 => @reshape_app_combine' r1 r2 s1 s2 A).
     cbv [reshape_app_combine' RawIndex.uncurry_radd].
     repeat intro; destruct RawIndex.split_radd; cbv [eqfR eqfR_rank pointwise_relation] in *; eauto.
   Qed.
+  #[export] Instance reshape_app_combine'_Proper_rank {r1 r2 A R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank (eqfR_rank R) ==> eqfR_rank R) (fun s1 s2 => @reshape_app_combine' r1 r2 s1 s2 A).
+  Proof. apply reshape_app_combine'_Proper_rank_dep. Qed.
+  #[export] Instance reshape_app_split_Proper_rank_dep {r1 r2} : Dependent.Proper (Dependent.const (fun _ _ => True) ==> Dependent.const (fun _ _ => True) ==> eqfR_rank ==> (fun _ _ R => eqfR_rank (eqfR_rank R))) (fun A s1 s2 => @reshape_app_split r1 r2 s1 s2 A) := _.
   #[export] Instance reshape_app_split_Proper_rank {r1 r2 A R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank R ==> eqfR_rank (eqfR_rank R)) (fun s1 s2 => @reshape_app_split r1 r2 s1 s2 A) := _.
+  #[export] Instance reshape_app_combine_Proper_rank_dep {r1 r2} : Dependent.Proper (Dependent.const (fun _ _ => True) ==> Dependent.const (fun _ _ => True) ==> (fun _ _ R => eqfR_rank (eqfR_rank R)) ==> eqfR_rank) (fun A s1 s2 => @reshape_app_combine r1 r2 s1 s2 A) := _.
   #[export] Instance reshape_app_combine_Proper_rank {r1 r2 A R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank (eqfR_rank R) ==> eqfR_rank R) (fun s1 s2 => @reshape_app_combine r1 r2 s1 s2 A) := _.
-  #[export] Instance reshape_snoc_split_Proper_rank {r A R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank R ==> eqfR_rank (eqfR_rank R)) (fun s1 s2 => @reshape_snoc_split r s1 s2 A).
+  #[export] Instance reshape_snoc_split_Proper_rank_dep {r} : Dependent.Proper (Dependent.const (fun _ _ => True) ==> Dependent.const (fun _ _ => True) ==> eqfR_rank ==> (fun _ _ R => eqfR_rank (eqfR_rank R))) (fun A s1 s2 => @reshape_snoc_split r s1 s2 A).
   Proof.
     cbv [reshape_snoc_split RawIndex.curry_radd].
     repeat intro; eauto.
   Qed.
-  #[export] Instance reshape_snoc_combine_Proper_rank {r A R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank (eqfR_rank R) ==> eqfR_rank R) (fun s1 s2 => @reshape_snoc_combine r s1 s2 A).
+  #[export] Instance reshape_snoc_split_Proper_rank {r A R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank R ==> eqfR_rank (eqfR_rank R)) (fun s1 s2 => @reshape_snoc_split r s1 s2 A).
+  Proof. apply reshape_snoc_split_Proper_rank_dep. Qed.
+  #[export] Instance reshape_snoc_combine_Proper_rank_dep {r} : Dependent.Proper (Dependent.const (fun _ _ => True) ==> Dependent.const (fun _ _ => True) ==> (fun _ _ R => eqfR_rank (eqfR_rank R)) ==> eqfR_rank) (fun A s1 s2 => @reshape_snoc_combine r s1 s2 A).
   Proof.
     cbv [reshape_snoc_combine RawIndex.uncurry_radd].
     repeat intro; destruct RawIndex.split_radd; cbv [eqfR eqfR_rank pointwise_relation] in *; eauto.
   Qed.
+  #[export] Instance reshape_snoc_combine_Proper_rank {r A R} : Proper ((fun _ _ => True) ==> (fun _ _ => True) ==> eqfR_rank (eqfR_rank R) ==> eqfR_rank R) (fun s1 s2 => @reshape_snoc_combine r s1 s2 A).
+  Proof. apply reshape_snoc_combine_Proper_rank_dep. Qed.
 
+  #[export] Instance reshape_app_split'_Proper_dep {r1 r2 s1 s2} : Dependent.Proper (eqfR ==> (fun _ _ R => eqfR_rank (eqfR_rank R))) (@reshape_app_split' r1 r2 s1 s2).
+  Proof. repeat intro; eapply reshape_app_split'_Proper_rank_dep; trivial. Qed.
   #[export] Instance reshape_app_split'_Proper {r1 r2 s1 s2 A R} : Proper (eqfR R ==> eqfR (eqfR R)) (@reshape_app_split' r1 r2 s1 s2 A).
   Proof. repeat intro; eapply reshape_app_split'_Proper_rank; trivial. Qed.
+  #[export] Instance reshape_app_combine'_Proper_dep {r1 r2 s1 s2} : Dependent.Proper ((fun _ _ R => eqfR_rank (eqfR_rank R)) ==> eqfR) (@reshape_app_combine' r1 r2 s1 s2).
+  Proof. repeat intro; eapply reshape_app_combine'_Proper_rank_dep; trivial. Qed.
   #[export] Instance reshape_app_combine'_Proper {r1 r2 s1 s2 A R} : Proper (eqfR (eqfR R) ==> eqfR R) (@reshape_app_combine' r1 r2 s1 s2 A).
   Proof. repeat intro; eapply reshape_app_combine'_Proper_rank; trivial. Qed.
+  #[export] Instance reshape_app_split_Proper_dep {r1 r2 s1 s2} : Dependent.Proper (eqfR ==> (fun _ _ R => eqfR_rank (eqfR_rank R))) (@reshape_app_split r1 r2 s1 s2) := _.
   #[export] Instance reshape_app_split_Proper {r1 r2 s1 s2 A R} : Proper (eqfR R ==> eqfR (eqfR R)) (@reshape_app_split r1 r2 s1 s2 A) := _.
+  #[export] Instance reshape_app_combine_Proper_dep {r1 r2 s1 s2} : Dependent.Proper ((fun _ _ R => eqfR_rank (eqfR_rank R)) ==> eqfR) (@reshape_app_combine r1 r2 s1 s2) := _.
   #[export] Instance reshape_app_combine_Proper {r1 r2 s1 s2 A R} : Proper (eqfR (eqfR R) ==> eqfR R) (@reshape_app_combine r1 r2 s1 s2 A) := _.
+  #[export] Instance reshape_snoc_split_Proper_dep {r s1 s2} : Dependent.Proper (eqfR ==> (fun _ _ R => eqfR_rank (eqfR_rank R))) (@reshape_snoc_split r s1 s2).
+  Proof. repeat intro; eapply reshape_snoc_split_Proper_rank_dep; trivial. Qed.
   #[export] Instance reshape_snoc_split_Proper {r s1 s2 A R} : Proper (eqfR R ==> eqfR (eqfR R)) (@reshape_snoc_split r s1 s2 A).
   Proof. repeat intro; eapply reshape_snoc_split_Proper_rank; trivial. Qed.
+  #[export] Instance reshape_snoc_combine_Proper_dep {r s1 s2} : Dependent.Proper ((fun _ _ R => eqfR_rank (eqfR_rank R)) ==> eqfR) (@reshape_snoc_combine r s1 s2).
+  Proof. repeat intro; eapply reshape_snoc_combine_Proper_rank_dep; trivial. Qed.
   #[export] Instance reshape_snoc_combine_Proper {r s1 s2 A R} : Proper (eqfR (eqfR R) ==> eqfR R) (@reshape_snoc_combine r s1 s2 A).
   Proof. repeat intro; eapply reshape_snoc_combine_Proper_rank; trivial. Qed.
   (*
@@ -211,20 +243,24 @@ Definition curry {r A} {s : Shape r} : tensor A s -> @RawIndex.curriedT r A
   := RawIndex.curry.
    *)
 
-  #[export] Instance map'_Proper {ra1 ra2 rb sa1 sa2 sb A B RA RB} : Proper ((eqfR RA ==> eqfR RB) ==> eqfR RA ==> eqfR RB) (@map' ra1 ra2 rb sa1 sa2 sb A B).
+  #[export] Instance map'_Proper_dep {ra1 ra2 rb sa1 sa2 sb} : Dependent.Proper2 ((Dependent.lift2_1 eqfR ==> Dependent.lift2_2 eqfR) ==> Dependent.lift2_1 eqfR ==> Dependent.lift2_2 eqfR) (@map' ra1 ra2 rb sa1 sa2 sb).
   Proof.
     cbv [map']; repeat intro.
-    apply reshape_app_combine_Proper.
-    eapply map_Proper_R; try eassumption.
-    apply reshape_app_split_Proper; eassumption.
+    apply reshape_app_combine_Proper_dep.
+    eapply map_Proper_dep; try eassumption.
+    apply reshape_app_split_Proper_dep; eassumption.
   Qed.
-  #[export] Instance map2'_Proper {ri1 ri2 ro sA1 sB1 sA2 sB2 so A B C RA RB RC} : Proper ((eqfR RA ==> eqfR RB ==> eqfR RC) ==> eqfR RA ==> eqfR RB ==> eqfR RC) (@map2' ri1 ri2 ro sA1 sB1 sA2 sB2 so A B C).
+  #[export] Instance map'_Proper {ra1 ra2 rb sa1 sa2 sb A B RA RB} : Proper ((eqfR RA ==> eqfR RB) ==> eqfR RA ==> eqfR RB) (@map' ra1 ra2 rb sa1 sa2 sb A B).
+  Proof. apply map'_Proper_dep. Qed.
+  #[export] Instance map2'_Proper_dep {ri1 ri2 ro sA1 sB1 sA2 sB2 so} : Dependent.Proper3 ((Dependent.lift3_1 eqfR ==> Dependent.lift3_2 eqfR ==> Dependent.lift3_3 eqfR) ==> Dependent.lift3_1 eqfR ==> Dependent.lift3_2 eqfR ==> Dependent.lift3_3 eqfR) (@map2' ri1 ri2 ro sA1 sB1 sA2 sB2 so).
   Proof.
     cbv [map2']; repeat intro.
-    apply reshape_app_combine_Proper.
-    eapply map2_Proper_R; try eassumption.
-    all: apply reshape_app_split_Proper; eassumption.
+    apply reshape_app_combine_Proper_dep.
+    eapply map2_Proper_dep; try eassumption.
+    all: apply reshape_app_split_Proper_dep; eassumption.
   Qed.
+  #[export] Instance map2'_Proper {ri1 ri2 ro sA1 sB1 sA2 sB2 so A B C RA RB RC} : Proper ((eqfR RA ==> eqfR RB ==> eqfR RC) ==> eqfR RA ==> eqfR RB ==> eqfR RC) (@map2' ri1 ri2 ro sA1 sB1 sA2 sB2 so A B C).
+  Proof. apply map2'_Proper_dep. Qed.
 
   #[export] Instance map'_Proper_2 {ra1 ra2 rb sa1 sa2 sb A B f RA RB}
     {Hf : Proper (eqfR RA ==> eqfR RB) f}
@@ -235,64 +271,77 @@ Definition curry {r A} {s : Shape r} : tensor A s -> @RawIndex.curriedT r A
     : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@map2' ri1 ri2 ro sA1 sB1 sA2 sB2 so A B C f)
     := _.
 
-  #[export] Instance broadcast_Proper {r r' s A R} : Proper (eqfR R ==> eqfR R) (@broadcast r r' s A).
+  #[export] Instance broadcast_Proper_dep {r r' s} : Dependent.Proper (eqfR ==> eqfR) (@broadcast r r' s).
   Proof.
-    cbv [broadcast broadcast' repeat']; intros ??? ?.
-    apply reshape_app_combine_Proper.
+    cbv [broadcast broadcast' repeat']; repeat intro.
+    apply reshape_app_combine_Proper_dep.
+    intro; assumption.
+  Qed.
+  #[export] Instance broadcast_Proper {r r' s A R} : Proper (eqfR R ==> eqfR R) (@broadcast r r' s A).
+  Proof. apply broadcast_Proper_dep. Qed.
+  #[export] Instance repeat_Proper_dep {r r' s s'} : Dependent.Proper (eqfR ==> eqfR) (@repeat r r' s s').
+  Proof.
+    cbv [repeat repeat']; repeat intro.
+    apply reshape_app_combine_Proper_dep.
     intro; assumption.
   Qed.
   #[export] Instance repeat_Proper {r r' s s' A R} : Proper (eqfR R ==> eqfR R) (@repeat r r' s s' A).
-  Proof.
-    cbv [repeat repeat']; intros ???.
-    apply reshape_app_combine_Proper.
-    intro; assumption.
-  Qed.
+  Proof. apply repeat_Proper_dep. Qed.
 
-  #[export] Instance keepdim_gen_Proper {r s A B R} : Proper (pointwise_relation _ (eqfR R) ==> eq ==> eqfR R) (@keepdim_gen r s A B).
+  #[export] Instance keepdim_gen_Proper_dep {r s} : Dependent.Proper2 ((Dependent.lift2_1 Dependent.idR ==> Dependent.lift2_2 eqfR) ==> Dependent.lift2_1 Dependent.idR ==> Dependent.lift2_2 eqfR) (@keepdim_gen r s).
   Proof.
-    cbv [keepdim_gen]; intros ?? H ???; subst.
-    apply broadcast_Proper; apply H.
+    cbv [keepdim_gen]; repeat intro.
+    apply broadcast_Proper_dep; cbv in *; eauto.
+  Qed.
+  #[export] Instance keepdim_gen_Proper {r s A B R} : Proper (pointwise_relation _ (eqfR R) ==> eq ==> eqfR R) (@keepdim_gen r s A B).
+  Proof. intros ???; apply keepdim_gen_Proper_dep; repeat intro; hnf in *; subst; cbv in *; eauto. Qed.
+  #[export] Instance keepdim_Proper_dep : Dependent.Proper2 ((Dependent.lift2_1 Dependent.idR ==> Dependent.lift2_2 Dependent.idR) ==> Dependent.lift2_1 Dependent.idR ==> Dependent.lift2_2 eqfR) (@keepdim).
+  Proof.
+    cbv [keepdim]; intros ??? ??? ?? H ??? ?; subst; eapply keepdim_gen_Proper_dep; t.
+    cbv in *; eauto.
   Qed.
   #[export] Instance keepdim_Proper {A B R} : Proper (pointwise_relation _ R ==> eq ==> eqfR R) (@keepdim A B).
-  Proof.
-    cbv [keepdim]; intros ?? H ??? ?; subst; eapply keepdim_gen_Proper; t.
-  Qed.
+  Proof. intros ???; apply keepdim_Proper_dep; cbv; intros; subst; eauto. Qed.
 
+  #[export] Instance reduce_axis_m1'_Proper_dep {r s1 s2} : Dependent.Proper2 ((Dependent.const2 eq ==> Dependent.const2 eq ==> Dependent.const2 eq ==> (Dependent.const2 eq ==> Dependent.lift2_1 Dependent.idR) ==> Dependent.lift2_2 Dependent.idR) ==> Dependent.lift2_1 eqfR ==> Dependent.lift2_2 eqfR) (@reduce_axis_m1' r s1 s2).
+  Proof.
+    cbv [reduce_axis_m1']; repeat intro.
+    eapply map_Proper_dep; try eapply reshape_snoc_split_Proper_dep; try eassumption.
+    repeat intro.
+    match goal with H : _ |- _ => apply H end; repeat intro; hnf in *; subst; eauto.
+  Qed.
   #[export] Instance reduce_axis_m1'_Proper {r s1 s2 A B RA RB} : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ RA ==> RB))) ==> eqfR RA ==> eqfR RB) (@reduce_axis_m1' r s1 s2 A B).
-  Proof.
-    cbv [reduce_axis_m1'].
-    intros ?? H ?? Ht.
-    eapply map_Proper_R; try eapply reshape_snoc_split_Proper; try eassumption.
-    intros ?? Ht'.
-    cbv [pointwise_relation eqfR respectful] in *.
-    eauto.
-  Qed.
+  Proof. intros ???; apply reduce_axis_m1'_Proper_dep; cbv in *; intros; subst; eauto. Qed.
 
-  #[export] Instance reduce_axis_m1_Proper {r s1 s2 A B keepdim RA RB}
+  #[export] Instance reduce_axis_m1_Proper_dep {r s1 s2 keepdim}
+    : Dependent.Proper2 ((Dependent.const2 eq ==> Dependent.const2 eq ==> Dependent.const2 eq ==> (Dependent.const2 eq ==> Dependent.lift2_1 Dependent.idR) ==> Dependent.lift2_2 Dependent.idR) ==> Dependent.lift2_1 eqfR ==> Dependent.lift2_2 eqfR)
+        (@reduce_axis_m1 r s1 s2 keepdim).
+  Proof.
+    cbv [reduce_axis_m1]; destruct keepdim; repeat intro.
+    all: eapply reduce_axis_m1'_Proper_dep; try eassumption.
+  Qed.
+  #[export] Instance reduce_axis_m1_Proper {r s1 s2 keepdim A B RA RB}
     : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ RA ==> RB))) ==> eqfR RA ==> eqfR RB)
         (@reduce_axis_m1 r s1 s2 A B keepdim).
-  Proof.
-    cbv [reduce_axis_m1]; destruct keepdim; intros ?? H ?? Ht ?.
-    all: eapply reduce_axis_m1'_Proper; try eassumption.
-  Qed.
+  Proof. intros ???; apply reduce_axis_m1_Proper_dep; cbv in *; intros; subst; eauto. Qed.
 
   #[export] Instance reduce_axis_m1'_Proper_2 {r s1 s2 A B reduction RA RB}
    {_ : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ RA ==> RB)))) reduction}
     : Proper (eqfR RA ==> eqfR RB) (@reduce_axis_m1' r s1 s2 A B reduction)
     := _.
 
-  #[export] Instance reduce_axis_m1_Proper_2 {r s1 s2 A B keepdim reduction RA RB}
+  #[export] Instance reduce_axis_m1_Proper_2 {r s1 s2 keepdim A B reduction RA RB}
     {_ : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ RA ==> RB)))) reduction}
-    : Proper (eqfR RA ==> eqfR RB) (@reduce_axis_m1 r s1 s2 A B keepdim reduction)
+    : Proper (eqfR RA ==> eqfR RB) (@reduce_axis_m1 r s1 s2 keepdim A B reduction)
     := _.
 
   #[export] Instance reduce_axis_m1_Proper_2_keepdim_false {r s1 s2 A B reduction RA RB}
     {_ : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ RA ==> RB)))) reduction}
-    : Proper (eqfR RA ==> eqfR RB) (@reduce_axis_m1 r s1 s2 A B false reduction)
+    : Proper (eqfR RA ==> eqfR RB) (@reduce_axis_m1 r s1 s2 false A B reduction)
     := _.
   #[export] Instance reduce_axis_m1_Proper_2_keepdim_true {r s1 s2 A B reduction RA RB}
     {_ : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ RA ==> RB)))) reduction}
-    : Proper (eqfR RA ==> eqfR RB) (@reduce_axis_m1 r s1 s2 A B true reduction)
+    : Proper (eqfR RA ==> eqfR RB) (@reduce_axis_m1 r s1 s2 true A B reduction)
     := _.
 
   (*#[export] Instance reduce_axis_m1'_Proper' {r s1 s2 A B reduction RA} : Proper (eqfR RA ==> eqf) (@reduce_axis_m1' r s1 s2 A B reduction).
@@ -314,71 +363,127 @@ Proof.
 Qed.
 
    *)
+
+  #[export] Instance softmax_dim_m1_Proper_dep {r s0 s'}
+    : Dependent.Proper3
+        ((Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR)
+           ==> (Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_2 Dependent.idR)
+           ==> Dependent.lift3_2 Dependent.idR
+           ==> (Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_3 Dependent.idR)
+           ==> Dependent.lift3_1 eqfR
+           ==> Dependent.lift3_3 eqfR)
+        (@softmax_dim_m1 r s0 s').
+  Proof.
+    repeat intro; cbv [softmax_dim_m1 div].
+    eapply tensor_div_by_Proper_dep; repeat intro; hnf.
+    all: try eapply (@reduce_axis_m1_Proper_dep r s0 s' true); repeat intro; hnf.
+    all: try (eapply map_Proper_dep; try eassumption; repeat intro).
+    all: try eapply Reduction.sum_Proper_dep.
+    all: repeat intro; cbv in *; subst; eauto.
+  Qed.
+
   #[export] Instance softmax_dim_m1_Proper {r s0 s' A B C addB expA zeroB divB}
     : Proper (eqf ==> eqf) (@softmax_dim_m1 r s0 s' A B C addB expA zeroB divB).
+  Proof. eapply softmax_dim_m1_Proper_dep; repeat intro; hnf in *; try reflexivity; subst; reflexivity. Qed.
+
+  #[export] Instance log_softmax_dim_m1_Proper_dep {r s0 s'}
+    : Dependent.Proper4
+        ((Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_2 Dependent.idR)
+           ==> (Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_3 Dependent.idR)
+           ==> (Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_2 Dependent.idR)
+           ==> Dependent.lift4_2 Dependent.idR
+           ==> (Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_3 Dependent.idR ==> Dependent.lift4_4 Dependent.idR)
+           ==> Dependent.lift4_1 eqfR
+           ==> Dependent.lift4_4 eqfR)
+        (@log_softmax_dim_m1 r s0 s').
   Proof.
-    intros ?? Ht.
-    cbv [softmax_dim_m1 div].
-    eapply tensor_div_by_Proper.
-    all: try eapply (@reduce_axis_m1_Proper r s0 s' B B true).
-    all: try (eapply map_Proper; try eassumption; repeat intro).
-    all: try eapply Reduction.sum_Proper_pointwise.
-    all: try exact eq_refl.
-    Unshelve.
-    repeat intro; subst; reflexivity.
+    repeat intro; cbv [log_softmax_dim_m1 div].
+    eapply tensor_div_by_Proper_dep; repeat intro; hnf in *.
+    all: cbv [Dependent.respectful4 Dependent.lift4_1 Dependent.lift4_2 Dependent.lift4_3 Dependent.lift4_4] in *.
+    all: eauto.
+    all: eapply map_Proper_dep; repeat intro; hnf in *; eauto.
+    all: eapply (@reduce_axis_m1_Proper_dep r s0 s' true); repeat intro; hnf in *.
+    all: try (eapply map_Proper_dep; try eassumption; repeat intro).
+    all: try eapply Reduction.sum_Proper_dep.
+    all: repeat intro; cbv in *; subst; eauto.
   Qed.
 
   #[export] Instance log_softmax_dim_m1_Proper {r s0 s' A B C D addB lnA expA zeroB divB}
     : Proper (eqf ==> eqf) (@log_softmax_dim_m1 r s0 s' A B C D addB lnA expA zeroB divB).
-  Proof.
-    intros ?? Ht.
-    cbv [log_softmax_dim_m1 div].
-    eapply tensor_div_by_Proper; try eassumption.
-    eapply map_Proper; try eassumption.
-    all: try eapply (@reduce_axis_m1_Proper r s0 s' B B true).
-    all: try (eapply map_Proper; try eassumption; repeat intro).
-    all: try eapply Reduction.sum_Proper_pointwise.
-    all: try (repeat intro; exact eq_refl).
-    Unshelve.
-    repeat intro; subst; reflexivity.
-  Qed.
+  Proof. eapply log_softmax_dim_m1_Proper_dep; repeat intro; hnf in *; try reflexivity; subst; try reflexivity; subst; reflexivity. Qed.
+
+  #[export] Instance unsqueeze_dim_m1_Proper_dep {r s} : Dependent.Proper (eqfR ==> eqfR) (@unsqueeze_dim_m1 r s).
+  Proof. cbv; eauto. Qed.
 
   #[export] Instance unsqueeze_dim_m1_Proper {r s A R} : Proper (eqfR R ==> eqfR R) (@unsqueeze_dim_m1 r s A).
-  Proof. intros ?? H; cbv; intros; apply H. Qed.
+  Proof. apply unsqueeze_dim_m1_Proper_dep. Qed.
 
-  #[export] Instance gather_dim_m1_Proper {r ssinput ssindex sinput' sindex' A R} : Proper (eqfR R ==> eqf ==> eqfR R) (@gather_dim_m1 r ssinput ssindex sinput' sindex' A).
+  #[export] Instance gather_dim_m1_Proper_dep {r ssinput ssindex sinput' sindex'} : Dependent.Proper (eqfR ==> Dependent.const eqf ==> eqfR) (@gather_dim_m1 r ssinput ssindex sinput' sindex').
   Proof.
-    intros ?? H1 ?? H2; cbv [gather_dim_m1]; intro.
+    intros ??? ?? H1 ?? H2; cbv [gather_dim_m1]; intro.
+    hnf in *.
     rewrite H2.
     apply H1.
   Qed.
+  #[export] Instance gather_dim_m1_Proper {r ssinput ssindex sinput' sindex' A R} : Proper (eqfR R ==> eqf ==> eqfR R) (@gather_dim_m1 r ssinput ssindex sinput' sindex' A).
+  Proof. apply gather_dim_m1_Proper_dep. Qed.
 
+  #[export] Instance squeeze_Proper_dep {r s} : Dependent.Proper (eqfR ==> eqfR) (@squeeze r s).
+  Proof. cbv; eauto. Qed.
   #[export] Instance squeeze_Proper {r s A R} : Proper (eqfR R ==> eqfR R) (@squeeze r s A).
-  Proof. intros ?? H; cbv; intros; apply H. Qed.
+  Proof. apply squeeze_Proper_dep. Qed.
+  #[export] Instance reshape_m1_Proper_dep {r s} : Dependent.Proper (eqfR ==> eqfR) (@reshape_m1 r s).
+  Proof. intros ??? ?? H ?; cbv [reshape_m1]; apply H. Qed.
   #[export] Instance reshape_m1_Proper {r s A R} : Proper (eqfR R ==> eqfR R) (@reshape_m1 r s A).
-  Proof. intros ?? H ?; cbv [reshape_m1]; apply H. Qed.
+  Proof. apply reshape_m1_Proper_dep. Qed.
+  #[export] Instance unreshape_m1_Proper_dep {r s} : Dependent.Proper (eqfR ==> eqfR) (@unreshape_m1 r s).
+  Proof. intros ??? ?? H ?; cbv [unreshape_m1]; apply H. Qed.
   #[export] Instance unreshape_m1_Proper {r s A R} : Proper (eqfR R ==> eqfR R) (@unreshape_m1 r s A).
-  Proof. intros ?? H ?; cbv [unreshape_m1]; apply H. Qed.
+  Proof. apply unreshape_m1_Proper_dep. Qed.
 
-  #[export] Instance to_bool_Proper {A r s zero eqb} : Proper (eqf ==> eqf) (@to_bool A r s zero eqb).
+  #[export] Instance to_bool_Proper_dep {r s} : Dependent.Proper (Dependent.idR ==> (Dependent.idR ==> Dependent.idR ==> Dependent.const eq) ==> eqfR ==> Dependent.const eqf) (@to_bool r s).
   Proof.
-    intros ?? H ?; cbv [to_bool]; apply map_Proper; try assumption; repeat intro; reflexivity.
+    repeat intro; cbv [to_bool]; eapply map_Proper_dep; repeat intro; hnf in *;
+      try match goal with H : _ |- _ => eapply H end; hnf.
+    cbv in *; match goal with H : _ |- _ => now erewrite H by eauto end.
+  Qed.
+
+  #[export] Instance to_bool_Proper {r s A zero eqb} : Proper (eqf ==> eqf) (@to_bool r s A zero eqb).
+  Proof. apply to_bool_Proper_dep; cbv; intros; subst; reflexivity. Qed.
+
+  #[export] Instance of_bool_Proper_dep {r s} : Dependent.Proper (Dependent.idR ==> Dependent.idR ==> Dependent.const eqf ==> eqfR) (@of_bool r s).
+  Proof.
+    repeat intro; cbv [of_bool]; eapply map_Proper_dep; repeat intro; hnf in *;
+      try match goal with H : _ |- _ => eapply H end; hnf.
+    match goal with H : _ |- _ => erewrite H by eauto end.
+    cbv; break_innermost_match; assumption.
   Qed.
 
   #[export] Instance of_bool_Proper {A r s zero one} : Proper (eqf ==> eqf) (@of_bool A r s zero one).
-  Proof.
-    intros ?? H ?; cbv [of_bool]; apply map_Proper; try assumption; repeat intro; reflexivity.
-  Qed.
+  Proof. apply of_bool_Proper_dep; reflexivity. Qed.
 
+  #[export] Instance mean_Proper_dep {r s}
+    : Dependent.Proper3
+        (Dependent.lift3_1 Dependent.idR
+           ==> (Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_1 Dependent.idR)
+           ==> (Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_3 Dependent.idR)
+           ==> (Dependent.const3 eq ==> Dependent.lift3_2 Dependent.idR)
+           ==> Dependent.lift3_1 eqfR ==> Dependent.lift3_3 eqfR)
+        (@mean r s).
+  Proof.
+    cbv [mean]; repeat intro.
+    eapply reduce_axis_m1_Proper_dep; repeat intro; hnf in *.
+    2: eapply reshape_m1_Proper_dep; repeat intro; hnf in *.
+    1: eapply Reduction.mean_Proper_dep; repeat intro; hnf in *.
+    all: try eassumption.
+    all: cbv in *; eauto.
+    all: subst; eauto.
+    all: match goal with H : _ |- _ => eapply H end.
+    all: eauto.
+  Qed.
 
   #[export] Instance mean_Proper {r s A B C zero addA div_boyABC coerB} : Proper (eqf ==> eqf) (@mean r s A B C zero addA div_boyABC coerB).
-  Proof.
-    cbv [mean]; intros ?? H ?.
-    eapply reduce_axis_m1_Proper.
-    1: eapply Reduction.mean_Proper_pointwise.
-    apply reshape_m1_Proper.
-    assumption.
-  Qed.
+  Proof. eapply mean_Proper_dep; repeat instantiate (1:=eq); cbv; intros; subst; reflexivity. Qed.
 
   (*(* TODO: nary *)
 Definition tupleify {s1 s2 A B} (t1 : tensor A [s1]) (t2 : tensor B [s2]) : tensor (A * B) [s1; s2]
@@ -388,18 +493,14 @@ Definition cartesian_prod {s1 s2 A} (t1 : tensor A [s1]) (t2 : tensor A [s2]) : 
      => let '(a, b) := raw_get (reshape_m1 (tupleify t1 t2)) [idx] in
         nth_default a [a; b] (Z.to_nat (Uint63.to_Z (tuple_idx mod 2))).
    *)
-  #[export] Instance tril_Proper {rnk s A zeroA r c diagonal} : Proper (eqf ==> eqf) (@tril rnk s A zeroA r c diagonal).
-  Proof.
-    cbv [tril]; intros ?? H [[? ?] ?].
-    rewrite H.
-    reflexivity.
-  Qed.
-  #[export] Instance triu_Proper {rnk s A zeroA r c diagonal} : Proper (eqf ==> eqf) (@triu rnk s A zeroA r c diagonal).
-  Proof.
-    cbv [triu]; intros ?? H [[? ?] ?].
-    rewrite H.
-    reflexivity.
-  Qed.
+  #[export] Instance tril_Proper_dep {rnk s r c} : Dependent.Proper (Dependent.idR ==> Dependent.const eq ==> eqfR ==> eqfR) (@tril rnk s r c).
+  Proof. cbv [tril]; repeat intro; subst; break_innermost_match; eauto. Qed.
+  #[export] Instance tril_Proper {rnk s r c A zeroA diagonal} : Proper (eqf ==> eqf) (@tril rnk s r c A zeroA diagonal).
+  Proof. apply tril_Proper_dep; reflexivity. Qed.
+  #[export] Instance triu_Proper_dep {rnk s r c} : Dependent.Proper (Dependent.idR ==> Dependent.const eq ==> eqfR ==> eqfR) (@triu rnk s r c).
+  Proof. cbv [triu]; repeat intro; subst; break_innermost_match; eauto. Qed.
+  #[export] Instance triu_Proper {rnk s r c A zeroA diagonal} : Proper (eqf ==> eqf) (@triu rnk s r c A zeroA diagonal).
+  Proof. apply triu_Proper_dep; reflexivity. Qed.
 
   (* probably not needed, but might speed things up a bit *)
   #[export] Instance : Params (@Tensor.eqfR) 4 := {}.

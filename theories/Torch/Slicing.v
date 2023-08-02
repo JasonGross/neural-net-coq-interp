@@ -93,26 +93,26 @@ Module SliceIndex.
            => transfer_shape_single_index transfer_shape_idxs
          end.
 
-    Definition slice {ris ros ri ro A}
+    Definition slice {ris ros ri ro}
       (transfer_shape_idxs : Shape ris -> Shape ros)
-      (slice_idxs : forall {s : Shape ris}, tensor s A -> tensor (transfer_shape_idxs s) A)
+      (slice_idxs : forall {s : Shape ris} {A}, tensor s A -> tensor (transfer_shape_idxs s) A)
       (idx : SliceIndexType ri ro)
-      : forall {s : Shape (ris +' ri)}, tensor s A -> tensor (transfer_shape transfer_shape_idxs idx s) A
-      := match idx in Slicing.SliceIndexType ri ro return forall s : Shape (ris +' ri), tensor s A -> tensor (transfer_shape transfer_shape_idxs idx s) A with
+      : forall {s : Shape (ris +' ri)} {A}, tensor s A -> tensor (transfer_shape transfer_shape_idxs idx s) A
+      := match idx in Slicing.SliceIndexType ri ro return forall (s : Shape (ris +' ri)) {A}, tensor s A -> tensor (transfer_shape transfer_shape_idxs idx s) A with
          | slice_index sl
-           => fun s t idxs' (* adjust slice at last index *)
+           => fun s A t idxs' (* adjust slice at last index *)
               => let idx := RawIndex.tl idxs' in
-                 @slice_idxs (Shape.hd s) (fun idxs' => t (RawIndex.snoc idxs' (Slice.invert_index sl (Shape.tl s) idx))) (RawIndex.hd idxs')
+                 @slice_idxs (Shape.hd s) A (fun idxs' => t (RawIndex.snoc idxs' (Slice.invert_index sl (Shape.tl s) idx))) (RawIndex.hd idxs')
          (*| @slice_tensor_index s' sidx
               => fun s t idxs' (* lookup index *)
                  => let idx := RawIndex.tl idxs' in
                     slice_idxs (Shape.hd s) (fun idxs' => t (RawIndex.snoc idxs' (adjust_index_for (Shape.tl s) (Tensor.raw_get sidx [idx])))) (RawIndex.hd idxs')*)
          | broadcast_one_index
-           => fun s t idxs' (* ignore final idxs', which is just 1 *)
-              => @slice_idxs s t (RawIndex.hd idxs')
+           => fun s A t idxs' (* ignore final idxs', which is just 1 *)
+              => @slice_idxs s A t (RawIndex.hd idxs')
          | single_index idx
-           => fun s t idxs' (* adjoin idx as final index *)
-              => @slice_idxs (Shape.hd s) (fun idxs' => t (RawIndex.snoc idxs' (adjust_index_for (Shape.tl s) idx))) idxs'
+           => fun s A t idxs' (* adjoin idx as final index *)
+              => @slice_idxs (Shape.hd s) A (fun idxs' => t (RawIndex.snoc idxs' (adjust_index_for (Shape.tl s) idx))) idxs'
          end.
   End SliceIndexType.
   Notation IndexType := SliceIndexType.t.
@@ -149,13 +149,13 @@ Module SliceIndex.
        | idxs ::' idx => SliceIndexType.transfer_shape (transfer_shape idxs) idx
        end.
 
-  Fixpoint slice {A ri ro} (idxs : t ri ro) : forall {s : Shape ri}, tensor s A -> tensor (transfer_shape idxs s) A
+  Fixpoint slice {ri ro} {s : Shape ri} (idxs : t ri ro) {A} : tensor s A -> tensor (transfer_shape idxs s) A
     := match idxs in t ri ro return forall {s : Shape ri}, tensor s A -> tensor (transfer_shape idxs s) A with
        | [] => fun _s t idxs' => t tt
        | … => fun _s t idxs' => t idxs'
        | idxs ::' idx
-         => fun s => SliceIndexType.slice (transfer_shape idxs) (fun s => slice idxs) idx
-       end.
+         => fun s => SliceIndexType.slice (transfer_shape idxs) (fun s A => slice idxs) idx
+       end s.
 
   Module Import SliceIndexNotations.
     Export SliceIndexNotations0.
@@ -255,12 +255,12 @@ Module FancyIndex.
               (FancyIndexType.broadcast idx)
        end.
 
-  Definition slice_ {A} {rb} {s_broadcast : Shape rb} {ri ro} (idxs : @t rb s_broadcast ri ro) {s : Shape ri} (x : tensor s A)
+  Definition slice_ {rb} {s_broadcast : Shape rb} {ri ro} {s : Shape ri} {A} (idxs : @t rb s_broadcast ri ro) (x : tensor s A)
     : tensor_dep (fun i => tensor (SliceIndex.transfer_shape i s) A) (broadcast idxs)
     := Tensor.map_dep (fun i => SliceIndex.slice i x) (broadcast idxs).
 
   Definition slice
-    {A} {rb} {s_broadcast : Shape rb} {ri ro} (idxs : @t rb s_broadcast ri ro) {s : Shape ri} (x : tensor s A)
+    {rb} {s_broadcast : Shape rb} {ri ro} {s : Shape ri} {A} (idxs : @t rb s_broadcast ri ro) (x : tensor s A)
     : tensor (transfer_shape idxs s) A
     := reshape_app_combine' (slice_ idxs x).
 

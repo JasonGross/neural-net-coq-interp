@@ -42,6 +42,17 @@ Section Proper3.
     := fun a0 b0 R0 a1 b1 R1 a2 b2 R2 f g => forall x y, R _ _ R0 _ _ R1 _ _ R2 x y -> R' _ _ R0 _ _ R1 _ _ R2 (f x) (g y).
 
 End Proper3.
+
+Section Proper4.
+  Context {F : Type -> Type -> Type -> Type -> Type}.
+
+  Class Proper4 (R : Dependent.relation4 F) (m : forall A B C D, F A B C D) : Prop :=
+    proper4_prf : forall {A B} (R0 : Hetero.relation A B) {A' B'} (R1 : Hetero.relation A' B') {A'' B''} (R2 : Hetero.relation A'' B'') {A''' B'''} (R3 : Hetero.relation A''' B'''), R A B R0 A' B' R1 A'' B'' R2 A''' B''' R3 (m A A' A'' A''') (m B B' B'' B''').
+
+  Definition respectful4 {A B : Type -> Type -> Type -> Type -> Type} (R : Dependent.relation4 A) (R' : Dependent.relation4 B) : Dependent.relation4 (fun T U V W => A T U V W -> B T U V W)
+    := fun a0 b0 R0 a1 b1 R1 a2 b2 R2 a3 b3 R3 f g => forall x y, R _ _ R0 _ _ R1 _ _ R2 _ _ R3 x y -> R' _ _ R0 _ _ R1 _ _ R2 _ _ R3 (f x) (g y).
+
+End Proper4.
 (*
 (** Non-dependent pointwise lifting *)
 Definition pointwise_relation A {B} (R : relation B) : relation (A -> B) :=
@@ -60,6 +71,10 @@ Delimit Scope dependent2_signature_scope with signatureD2.
 Declare Scope dependent3_signature_scope.
 Delimit Scope dependent3_signature_scope with dependent3_signature.
 Delimit Scope dependent3_signature_scope with signatureD3.
+
+Declare Scope dependent4_signature_scope.
+Delimit Scope dependent4_signature_scope with dependent4_signature.
+Delimit Scope dependent4_signature_scope with signatureD4.
 
 Module ProperNotations.
 
@@ -90,6 +105,15 @@ Module ProperNotations.
   Notation " R --> R' " := (@respectful3 _ _ (flip (R%dependent3_signature)) (R'%dependent3_signature))
     (right associativity, at level 55) : dependent3_signature_scope.
 
+  Notation " R ++> R' " := (@respectful4 _ _ (R%dependent4_signature) (R'%dependent4_signature))
+    (right associativity, at level 55) : dependent4_signature_scope.
+
+  Notation " R ==> R' " := (@respectful4 _ _ (R%dependent4_signature) (R'%dependent4_signature))
+    (right associativity, at level 55) : dependent4_signature_scope.
+
+  Notation " R --> R' " := (@respectful4 _ _ (flip (R%dependent4_signature)) (R'%dependent4_signature))
+    (right associativity, at level 55) : dependent4_signature_scope.
+
 End ProperNotations.
 
 Notation idR := (fun (A B : Type) (R : Hetero.relation A B) => R).
@@ -97,12 +121,26 @@ Notation const R := (match _ as F return forall A B, Hetero.relation A B -> Hete
                      | F => fun (A B : Type) (_ : Hetero.relation A B) => R
                      end) (only parsing).
 Notation constR R := (fun (A B : Type) (_ : Hetero.relation A B) => R).
+Notation const2 R := (match _ as F return forall A B, Hetero.relation A B -> forall A' B', Hetero.relation A' B' -> Hetero.relation F F with
+                      | F => fun (A B : Type) (_ : Hetero.relation A B) (A' B' : Type) (_ : Hetero.relation A' B') => R
+                      end) (only parsing).
+Notation constR2 R := (fun (A B : Type) (_ : Hetero.relation A B) (A' B' : Type) (_ : Hetero.relation A' B') => R).
+Notation const3 R := (match _ as F return forall A B, Hetero.relation A B -> forall A' B', Hetero.relation A' B' -> forall A'' B'', Hetero.relation A'' B'' -> Hetero.relation F F with
+                      | F => fun (A B : Type) (_ : Hetero.relation A B) (A' B' : Type) (_ : Hetero.relation A' B') (A'' B'' : Type) (_ : Hetero.relation A'' B'') => R
+                      end) (only parsing).
+Notation constR3 R := (fun (A B : Type) (_ : Hetero.relation A B) (A' B' : Type) (_ : Hetero.relation A' B') (A'' B'' : Type) (_ : Hetero.relation A'' B'') => R).
+Notation const4 R := (match _ as F return forall A B, Hetero.relation A B -> forall A' B', Hetero.relation A' B' -> forall A'' B'', Hetero.relation A'' B'' -> forall A''' B''', Hetero.relation A''' B''' -> Hetero.relation F F with
+                      | F => fun (A B : Type) (_ : Hetero.relation A B) (A' B' : Type) (_ : Hetero.relation A' B') (A'' B'' : Type) (_ : Hetero.relation A'' B'') (A''' B''' : Type) (_ : Hetero.relation A''' B''') => R
+                      end) (only parsing).
+Notation constR4 R := (fun (A B : Type) (_ : Hetero.relation A B) (A' B' : Type) (_ : Hetero.relation A' B') (A'' B'' : Type) (_ : Hetero.relation A'' B'') (A''' B''' : Type) (_ : Hetero.relation A''' B''') => R).
 Arguments Proper {F}%type R%dependent_signature m.
 Arguments respectful {A B}%type (R R')%dependent_signature (_ _)%type _ _.
 Arguments Proper2 {F}%type R%dependent2_signature m.
 Arguments respectful2 {A B}%type (R R')%dependent2_signature (_ _)%type _ _.
 Arguments Proper3 {F}%type R%dependent3_signature m.
 Arguments respectful3 {A B}%type (R R')%dependent3_signature (_ _)%type _ _.
+Arguments Proper4 {F}%type R%dependent4_signature m.
+Arguments respectful4 {A B}%type (R R')%dependent4_signature (_ _)%type _ _.
 
 Export ProperNotations.
 

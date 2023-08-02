@@ -8,6 +8,54 @@ Definition relation2 (F : Type -> Type -> Type)
   := forall A B, Hetero.relation A B -> forall A' B', Hetero.relation A' B' -> Hetero.relation (F A A') (F B B').
 Definition relation3 (F : Type -> Type -> Type -> Type)
   := forall A B, Hetero.relation A B -> forall A' B', Hetero.relation A' B' -> forall A'' B'', Hetero.relation A'' B'' -> Hetero.relation (F A A' A'') (F B B' B'').
+Definition relation4 (F : Type -> Type -> Type -> Type -> Type)
+  := forall A B, Hetero.relation A B -> forall A' B', Hetero.relation A' B' -> forall A'' B'', Hetero.relation A'' B'' -> forall A''' B''', Hetero.relation A''' B''' -> Hetero.relation (F A A' A'' A''') (F B B' B'' B''').
+
+Definition lift2_1 {F} (R : relation F) : relation2 (fun A _ => F A)
+  := fun _ _ R' _ _ _ => R _ _ R'.
+Definition lift2_2 {F} (R : relation F) : relation2 (fun _ A => F A)
+  := fun _ _ _ _ _ R' => R _ _ R'.
+Definition lift3_1 {F} (R : relation F) : relation3 (fun A _ _ => F A)
+  := fun _ _ R' _ _ _ _ _ _ => R _ _ R'.
+Definition lift3_2 {F} (R : relation F) : relation3 (fun _ A _ => F A)
+  := fun _ _ _ _ _ R' _ _ _ => R _ _ R'.
+Definition lift3_3 {F} (R : relation F) : relation3 (fun _ _ A => F A)
+  := fun _ _ _ _ _ _ _ _ R' => R _ _ R'.
+Definition lift3_12 {F} (R : relation2 F) : relation3 (fun A B _ => F A B)
+  := fun _ _ R' _ _ R'' _ _ _ => R _ _ R' _ _ R''.
+Definition lift3_13 {F} (R : relation2 F) : relation3 (fun A _ B => F A B)
+  := fun _ _ R' _ _ _ _ _ R'' => R _ _ R' _ _ R''.
+Definition lift3_23 {F} (R : relation2 F) : relation3 (fun _ A B => F A B)
+  := fun _ _ _ _ _ R' _ _ R'' => R _ _ R' _ _ R''.
+Definition lift4_1 {F} (R : relation F) : relation4 (fun A _ _ _ => F A)
+  := fun _ _ R' _ _ _ _ _ _ _ _ _ => R _ _ R'.
+Definition lift4_2 {F} (R : relation F) : relation4 (fun _ A _ _ => F A)
+  := fun _ _ _ _ _ R' _ _ _ _ _ _ => R _ _ R'.
+Definition lift4_3 {F} (R : relation F) : relation4 (fun _ _ A _ => F A)
+  := fun _ _ _ _ _ _ _ _ R' _ _ _ => R _ _ R'.
+Definition lift4_4 {F} (R : relation F) : relation4 (fun _ _ _ A => F A)
+  := fun _ _ _ _ _ _ _ _ _ _ _ R' => R _ _ R'.
+Definition lift4_12 {F} (R : relation2 F) : relation4 (fun A B _ _ => F A B)
+  := fun _ _ R' _ _ R'' _ _ _ _ _ _ => R _ _ R' _ _ R''.
+Definition lift4_13 {F} (R : relation2 F) : relation4 (fun A _ B _ => F A B)
+  := fun _ _ R' _ _ _ _ _ R'' _ _ _ => R _ _ R' _ _ R''.
+Definition lift4_14 {F} (R : relation2 F) : relation4 (fun A _ _ B => F A B)
+  := fun _ _ R' _ _ _ _ _ _ _ _ R'' => R _ _ R' _ _ R''.
+Definition lift4_23 {F} (R : relation2 F) : relation4 (fun _ A B _ => F A B)
+  := fun _ _ _ _ _ R' _ _ R'' _ _ _ => R _ _ R' _ _ R''.
+Definition lift4_24 {F} (R : relation2 F) : relation4 (fun _ A _ B => F A B)
+  := fun _ _ _ _ _ R' _ _ _ _ _ R'' => R _ _ R' _ _ R''.
+Definition lift4_34 {F} (R : relation2 F) : relation4 (fun _ _ A B => F A B)
+  := fun _ _ _ _ _ _ _ _ R' _ _ R'' => R _ _ R' _ _ R''.
+Definition lift4_123 {F} (R : relation3 F) : relation4 (fun A B C _ => F A B C)
+  := fun _ _ R' _ _ R'' _ _ R''' _ _ _ => R _ _ R' _ _ R'' _ _ R'''.
+Definition lift4_124 {F} (R : relation3 F) : relation4 (fun A B _ C => F A B C)
+  := fun _ _ R' _ _ R'' _ _ _ _ _ R''' => R _ _ R' _ _ R'' _ _ R'''.
+Definition lift4_134 {F} (R : relation3 F) : relation4 (fun A _ B C => F A B C)
+  := fun _ _ R' _ _ _ _ _ R'' _ _ R''' => R _ _ R' _ _ R'' _ _ R'''.
+Definition lift4_234 {F} (R : relation3 F) : relation4 (fun _ A B C => F A B C)
+  := fun _ _ _ _ _ R' _ _ R'' _ _ R''' => R _ _ R' _ _ R'' _ _ R'''.
+
 Section Relation_Definition.
 
   Variable F : Type -> Type.

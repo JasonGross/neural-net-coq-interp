@@ -869,7 +869,7 @@ Definition uncurry {r} {s : Shape r} {A} : @RawIndex.curriedT r A -> tensor s A
 Definition curry {r} {s : Shape r} {A} : tensor s A -> @RawIndex.curriedT r A
   := RawIndex.curry.
 
-Definition map' {ra1 ra2 rb A B} {sa1 : Shape ra1} {sa2 : Shape ra2} {sb : Shape rb} (f : tensor sa2 A -> tensor sb B) (t : tensor (sa1 ++' sa2) A) : tensor (sa1 ++' sb) B
+Definition map' {ra1 ra2 rb} {sa1 : Shape ra1} {sa2 : Shape ra2} {sb : Shape rb} {A B} (f : tensor sa2 A -> tensor sb B) (t : tensor (sa1 ++' sa2) A) : tensor (sa1 ++' sb) B
   := reshape_app_combine (map f (reshape_app_split t)).
 Definition map2' {ri1 ri2 ro} {sA1 sB1 : Shape ri1} {sA2 sB2 : Shape ri2} {so : Shape ro} {A B C} (f : tensor sA2 A -> tensor sB2 B -> tensor so C) (tA : tensor (sA1 ++' sA2) A) (tB : tensor (sB1 ++' sB2) B) : tensor (Shape.broadcast2 sA1 sB1 ++' so) C
   := reshape_app_combine (map2 f (reshape_app_split tA) (reshape_app_split tB)).
@@ -892,7 +892,7 @@ Definition reduce_axis_m1' {r} {s1 : Shape r} {s2} {A B}
   : tensor s1 B
   := map (fun v => reduction 0 s2 1 (fun i => raw_get v [i])) (reshape_snoc_split t).
 
-Definition reduce_axis_m1 {r} {s1 : Shape r} {s2} {A B} {keepdim : with_default "keepdim" bool false}
+Definition reduce_axis_m1 {r} {s1 : Shape r} {s2} {keepdim : with_default "keepdim" bool false} {A B}
   (reduction : forall (start stop step : RawIndexType), (RawIndexType -> A) -> B)
   : tensor (s1 ::' s2) A -> tensor (s1 ++' if keepdim return Shape (if keepdim then _ else _) then [1] else []) B
   := if keepdim
@@ -982,14 +982,14 @@ main diagonal, and similarly a negative value excludes just as many
 diagonals below the main diagonal. The main diagonal are the set of
 indices {(i,i)} for i ∈ [0,min{d₁,d₂}−1] where d₁,d₂ are the
 dimensions of the matrix. *)
-Definition tril {rnk} {s : Shape rnk} {A} {zero : has_zero A} {r c}
+Definition tril {rnk} {s : Shape rnk} {r c} {A} {zero : has_zero A}
   {diagonal : with_default "diagonal" int 0%int63} (input : tensor (s ++' [r; c]) A)
   : tensor (s ++' [r; c]) A
   := fun '(((_, i), j) as idxs)
      => if ((0 ≤? i) && (i <? r) && (Sint63.max 0 (1 + i + diagonal) ≤? j) && (j <? c))%bool
         then 0%core
         else input idxs.
-#[global] Arguments tril {rnk%nat s%shape} {A%type_scope zero} {r c}%uint63 {diagonal}%sint63 input%tensor.
+#[global] Arguments tril {rnk%nat s%shape} {r c}%uint63 {A%type_scope zero} {diagonal}%sint63 input%tensor.
 (** Quoting https://pytorch.org/docs/stable/generated/torch.triu.html
 
 torch.triu(input, diagonal=0, *, out=None) → Tensor
@@ -1008,11 +1008,11 @@ main diagonal, and similarly a negative value includes just as many
 diagonals below the main diagonal. The main diagonal are the set of
 indices {(i,i)} for i ∈ [0,min{d₁,d₂}−1] where d₁,d₂ are the
 dimensions of the matrix. *)
-Definition triu {rnk} {s : Shape rnk} {A} {zero : has_zero A} {r c}
+Definition triu {rnk} {s : Shape rnk} {r c} {A} {zero : has_zero A}
   {diagonal : with_default "diagonal" int 0%int63} (input : tensor (s ++' [r; c]) A)
   : tensor (s ++' [r; c]) A
   := fun '(((_, i), j) as idxs)
      => if ((0 ≤? i) && (i <? r) && (0 ≤? j) && (j <? Sint63.max 0 (i + diagonal)))%bool
         then 0%core
         else input idxs.
-#[global] Arguments triu {rnk%nat s%shape} {A%type_scope zero} {r c}%uint63 {diagonal}%sint63 input%tensor.
+#[global] Arguments triu {rnk%nat s%shape} {r c}%uint63 {A%type_scope zero} {diagonal}%sint63 input%tensor.

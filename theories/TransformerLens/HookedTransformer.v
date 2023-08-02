@@ -22,22 +22,24 @@ Notation tensor_of_list ls := (Tensor.PArray.abstract (Tensor.PArray.concretize 
 
 Module Embed.
   Section __.
-    Context {A d_vocab d_model}
+    Context {r} {s : Shape r} {d_vocab d_model A}
       (W_E : tensor [d_vocab; d_model] A).
 
-    Definition forward {r} {s : Shape r} (tokens : tensor s IndexType) : tensor (s ::' d_model) A
+    Definition forward (tokens : tensor s IndexType) : tensor (s ::' d_model) A
       := (W_E.[tokens, :])%fancy_raw_tensor.
   End __.
 End Embed.
 
 Module Unembed.
   Section __.
-    Context {A} {addA : has_add A} {mulA : has_mul A} {zeroA : has_zero A}
+    Context
+      {r} {batch_pos : Shape r}
       {d_model d_vocab_out}
+      {A} {addA : has_add A} {mulA : has_mul A} {zeroA : has_zero A}
       (W_U : tensor [d_model; d_vocab_out] A)
       (b_U : tensor [d_vocab_out] A).
 
-    Definition forward {r} {batch_pos : Shape r} (residual : tensor (batch_pos ::' d_model) A)
+    Definition forward (residual : tensor (batch_pos ::' d_model) A)
       : tensor (batch_pos ::' d_vocab_out) A
       := (Tensor.map'
             (fun residual : tensor [d_model] A
@@ -52,12 +54,13 @@ End Unembed.
 
 Module PosEmbed.
   Section __.
-    Context {A d_model}
-      {n_ctx:N}
+    Context {r} {batch : Shape r} {tokens_length : ShapeType}
+      {d_model} {n_ctx:N}
       (n_ctx' : int := n_ctx)
+      {A}
       (W_pos : tensor [n_ctx'; d_model] A).
 
-    Definition forward {r} {batch : Shape r} {tokens_length} (tokens : tensor (batch ::' tokens_length) IndexType)
+    Definition forward (tokens : tensor (batch ::' tokens_length) IndexType)
       : tensor (batch ::' tokens_length ::' d_model) A
       := repeat batch (W_pos.[:tokens_length, :]).
   End __.
@@ -65,7 +68,8 @@ End PosEmbed.
 
 Module LayerNorm.
   Section __.
-    Context {r A} {s : Shape r} {d_model}
+    Context {r} {s : Shape r} {d_model}
+      {A}
       {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A} {sqrtA : has_sqrt A} {zeroA : has_zero A} {coerZ : has_coer Z A} {default : pointed A}
       (eps : A) (w b : tensor [d_model] A).
 
@@ -97,10 +101,11 @@ End LayerNorm.
 
 Module Attention.
   Section __.
-    Context {A r} {batch : Shape r}
-      {sqrtA : has_sqrt A} {coerZ : has_coer Z A} {addA : has_add A} {zeroA : has_zero A} {mulA : has_mul A} {divA : has_div A} {expA : has_exp A} {defaultA : pointed A}
+    Context {r} {batch : Shape r}
       {pos n_heads d_model d_head} {n_ctx:N}
       {use_split_qkv_input : with_default "use_split_qkv_input" bool false}
+      {A}
+      {sqrtA : has_sqrt A} {coerZ : has_coer Z A} {addA : has_add A} {zeroA : has_zero A} {mulA : has_mul A} {divA : has_div A} {expA : has_exp A} {defaultA : pointed A}
       (W_Q W_K W_V W_O : tensor [n_heads; d_model; d_head] A)
       (b_Q b_K b_V : tensor [n_heads; d_head] A)
       (b_O : tensor [d_model] A)
@@ -210,14 +215,17 @@ Variant NormalizationType := LN (*| LNPre*).
 
 Module TransformerBlock.
   Section __.
-    Context {A r} {batch : Shape r}
+    Context {r} {batch : Shape r}
+      {pos n_heads d_model d_head} {n_ctx:N}
+      {use_split_qkv_input : with_default "use_split_qkv_input" bool false}
+      {normalization_type : with_default "normalization_type" (option NormalizationType) (Some LN)}
+      (maybe_n_heads := fun b : bool => (if b return Shape (if b then _ else _) then [n_heads] else [])%shape)
+      (ln_s := (batch ::' pos ++ maybe_n_heads use_split_qkv_input)%shape)
+      {A}
       {zeroA : has_zero A} {coerZ : has_coer Z A}
       {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
       {sqrtA : has_sqrt A} {expA : has_exp A}
       {default : pointed A}
-      {pos n_heads d_model d_head} {n_ctx:N}
-      {use_split_qkv_input : with_default "use_split_qkv_input" bool false}
-      {normalization_type : with_default "normalization_type" (option NormalizationType) (Some LN)}
       (W_Q W_K W_V W_O : tensor [n_heads; d_model; d_head] A)
       (b_Q b_K b_V : tensor [n_heads; d_head] A)
       (b_O : tensor [d_model] A)
@@ -226,8 +234,8 @@ Module TransformerBlock.
                                  | Some LN => tensor [d_model] A
                                  | Datatypes.None => with_default "()" True I
                                  end)
-      (resid_pre : tensor ((batch ::' pos) ++' [d_model]) A)
-      (maybe_n_heads := fun b : bool => (if b return Shape (if b then _ else _) then [n_heads] else [])%shape).
+      (resid_pre : tensor ((batch ::' pos) ++' [d_model]) A).
+
 
     Definition add_head_dimension
       (resid_pre : tensor ((batch ::' pos) ++' [d_model]) A)
@@ -257,9 +265,9 @@ Module TransformerBlock.
           end)
            (only parsing).
 
-    Definition ln1 {r} {s : Shape r} (t : tensor (s ::' d_model) A) : tensor (s ::' d_model) A
+    Definition ln1 (*{r} {s : Shape r}*) (t : tensor (ln_s ::' d_model) A) : tensor (ln_s ::' d_model) A
       := LayerNorm_forward ln1_w ln1_b t.
-    Definition ln2 {r} {s : Shape r} (t : tensor (s ::' d_model) A) : tensor (s ::' d_model) A
+    Definition ln2 (*{r} {s : Shape r}*) (t : tensor (ln_s ::' d_model) A) : tensor (ln_s ::' d_model) A
       := LayerNorm_forward ln2_w ln2_b t.
 
     Definition attn_only_out : tensor (batch ++ [pos; d_model]) A
@@ -294,12 +302,15 @@ End TransformerBlock.
 
 Module HookedTransformer.
   Section __.
-    Context {A}
+    Context {d_vocab d_vocab_out n_heads d_model d_head} {n_ctx:N}
+      {r} {batch : Shape r} {pos}
+      (s := (batch ::' pos)%shape)
+      (resid_shape := (s ::' d_model)%shape)
+      {A}
       {zeroA : has_zero A} {coerZ : has_coer Z A}
       {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
       {sqrtA : has_sqrt A} {expA : has_exp A}
       {default : pointed A}
-      {d_vocab d_vocab_out n_heads d_model d_head} {n_ctx:N}
       (*{use_split_qkv_input : with_default "use_split_qkv_input" bool false}*)
       {normalization_type : with_default "normalization_type" (option NormalizationType) (Some LN)}
       (eps : A)
@@ -333,31 +344,26 @@ Module HookedTransformer.
       (W_U : tensor [d_model; d_vocab_out] A) (b_U : tensor [d_vocab_out] A)
     .
 
-    Section with_batch.
-      Context {r} {batch : Shape r} {pos}
-        (s := (batch ::' pos)%shape)
-        (resid_shape := (s ::' d_model)%shape).
+    Definition embed (tokens : tensor s IndexType) : tensor resid_shape A
+      := Embed.forward W_E tokens.
 
-      Definition embed (tokens : tensor s IndexType) : tensor resid_shape A
-        := Embed.forward W_E tokens.
+    Definition pos_embed (tokens : tensor s IndexType) : tensor resid_shape A
+      := PosEmbed.forward W_pos tokens.
 
-      Definition pos_embed (tokens : tensor s IndexType) : tensor resid_shape A
-        := PosEmbed.forward W_pos tokens.
-
-      Definition blocks : list (tensor resid_shape A -> tensor resid_shape A)
-        := List.map
-             (fun '(W_Q, W_K, W_V, W_O,
-                    b_Q, b_K, b_V,
-                    b_O,
-                    ln1_w, ln1_b)
-              => TransformerBlock.attn_only_out
-                   (n_ctx:=n_ctx)
-                   W_Q W_K W_V W_O
-                   b_Q b_K b_V
-                   b_O
-                   eps
-                   ln1_w ln1_b)
-             blocks_params.
+    Definition blocks : list (tensor resid_shape A -> tensor resid_shape A)
+      := List.map
+           (fun '(W_Q, W_K, W_V, W_O,
+                  b_Q, b_K, b_V,
+                  b_O,
+                  ln1_w, ln1_b)
+            => TransformerBlock.attn_only_out
+                 (n_ctx:=n_ctx)
+                 W_Q W_K W_V W_O
+                 b_Q b_K b_V
+                 b_O
+                 eps
+                 ln1_w ln1_b)
+           blocks_params.
 
     #[local] Notation LayerNorm_forward
       := (match normalization_type
@@ -370,94 +376,93 @@ Module HookedTransformer.
           end)
            (only parsing).
 
-      Definition ln_final (resid : tensor resid_shape A) : tensor resid_shape A
-        := LayerNorm_forward ln_final_w ln_final_b resid.
+    Definition ln_final (resid : tensor resid_shape A) : tensor resid_shape A
+      := LayerNorm_forward ln_final_w ln_final_b resid.
 
-      Definition unembed (resid : tensor resid_shape A) : tensor (s ::' d_vocab_out) A
-        := Unembed.forward W_U b_U resid.
+    Definition unembed (resid : tensor resid_shape A) : tensor (s ::' d_vocab_out) A
+      := Unembed.forward W_U b_U resid.
 
-      Definition blocks_cps {T} {n : with_default "blocks n" nat (List.length blocks)} (residual : tensor resid_shape A) (K : tensor resid_shape A -> T) : T
-        := List.fold_right
-             (fun block cont residual
-              => let residual := PArray.checkpoint (block residual) in
-                 cont residual)
-             K
-             (List.firstn n blocks)
-             residual.
+    Definition blocks_cps {T} {n : with_default "blocks n" nat (List.length blocks)} (residual : tensor resid_shape A) (K : tensor resid_shape A -> T) : T
+      := List.fold_right
+           (fun block cont residual
+            => let residual := PArray.checkpoint (block residual) in
+               cont residual)
+           K
+           (List.firstn n blocks)
+           residual.
 
-      Definition resid_postembed (tokens : tensor s IndexType) : tensor resid_shape A
-        := (let embed          := embed tokens in
-            let pos_embed      := pos_embed tokens in
-            PArray.checkpoint (embed + pos_embed)%core).
+    Definition resid_postembed (tokens : tensor s IndexType) : tensor resid_shape A
+      := (let embed          := embed tokens in
+          let pos_embed      := pos_embed tokens in
+          PArray.checkpoint (embed + pos_embed)%core).
 
-      Definition logits (tokens : tensor s IndexType) : tensor (s ::' d_vocab_out) A
-        := (let residual       := resid_postembed tokens in
-            blocks_cps
-              residual
-              (fun residual
-               => let residual := PArray.checkpoint (ln_final residual) in
-                  let logits   := PArray.checkpoint (unembed residual) in
-                  logits)).
+    Definition logits (tokens : tensor s IndexType) : tensor (s ::' d_vocab_out) A
+      := (let residual       := resid_postembed tokens in
+          blocks_cps
+            residual
+            (fun residual
+             => let residual := PArray.checkpoint (ln_final residual) in
+                let logits   := PArray.checkpoint (unembed residual) in
+                logits)).
 
-      Definition forward (tokens : tensor s IndexType) : tensor (s ::' d_vocab_out) A
-        := logits tokens.
+    Definition forward (tokens : tensor s IndexType) : tensor (s ::' d_vocab_out) A
+      := logits tokens.
 
-      (** convenience *)
-      Local Definition blocks_attn_masked_attn_scores
-        : list (tensor resid_shape A -> tensor (batch ::' n_heads ::' pos ::' pos) A)
-        := List.map
-             (fun '(W_Q, W_K, W_V, W_O,
-                    b_Q, b_K, b_V,
-                    b_O,
-                    ln1_w, ln1_b)
-              => TransformerBlock.attn_masked_attn_scores
-                   (n_ctx:=n_ctx)
-                   W_Q W_K
-                   b_Q b_K
-                   eps
-                   ln1_w ln1_b)
-             blocks_params.
+    (** convenience *)
+    Local Definition blocks_attn_masked_attn_scores
+      : list (tensor resid_shape A -> tensor (batch ::' n_heads ::' pos ::' pos) A)
+      := List.map
+           (fun '(W_Q, W_K, W_V, W_O,
+                  b_Q, b_K, b_V,
+                  b_O,
+                  ln1_w, ln1_b)
+            => TransformerBlock.attn_masked_attn_scores
+                 (n_ctx:=n_ctx)
+                 W_Q W_K
+                 b_Q b_K
+                 eps
+                 ln1_w ln1_b)
+           blocks_params.
 
-      Local Definition blocks_attn_pattern
-        : list (tensor resid_shape A -> tensor (batch ::' n_heads ::' pos ::' pos) A)
-        := List.map
-             (fun '(W_Q, W_K, W_V, W_O,
-                    b_Q, b_K, b_V,
-                    b_O,
-                    ln1_w, ln1_b)
-              => TransformerBlock.attn_pattern
-                   (n_ctx:=n_ctx)
-                   W_Q W_K
-                   b_Q b_K
-                   eps
-                   ln1_w ln1_b)
-             blocks_params.
+    Local Definition blocks_attn_pattern
+      : list (tensor resid_shape A -> tensor (batch ::' n_heads ::' pos ::' pos) A)
+      := List.map
+           (fun '(W_Q, W_K, W_V, W_O,
+                  b_Q, b_K, b_V,
+                  b_O,
+                  ln1_w, ln1_b)
+            => TransformerBlock.attn_pattern
+                 (n_ctx:=n_ctx)
+                 W_Q W_K
+                 b_Q b_K
+                 eps
+                 ln1_w ln1_b)
+           blocks_params.
 
-      Local Definition masked_attn_scores (n : nat) (tokens : tensor s IndexType)
-        : option (tensor (batch ::' n_heads ::' pos ::' pos) A)
-        := match List.nth_error blocks_attn_masked_attn_scores n with
-           | Some block_n_attn_masked_attn_scores
-             => Some (let residual       := resid_postembed tokens in
-                      blocks_cps
-                        (n:=Nat.pred n)
-                        residual
-                        (fun residual
-                         => PArray.checkpoint (block_n_attn_masked_attn_scores residual)))
-           | None => None
-           end.
+    Local Definition masked_attn_scores (n : nat) (tokens : tensor s IndexType)
+      : option (tensor (batch ::' n_heads ::' pos ::' pos) A)
+      := match List.nth_error blocks_attn_masked_attn_scores n with
+         | Some block_n_attn_masked_attn_scores
+           => Some (let residual       := resid_postembed tokens in
+                    blocks_cps
+                      (n:=Nat.pred n)
+                      residual
+                      (fun residual
+                       => PArray.checkpoint (block_n_attn_masked_attn_scores residual)))
+         | None => None
+         end.
 
-      Local Definition attn_pattern (n : nat) (tokens : tensor s IndexType)
-        : option (tensor (batch ::' n_heads ::' pos ::' pos) A)
-        := match List.nth_error blocks_attn_pattern n with
-           | Some block_n_attn_pattern
-             => Some (let residual       := resid_postembed tokens in
-                      blocks_cps
-                        (n:=Nat.pred n)
-                        residual
-                        (fun residual
-                         => PArray.checkpoint (block_n_attn_pattern residual)))
-           | None => None
-           end.
-    End with_batch.
+    Local Definition attn_pattern (n : nat) (tokens : tensor s IndexType)
+      : option (tensor (batch ::' n_heads ::' pos ::' pos) A)
+      := match List.nth_error blocks_attn_pattern n with
+         | Some block_n_attn_pattern
+           => Some (let residual       := resid_postembed tokens in
+                    blocks_cps
+                      (n:=Nat.pred n)
+                      residual
+                      (fun residual
+                       => PArray.checkpoint (block_n_attn_pattern residual)))
+         | None => None
+         end.
   End __.
 End HookedTransformer.

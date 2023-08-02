@@ -2,6 +2,9 @@ From Coq Require Import Sint63 Uint63 Setoid Morphisms Eqdep_dec.
 From NeuralNetInterp.Torch Require Import Tensor Slicing Tensor.Instances.
 From NeuralNetInterp.Util Require Import Slice Arith.Classes Arith.Instances PolymorphicOption Nat Notations.
 From NeuralNetInterp.Util.Tactics Require Import DestructHead BreakMatch.
+From NeuralNetInterp.Util.Relations Require Relation_Definitions.Hetero Relation_Definitions.Dependent.
+From NeuralNetInterp.Util.Classes Require Morphisms.Dependent.
+Import Dependent.ProperNotations.
 Set Implicit Arguments.
 
 Definition invert_FancyIndexType {r s ri ro} (x : @FancyIndexType r s ri ro)
@@ -52,21 +55,25 @@ Module SliceIndex.
   Module SliceIndexType.
     Export SliceIndexType.
 
-    #[export] Instance slice_Proper {A ris ros ri ro transfer_shape_idxs slice_idxs idx s R}
-      {slice_idxs_Proper : forall {s}, Proper (Tensor.eqfR R ==> Tensor.eqfR R) (@slice_idxs s)}
-      : Proper (Tensor.eqfR R ==> Tensor.eqfR R)
-          (@slice A ris ros ri ro transfer_shape_idxs (@slice_idxs) idx s).
+    Print slice.
+
+    #[export] Instance slice_Proper_dep {ris ros ri ro transfer_shape_idxs slice_idxs idx s}
+      {slice_idxs_Proper_dep : forall {s}, Dependent.Proper (Tensor.eqfR ==> Tensor.eqfR) (@slice_idxs s)}
+      : Dependent.Proper (Tensor.eqfR ==> Tensor.eqfR)
+          (@slice ris ros ri ro transfer_shape_idxs (@slice_idxs) idx s).
     Proof.
-      cbv [slice]; destruct idx; repeat intro; apply slice_idxs_Proper; try assumption; repeat intro; eauto.
+      cbv [slice]; destruct idx; repeat intro; apply slice_idxs_Proper_dep; try assumption; repeat intro; eauto.
     Qed.
   End SliceIndexType.
   Export (hints) SliceIndexType.
 
-  #[export] Instance slice_Proper {A ri ro idxs s R} : Proper (Tensor.eqfR R ==> Tensor.eqfR R) (@slice A ri ro idxs s).
+  #[export] Instance slice_Proper_dep {ri ro s idxs} : Dependent.Proper (Tensor.eqfR ==> Tensor.eqfR) (@slice ri ro s idxs).
   Proof.
     induction idxs; cbn [slice]; repeat intro; eauto.
-    apply SliceIndexType.slice_Proper; eauto.
+    apply SliceIndexType.slice_Proper_dep; eauto.
   Qed.
+  #[export] Instance slice_Proper {A ri ro idxs s R} : Proper (Tensor.eqfR R ==> Tensor.eqfR R) (@slice A ri ro idxs s).
+  Proof. apply slice_Proper_dep. Qed.
 End SliceIndex.
 Export (hints) SliceIndex.
 
@@ -125,8 +132,19 @@ Module FancyIndex.
     all: try assumption.
   Qed.
 
-  #[export] Instance slice_Proper {A rb sb ri ro}
-    : Proper (t_relation ==> forall_relation (fun s => Tensor.eqf ==> Tensor.eqf_rank)) (@slice A rb sb ri ro).
+  #[export] Instance slice_Proper_dep {rb sb ri ro s}
+    : Dependent.Proper (Dependent.const t_relation ==> Tensor.eqfR ==> Tensor.eqfR_rank) (@slice rb sb ri ro s).
+  Proof.
+    cbv [slice slice_ Tensor.map_dep]; repeat intro.
+    apply Tensor.reshape_app_combine'_Proper_rank_dep; repeat intro; trivial.
+    let H := match goal with H : t_relation _ _ |- _ => H end in
+    eapply broadcast_Proper in H;
+    rewrite H.
+    apply SliceIndex.slice_Proper_dep; assumption.
+  Qed.
+
+  #[export] Instance slice_Proper {rb sb ri ro s A R}
+    : Proper (t_relation ==> Tensor.eqfR R ==> Tensor.eqfR_rank R) (@slice rb sb ri ro s A).
   Proof.
     cbv [slice slice_ Tensor.map_dep]; repeat intro.
     apply Tensor.reshape_app_combine'_Proper_rank; repeat intro; trivial.

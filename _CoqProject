@@ -21,7 +21,6 @@ theories/MaxOfTwoNumbersSimpler/Computed/AllMaskedAttnScores.v
 theories/MaxOfTwoNumbersSimpler/Model/Instances.v
 theories/MaxOfTwoNumbersSimpler/Theorems/Attempt_01_BruteForce.v
 theories/MaxOfTwoNumbersSimpler/Theorems/Attempt_02_SplitAttention.v
-theories/Torch/.#test.v
 theories/Torch/Einsum.v
 theories/Torch/Slicing.v
 theories/Torch/Tensor.v
@@ -60,6 +59,8 @@ theories/Util/Arith/ZArith.v
 theories/Util/Arith/FloatArith/Definitions.v
 theories/Util/Arith/FloatArith/Proofs.v
 theories/Util/Classes/Morphisms/Dependent.v
+theories/Util/Classes/RelationClasses/Hetero.v
+theories/Util/Classes/RelationPairs/Hetero.v
 theories/Util/List/Proofs.v
 theories/Util/List/Instances/NthError.v
 theories/Util/PArray/Instances.v
@@ -77,6 +78,7 @@ theories/Util/Tactics/Head.v
 theories/Util/Tactics/IsArray.v
 theories/Util/Tactics/IsFloat.v
 theories/Util/Tactics/IsUint63.v
+theories/Util/Tactics/SpecializeAllWays.v
 theories/Util/Tactics/UniquePose.v
 theories/Util/Tactics2/Constr.v
 theories/Util/Tactics2/FixNotationsForPerformance.v
