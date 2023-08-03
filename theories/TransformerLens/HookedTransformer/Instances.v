@@ -769,30 +769,6 @@ Module HookedTransformer.
       : Proper (Tensor.eqf ==> Tensor.eqf) (@ln_final d_model r batch pos normalization_type A zeroA coerZ addA subA mulA divA sqrtA default eps ln_final_w ln_final_b).
     Proof. apply ln_final_Proper_dep; repeat intro; subst; break_innermost_match; reflexivity. Qed.
 
-    Print unembed.
-    (* unembed =
-fun (d_vocab_out d_model : ShapeType) (r : Rank) (batch : Shape r)
-  (pos : ShapeType) =>
-let s := (batch ::' pos)%shape in
-let resid_shape := (s ::' d_model)%shape in
-fun (A : Type) (zeroA : has_zero A) (addA : has_add A)
-  (mulA : has_mul A) (W_U : tensor [d_model; d_vocab_out] A)
-  (b_U : tensor [d_vocab_out] A) (resid : tensor resid_shape A) =>
-Unembed.forward W_U b_U resid
-     : forall (d_vocab_out d_model : ShapeType) (r : Rank)
-         (batch : Shape r) (pos : ShapeType) (A : Type),
-       has_zero A ->
-       has_add A ->
-       has_mul A ->
-       tensor [d_model; d_vocab_out] A ->
-       tensor [d_vocab_out] A ->
-       tensor (batch ::' pos ::' d_model) A ->
-       tensor (batch ::' pos ::' d_vocab_out) A
-
-Arguments unembed {d_vocab_out d_model}%uint63_scope {r}%nat_scope
-  {batch}%shape_scope {pos}%uint63_scope {A}%type_scope
-  {zeroA addA mulA} (W_U b_U resid)%tensor_scope _
-     *)
     #[export] Instance unembed_Proper_dep {d_vocab_out d_model r batch pos}
       : Dependent.Proper
           (Dependent.idR
