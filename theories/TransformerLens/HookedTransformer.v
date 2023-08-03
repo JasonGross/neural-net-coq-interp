@@ -70,8 +70,10 @@ Module LayerNorm.
   Section __.
     Context {r} {s : Shape r} {d_model}
       {A}
-      {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A} {sqrtA : has_sqrt A} {zeroA : has_zero A} {coerZ : has_coer Z A} {default : pointed A}
+      {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A} {sqrtA : has_sqrt A} {zeroA : has_zero A} {coerZ : has_coer Z A}
+      (defaultA : pointed A := @coer _ _ coerZ point)
       (eps : A) (w b : tensor [d_model] A).
+    #[local] Existing Instance defaultA.
 
     Definition linpart (x : tensor (s ::' d_model) A)
       : tensor (s ::' d_model) A
@@ -105,7 +107,8 @@ Module Attention.
       {pos n_heads d_model d_head} {n_ctx:N}
       {use_split_qkv_input : with_default "use_split_qkv_input" bool false}
       {A}
-      {sqrtA : has_sqrt A} {coerZ : has_coer Z A} {addA : has_add A} {zeroA : has_zero A} {mulA : has_mul A} {divA : has_div A} {expA : has_exp A} {defaultA : pointed A}
+      {sqrtA : has_sqrt A} {coerZ : has_coer Z A} {addA : has_add A} {zeroA : has_zero A} {mulA : has_mul A} {divA : has_div A} {expA : has_exp A}
+      (defaultA : pointed A := @coer _ _ coerZ point)
       (W_Q W_K W_V W_O : tensor [n_heads; d_model; d_head] A)
       (b_Q b_K b_V : tensor [n_heads; d_head] A)
       (b_O : tensor [d_model] A)
@@ -146,6 +149,7 @@ Module Attention.
                                       , input
                                       , W }}})
            input.
+    #[local] Existing Instance defaultA.
 
     Definition q : tensor (batch ++' [pos; n_heads; d_head]) A
       := PArray.checkpoint (einsum_input query_input W_Q + broadcast b_Q)%core.
@@ -225,7 +229,7 @@ Module TransformerBlock.
       {zeroA : has_zero A} {coerZ : has_coer Z A}
       {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
       {sqrtA : has_sqrt A} {expA : has_exp A}
-      {default : pointed A}
+      (defaultA : pointed A := @coer _ _ coerZ point)
       (W_Q W_K W_V W_O : tensor [n_heads; d_model; d_head] A)
       (b_Q b_K b_V : tensor [n_heads; d_head] A)
       (b_O : tensor [d_model] A)
@@ -235,6 +239,7 @@ Module TransformerBlock.
                                  | Datatypes.None => with_default "()" True I
                                  end)
       (resid_pre : tensor ((batch ::' pos) ++' [d_model]) A).
+    #[local] Existing Instance defaultA.
 
 
     Definition add_head_dimension
@@ -311,7 +316,7 @@ Module HookedTransformer.
       {zeroA : has_zero A} {coerZ : has_coer Z A}
       {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
       {sqrtA : has_sqrt A} {expA : has_exp A}
-      {default : pointed A}
+      (defaultA : pointed A := @coer _ _ coerZ point)
       (*{use_split_qkv_input : with_default "use_split_qkv_input" bool false}*)
       (eps : A)
 
@@ -343,6 +348,7 @@ Module HookedTransformer.
 
       (W_U : tensor [d_model; d_vocab_out] A) (b_U : tensor [d_vocab_out] A)
     .
+    #[local] Existing Instance defaultA.
 
     Definition embed (tokens : tensor s IndexType) : tensor resid_shape A
       := Embed.forward W_E tokens.
