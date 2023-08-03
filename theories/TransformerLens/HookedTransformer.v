@@ -382,7 +382,7 @@ Module HookedTransformer.
     Definition unembed (resid : tensor resid_shape A) : tensor (s ::' d_vocab_out) A
       := Unembed.forward W_U b_U resid.
 
-    Definition blocks_cps {T} {n : with_default "blocks n" nat (List.length blocks)} (residual : tensor resid_shape A) (K : tensor resid_shape A -> T) : T
+    Polymorphic Definition blocks_cps {T} {n : with_default "blocks n" nat (List.length blocks)} (residual : tensor resid_shape A) (K : tensor resid_shape A -> T) : T
       := List.fold_right
            (fun block cont residual
             => let residual := PArray.checkpoint (block residual) in

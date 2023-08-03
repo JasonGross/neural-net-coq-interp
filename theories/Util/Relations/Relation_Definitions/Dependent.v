@@ -2,6 +2,9 @@ From Coq Require Import Relations.Relation_Definitions.
 From NeuralNetInterp.Util.Program Require Import Basics.Dependent.
 From NeuralNetInterp.Util.Relations Require Import Relation_Definitions.Hetero.
 #[local] Set Implicit Arguments.
+#[local] Set Universe Polymorphism.
+#[local] Unset Universe Minimization ToSet.
+#[local] Set Polymorphic Inductive Cumulativity.
 
 Declare Scope dependent_signature_scope.
 Declare Scope dependent2_signature_scope.

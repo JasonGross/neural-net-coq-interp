@@ -1,5 +1,6 @@
 From Coq.Program Require Import Basics Tactics.
 From Coq.Classes Require Import Morphisms RelationClasses.
+From NeuralNetInterp.Util.Program Require Import Basics.Dependent.
 From NeuralNetInterp.Util.Relations Require Relation_Definitions.Dependent.
 Export Relation_Definitions.Dependent.RelationsNotations.
 (*From NeuralNetInterp.Util.Classes Require Export RelationClasses.Hetero.*)
@@ -142,6 +143,12 @@ Arguments Proper4 {F}%type R%dependent4_signature m.
 Arguments respectful4 {A B}%type (R R')%dependent4_signature (_ _)%type _ _.
 
 Local Open Scope dependent_signature_scope.
+
+Section Relations1.
+  Definition forall_relation {X}
+    : Dependent.relation2 X -> Dependent.relation (∀ T, X)
+    := fun R A B R' x y => forall T1 T2 RT, R _ _ R' _ _ RT (x T1) (y T2).
+End Relations1.
 (*
 Section Relations.
   Context {A B : Type -> Type} (P : A -> U).
