@@ -64,11 +64,13 @@ Section with_batch.
     {oppA : has_opp A} {sqrtA : has_sqrt A} {expA : has_exp A} {lnA : has_ln A}.
   #[local] Existing Instance defaultA.
 
+  Let coer_tensor_float {r s} (x : @tensor r s float) : @tensor r s A
+      := Tensor.map coer x.
+  Let coerA' (x : float) : A := coer x.
   #[local] Set Warnings Append "-uniform-inheritance,-ambiguous-paths".
-  #[local] Coercion coer_tensor_float {r s} (x : @tensor r s float) : @tensor r s A
-    := Tensor.map coer x.
+  #[local] Coercion coer_tensor_float : tensor >-> tensor.
   #[local] Set Warnings Append "uniform-inheritance,ambiguous-paths".
-  #[local] Coercion coerA' (x : float) : A := coer x.
+  #[local] Coercion coerA' : float >-> A.
 
   Definition embed (tokens : tensor s IndexType) : tensor resid_shape A
     := HookedTransformer.embed (A:=A) W_E tokens.
@@ -138,8 +140,8 @@ Section with_batch.
             tokens).
 
   Definition loss_fn
-    (logits : tensor (batch ::' pos ::' cfg.d_vocab_out) A)
-    (tokens : tensor (batch ::' pos) IndexType)
+    (logits : tensor (s ::' cfg.d_vocab_out) A)
+    (tokens : tensor s IndexType)
   : tensor (if return_per_token return Shape (if return_per_token then _ else _) then Shape.squeeze batch else []) A
   := (let logits : tensor (batch ::' _) A
         := PArray.checkpoint (logits.[…, -1, :]) in
@@ -154,8 +156,8 @@ Section with_batch.
       else -Tensor.mean correct_log_probs)%core.
 
   Definition acc_fn
-    (logits : tensor (batch ::' pos ::' cfg.d_vocab_out) A)
-    (tokens : tensor (batch ::' pos) IndexType)
+    (logits : tensor (s ::' cfg.d_vocab_out) A)
+    (tokens : tensor s IndexType)
     : tensor (if return_per_token return Shape (if return_per_token then _ else _) then batch else []) A
     := (let pred_logits : tensor (batch ::' _) A
           := PArray.checkpoint (logits.[…, -1, :]) in

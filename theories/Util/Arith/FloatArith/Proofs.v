@@ -452,6 +452,14 @@ Module PrimFloat.
                                        if is_infinity f
                                        then if f <? 0 then ninf else pinf
                                        else f.
-*)
+ *)
+
+  Lemma to_Q_cps_distr {A B} (f : A -> B) {x on_nan on_pinf on_ninf on_nzero on_Q}
+    : f (to_Q_cps x on_nan on_pinf on_ninf on_nzero on_Q) = to_Q_cps x (f on_nan) (f on_pinf) (f on_ninf) (f on_nzero) (fun z => f (on_Q z)).
+  Proof. cbv [to_Q_cps]; break_innermost_match; reflexivity. Qed.
+
+  Lemma to_Z_cps_distr {A B} (f : A -> B) {x on_nan on_pinf on_ninf on_nzero on_Z}
+    : f (to_Z_cps x on_nan on_pinf on_ninf on_nzero on_Z) = to_Z_cps x (f on_nan) (f on_pinf) (f on_ninf) (f on_nzero) (fun z => f (on_Z z)).
+  Proof. cbv [to_Z_cps]; rewrite (to_Q_cps_distr f); reflexivity. Qed.
 End PrimFloat.
 Export (hints) PrimFloat.

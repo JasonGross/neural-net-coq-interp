@@ -187,7 +187,7 @@ Local Open Scope float_scope.
 
 Module Float.
   Module IEEE754Eq.
-    #[export] Instance float_has_eqb : has_eqb float := eta2 PrimFloat.Leibniz.eqb.
+    #[export] Instance float_has_eqb : has_eqb float := eta2 PrimFloat.eqb.
   End IEEE754Eq.
 
   Module Leibniz.

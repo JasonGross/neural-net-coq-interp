@@ -3,13 +3,12 @@ From NeuralNetInterp.Util Require Import Default.
 From NeuralNetInterp.Util.Arith Require Import QArith.
 Local Open Scope float_scope.
 Notation "'∞'" := infinity : float_scope.
+Notation "'-∞'" := neg_infinity : float_scope.
 #[local] Coercion Z.of_N : N >-> Z.
 #[local] Coercion N.of_nat : nat >-> N.
 #[local] Coercion inject_Z : Z >-> Q.
 #[local] Coercion Z.pos : positive >-> Z.
 #[local] Coercion is_true : bool >-> Sortclass.
-Local Open Scope float_scope.
-Notation "'∞'" := infinity : float_scope.
 
 Module PrimFloat.
   Definition of_sint63 (x : int) : float

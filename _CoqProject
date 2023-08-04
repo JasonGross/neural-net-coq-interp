@@ -8,6 +8,7 @@ theories/MaxOfTwoNumbers/TheoremStatement.v
 theories/MaxOfTwoNumbers/Computed/AllAttnPattern.v
 theories/MaxOfTwoNumbers/Computed/AllLogits.v
 theories/MaxOfTwoNumbers/Computed/AllMaskedAttnScores.v
+theories/MaxOfTwoNumbers/Model/Flocqify.v
 theories/MaxOfTwoNumbers/Model/Instances.v
 theories/MaxOfTwoNumbers/Theorems/Attempt_01_BruteForce.v
 theories/MaxOfTwoNumbers/Theorems/Attempt_02_SplitAttention.v
@@ -24,7 +25,6 @@ theories/MaxOfTwoNumbersSimpler/Theorems/Attempt_02_SplitAttention.v
 theories/Torch/Einsum.v
 theories/Torch/Slicing.v
 theories/Torch/Tensor.v
-theories/Torch/test.v
 theories/Torch/Slicing/Instances.v
 theories/Torch/Tensor/Instances.v
 theories/Torch/Tensor/Proofs.v
@@ -58,6 +58,11 @@ theories/Util/Arith/QArith.v
 theories/Util/Arith/ZArith.v
 theories/Util/Arith/FloatArith/Definitions.v
 theories/Util/Arith/FloatArith/Proofs.v
+theories/Util/Arith/Flocq/Instances.v
+theories/Util/Arith/Flocq/Notations.v
+theories/Util/Arith/Flocq/Hints/Core.v
+theories/Util/Arith/Flocq/Hints/Prim2B.v
+theories/Util/Arith/FlocqArith/Definitions.v
 theories/Util/Classes/Morphisms/Dependent.v
 theories/Util/Classes/RelationClasses/Dependent.v
 theories/Util/Classes/RelationClasses/Hetero.v

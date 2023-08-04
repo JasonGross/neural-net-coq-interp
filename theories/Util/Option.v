@@ -2,6 +2,8 @@ Require Import Coq.Classes.Morphisms.
 Require Import Coq.Relations.Relation_Definitions.
 From NeuralNetInterp.Util.Tactics Require Import BreakMatch DestructHead.
 From NeuralNetInterp.Util Require Import Notations Monad.
+From NeuralNetInterp.Util.Classes Require Morphisms.Dependent.
+Import Dependent.ProperNotations.
 
 Scheme Equality for option.
 Arguments option_beq {_} _ _ _.
@@ -310,6 +312,20 @@ Definition invert_Some {A} (x : option A)
      | None => tt
      end.
 
+#[export] Instance invert_Some_Proper_dep
+  : Dependent.Proper
+      (@Dependent.respectful_hetero
+         (fun T => option T)
+         (fun T (x : option T) => if x then _ else _)
+         (@option_eq)
+         (fun A B R x y => match x, y with
+                           | Some _, Some _ => R
+                           | None, None => fun _ _ => True
+                           | Some _, None | None, Some _ => fun _ _ => False
+                           end))
+      (@invert_Some).
+Proof. now cbv; intros ??? [x|] [y|]. Qed.
+
 #[export] Instance invert_Some_Proper {A R}
   : Proper (respectful_hetero (option A) (option A)
               (fun x => if x then _ else _)
@@ -321,7 +337,7 @@ Definition invert_Some {A} (x : option A)
                           | Some _, None | None, Some _ => fun _ _ => False
                           end))
       (@invert_Some A).
-Proof. now cbv; intros [x|] [y|]. Qed.
+Proof. apply invert_Some_Proper_dep. Qed.
 
 Lemma invert_eq_Some {A x y} (p : Some x = Some y) : { pf : x = y | @option_eq_to_leq A (Some x) (Some y) pf = p }.
 Proof.

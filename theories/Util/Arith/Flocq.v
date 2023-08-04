@@ -4,6 +4,7 @@ From Coq.Floats Require Import Floats.
 From Flocq.Core Require Import Raux Generic_fmt Zaux FLX.
 From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
 From NeuralNetInterp.Util.Arith Require Import FloatArith.Definitions.
+From NeuralNetInterp.Util.Arith.Flocq.Hints Require Export Core Prim2B.
 From NeuralNetInterp.Util.Tactics Require Import BreakMatch DestructHead UniquePose.
 Local Open Scope bool_scope.
 
@@ -370,3 +371,6 @@ Proof.
                       | rewrite Z.sub_diag in * ].
     all: destruct_head'_bool; cbv [cond_Zopp xorb Z.mul Z.opp Bool.eqb] in *; break_innermost_match; try lia. }
 Qed.
+#[export] Hint Rewrite
+  fma_equiv
+  : prim2b.

@@ -33,6 +33,8 @@ Module HookedTransformer.
               => apply (Tensor.of_bool_Proper_dep _ _ R)
             | [ |- ?R (Tensor.map2 _ _ _ _) (Tensor.map2 _ _ _ _) ]
               => apply (Tensor.map2_Proper_dep _ _ R)
+            | [ |- ?R (Tensor.map2 _ _ _ _) (Tensor.map2 _ _ _ _) ]
+              => eapply Tensor.map2_Proper_dep; try eassumption
             | [ |- ?R (Tensor.map2' _ _ _ _) (Tensor.map2' _ _ _ _) ]
               => apply (Tensor.map2'_Proper_dep _ _ R _ _ R)
             | [ |- ?R (Tensor.map _ _ _) (Tensor.map _ _ _) ]
@@ -43,6 +45,8 @@ Module HookedTransformer.
               => apply (Tensor.squeeze_Proper_dep _ _ R)
             | [ |- ?R (reduce_axis_m1 _ _ _) (reduce_axis_m1 _ _ _) ]
               => apply (Tensor.reduce_axis_m1_Proper_dep _ _ R)
+            | [ |- ?R (reduce_axis_m1 _ _ _) (reduce_axis_m1 _ _ _) ]
+              => eapply Tensor.reduce_axis_m1_Proper_dep; try eassumption
             | [ |- ?R (Tensor.gather_dim_m1 _ _ _) (Tensor.gather_dim_m1 _ _ _) ]
               => apply (Tensor.gather_dim_m1_Proper_dep _ _ R)
             | [ |- ?R (Tensor.softmax_dim_m1 _ _) (Tensor.softmax_dim_m1 _ _) ]
@@ -57,12 +61,20 @@ Module HookedTransformer.
               => apply (Tensor.repeat_Proper_dep _ _ R)
             | [ |- ?R (Tensor.broadcast _ _) (Tensor.broadcast _ _) ]
               => apply (Tensor.broadcast_Proper_dep _ _ R)
+            | [ |- ?R (Tensor.raw_get _ _) (Tensor.raw_get _ _) ]
+              => apply (Tensor.raw_get_Proper_dep _ _ R)
+            | [ |- ?R (reshape_snoc_split _ _ _) (reshape_snoc_split _ _ _) ]
+              => apply (Tensor.reshape_snoc_split_Proper_dep _ _ R)
+            | [ |- ?R (reshape_m1 _ _) (reshape_m1 _ _) ]
+              => apply Tensor.reshape_m1_Proper_dep
             | [ |- ?R (@SliceIndex.slice ?A ?ri ?ro ?idxs ?s _ _) (@SliceIndex.slice ?A ?ri ?ro ?idxs ?s _ _) ]
               => eapply (@SliceIndex.slice_Proper A ri ro idxs s R)
             | [ |- ?R (@FancyIndex.slice ?rb ?sb ?ri ?ro ?s ?A ?idxs _ _) (@FancyIndex.slice ?rb ?sb ?ri ?ro ?s ?A' ?idxs' _ _) ]
               => apply (@FancyIndex.slice_Proper_dep rb sb ri ro s)
             | [ |- ?R (Reduction.argmax _ _ _ _) (Reduction.argmax _ _ _ _) ]
               => apply (Reduction.argmax_Proper_dep _ _ R)
+            | [ |- ?R (Reduction.argmax _ _ _ _) (Reduction.argmax _ _ _ _) ]
+              => eapply Reduction.argmax_Proper_dep; try eassumption
             | [ |- ?R (Reduction.argmin _ _ _ _) (Reduction.argmin _ _ _ _) ]
               => apply (Reduction.argmin_Proper_dep _ _ R)
             | [ |- ?R (Reduction.max _ _ _ _) (Reduction.max _ _ _ _) ]

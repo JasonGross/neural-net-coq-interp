@@ -18,9 +18,15 @@ Section Proper.
   Class Proper (R : Dependent.relation F) (m : forall T, F T) : Prop :=
     proper_prf : forall {A B} (R0 : Hetero.relation A B), R A B R0 (m A) (m B).
 
-  Definition respectful {A B : Type -> Type} (R : Dependent.relation A) (R' : Dependent.relation B) : Dependent.relation (fun T => A T -> B T)
-    := fun a0 b0 R0 f g => forall x y, R _ _ R0 x y -> R' _ _ R0 (f x) (g y).
+  Definition respectful_hetero {A : Type -> Type} {B : forall x, A x -> Type}
+    (R : Dependent.relation A)
+    (R' : forall x y, Hetero.relation x y -> forall x' y', Hetero.relation (B x x') (B y y'))
+    : Dependent.relation (fun T => forall a : A T, B T a)
+    := fun a0 b0 R0 f g => forall x y, R _ _ R0 x y -> R' _ _ R0 _ _ (f x) (g y).
 
+  Definition respectful {A B : Type -> Type} (R : Dependent.relation A) (R' : Dependent.relation B) : Dependent.relation (fun T => A T -> B T)
+    := Eval cbv [respectful_hetero] in
+      @respectful_hetero A (fun T _ => B T) R (fun x y R0 _ _ => R' x y R0).
 End Proper.
 
 Section Proper2.

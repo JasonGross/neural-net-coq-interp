@@ -1,19 +1,8 @@
 From Coq Require Import Floats Sint63 Uint63 QArith List PArray.
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
 From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool.
-(*From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool.
-From NeuralNetInterp.Util Require Nat Wf_Uint63.
-From NeuralNetInterp.TransformerLens Require Import HookedTransformer.
-Import Util.Nat.Notations.
-Import Util.Wf_Uint63.LoopNotation.
-Import Util.Wf_Uint63.
-Import Util.Wf_Uint63.Reduction.
-Import Arith.Instances.Truncating.
-Local Open Scope float_scope.
-Local Open Scope list_scope.
-Set Implicit Arguments.
-Import ListNotations.*)
 From NeuralNetInterp.MaxOfTwoNumbers Require Import Model Parameters Heuristics.
+Import Arith.Instances.Truncating.
 Local Open Scope raw_tensor_scope.
 
 Definition total : int := Eval vm_compute in Shape.item (Shape.reshape (shape_of all_tokens)).
