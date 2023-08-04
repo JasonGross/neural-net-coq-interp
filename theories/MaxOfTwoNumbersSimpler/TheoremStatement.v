@@ -8,12 +8,12 @@ Import Util.Nat.Notations.
 Import Util.Wf_Uint63.LoopNotation.
 Import Util.Wf_Uint63.
 Import Util.Wf_Uint63.Reduction.
-Import Arith.Instances.Truncating.
 Local Open Scope float_scope.
 Local Open Scope list_scope.
 Set Implicit Arguments.
 Import ListNotations.*)
 From NeuralNetInterp.MaxOfTwoNumbersSimpler Require Import Model Parameters Heuristics.
+Import Arith.Instances.Truncating.
 Local Open Scope raw_tensor_scope.
 
 Definition total : int := Eval vm_compute in Shape.item (Shape.reshape (shape_of all_tokens)).

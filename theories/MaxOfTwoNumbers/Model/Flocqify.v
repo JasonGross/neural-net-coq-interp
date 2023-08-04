@@ -28,7 +28,7 @@ Module Model.
     Lemma pos_embed_equiv (tokens : tensor s IndexType)
       : Tensor.eqfR Rf (pos_embed tokens) (pos_embed tokens).
     Proof using Type. apply pos_embed_Proper_dep; repeat intro; subst; try reflexivity. Qed.
-(*
+    (*
     Lemma ln_final_equiv (resid Bresid : tensor resid_shape _)
       : Tensor.eqfR Rf resid
           Tensor.eqfR Rf (ln_final resid) (ln_final (Tensor.map Prim2B resid)).
@@ -40,7 +40,7 @@ Module Model.
 
   Definition unembed (resid : tensor resid_shape A) : tensor (s ::' cfg.d_vocab_out) A
     := HookedTransformer.unembed (A:=A) W_U b_U resid.
- *)
+     *)
     (*Definition blocks_params : list _
     := [(L0_attn_W_Q:tensor _ A, L0_attn_W_K:tensor _ A, L0_attn_W_V:tensor _ A, L0_attn_W_O:tensor _ A,
           L0_attn_b_Q:tensor _ A, L0_attn_b_K:tensor _ A, L0_attn_b_V:tensor _ A,
@@ -81,4 +81,5 @@ Module Model.
       (tokens : tensor s IndexType)
       : Tensor.eqfR Rf logits logits' -> Tensor.eqfR Rf (acc_fn logits tokens) (acc_fn logits' tokens).
     Proof using Type. intro Hl; apply acc_fn_Proper_dep; t. Qed.
-End with_batch.
+  End with_batch.
+End Model.

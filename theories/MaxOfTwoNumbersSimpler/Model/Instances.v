@@ -80,7 +80,7 @@ Module Model.
                                * Tensor.eqfR * Tensor.eqfR
                                * Tensor.eqfR * Tensor.eqfR
                                * Tensor.eqfR * Tensor.eqfR
-                               * Tensor.eqfR * Tensor.eqfR))
+                               * Dependent.const (@eq True) * Dependent.const (@eq True)))
         (@blocks_params).
   Proof.
     cbv [blocks_params]; repeat intro; repeat constructor; cbv [Dependent.RelCompFun]; cbn [fst snd].
@@ -93,7 +93,7 @@ Module Model.
                             * Tensor.eqf * Tensor.eqf
                             * Tensor.eqf * Tensor.eqf
                             * Tensor.eqf * Tensor.eqf
-                            * Tensor.eqf * Tensor.eqf)%signature)
+                            * @eq True * @eq True)%signature)
         (@blocks_params A coer_float).
   Proof. apply blocks_params_Proper_dep; repeat intro; subst; reflexivity. Qed.
 
