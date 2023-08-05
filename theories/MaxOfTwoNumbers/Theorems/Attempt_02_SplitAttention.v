@@ -3,9 +3,10 @@ From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
 From NeuralNetInterp.Util.Tactics Require Import IsFloat IsUint63 BreakMatch.
 From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Wf_Uint63.Instances SolveProperEqRel Default.
 From NeuralNetInterp.Util.Arith Require Import Classes Instances FloatArith.Definitions.
+From NeuralNetInterp.Util.Arith.Flocq Require Import Hints.Prim2B.
 From NeuralNetInterp.Torch Require Import Tensor.Instances Slicing.Instances.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Instances.
-From NeuralNetInterp.MaxOfTwoNumbers Require Import Parameters Model Heuristics TheoremStatement Model.Instances.
+From NeuralNetInterp.MaxOfTwoNumbers Require Import Parameters Model Heuristics TheoremStatement Model.Instances Model.Flocqify.
 Import LoopNotation.
 (*From NeuralNetInterp.MaxOfTwoNumbers.Computed Require Import AllLogits.*)
 Local Open Scope uint63_scope.
@@ -72,9 +73,12 @@ Local Ltac Proper_Tensor_eqf_t_step _
      end.
 Local Ltac Proper_Tensor_eqf_t _ := repeat Proper_Tensor_eqf_t_step ().
 #[export] Hint Extern 1 (Proper (_ ==> _) (fun _ => _)) => progress Proper_Tensor_eqf_t () : typeclass_instances.
-Local Ltac setoid_rewrite_in_body R lem H :=
-  let rewrite_or_error lem :=
-    let rew _ := (rewrite lem) (* first [ rewrite lem | setoid_rewrite lem ] *) in
+Local Ltac setoid_rewrite_in_body rev R lem H :=
+  let rewrite_or_error rev lem :=
+    let rew := match rev with
+               | true => fun _ => rewrite <- lem
+               | false => fun _ => rewrite -> lem
+               end (*_ := (rewrite lem) (* first [ rewrite lem | setoid_rewrite lem ] *) *) in
     tryif rew ()
     then idtac
     else (match goal with
@@ -89,29 +93,47 @@ Local Ltac setoid_rewrite_in_body R lem H :=
   rename H into H';
   evar (H : ty);
   let lemH := fresh in
-  assert (lemH : R H' H) by (subst H'; rewrite_or_error lem; subst H; reflexivity);
+  assert (lemH : R H' H) by (subst H'; rewrite_or_error rev lem; subst H; reflexivity);
   let rec do_rewrite _
     := lazymatch goal with
        | [ H'' := context[H'] |- _ ]
-         => setoid_rewrite_in_body R lemH H'';
+         => setoid_rewrite_in_body false R lemH H'';
             do_rewrite ()
        | _ => idtac
        end in
   do_rewrite ();
   lazymatch goal with
-  | [ |- context[H'] ] => rewrite_or_error lemH
+  | [ |- context[H'] ] => rewrite_or_error false lemH
   | _ => idtac
   end;
   clear lemH; clear H'.
-Tactic Notation "setoid_rewrite" "(" uconstr(R) ")" uconstr(lem) "in" "(" "value" "of" hyp(H) ")" := setoid_rewrite_in_body R lem H.
+Tactic Notation "setoid_rewrite" "(" uconstr(R) ")" uconstr(lem) "in" "(" "value" "of" hyp(H) ")" := setoid_rewrite_in_body false R lem H.
+Tactic Notation "setoid_rewrite" "(" uconstr(R) ")" "<-" uconstr(lem) "in" "(" "value" "of" hyp(H) ")" := setoid_rewrite_in_body true R lem H.
 
 #[local] Set Warnings Append "undeclared-scope".
 From Interval Require Import Tactic_float.
 #[local] Set Warnings Append "+undeclared-scope".
 
+From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
+From NeuralNetInterp.Util.Arith Require Import Flocq Flocq.Instances.
+
 Theorem good_accuracy : TheoremStatement.Accuracy.best (* (abs (real_accuracy - expected_accuracy) <? error)%float = true *).
 Proof.
   cbv [real_accuracy].
+  cbv [Classes.abs Classes.leb Classes.ltb Classes.sub item float_has_abs float_has_sub].
+  rewrite leb_equiv, abs_equiv, sub_equiv.
+  cbv [raw_get].
+  (* convert from prim float to flocq *)
+  let lem := constr:(Model.acc_fn_equiv (logits all_tokens) (logits all_tokens) all_tokens (Model.logits_equiv _) tt) in
+  rewrite lem.
+  (* Now I'd like to convert to R, but this means I need to prove lack of exceptions, I think *)
+  (* So for now instead I'm playing around without really knowing what
+  I'm doing. My first attempt failed when I cound't even turn [abs (x
+  / y - z) < w] into [abs (x - z * y) < w*y]... *)
+  set (m := acc_fn _ _).
+  set (m' := m).
+  assert (m' = raw_get m) by (clearbody m; reflexivity).
+  clearbody m'; subst m' m.
   cbv beta iota delta [acc_fn]; let_bind_subst_shape ().
   cbv beta iota delta [logits] in *; let_bind_subst_shape ().
   cbv beta iota delta [HookedTransformer.logits] in *; let_bind_subst_shape ().
@@ -144,16 +166,24 @@ Proof.
   cbv beta iota delta [Reduction.max max has_default_max_leb leb] in true_maximum.
   cbv -[PrimInt63.leb all_toks_c] in true_maximum.
   move out' at bottom.
-  cbv -[map2' raw_get v pattern RawIndex.snoc RawIndex.nil] in out'.
+  cbv -[map2' raw_get v pattern RawIndex.snoc RawIndex.nil
+          Instances.binary_float_has_add prec emax Hprec Hmax Instances.binary_float_has_mul Classes.add Classes.mul Classes.zero] in out'.
   unfold Reduction.sum in (value of out) at 1.
-  cbv -[map2' Reduction.sum L0_attn_W_O out'] in out.
+  cbv -[map2' Reduction.sum L0_attn_W_O out'
+          Instances.binary_float_has_add prec emax Hprec Hmax Instances.binary_float_has_mul Classes.add Classes.mul Classes.zero Classes.coer Instances.coer_float_binary_float] in out.
   cbv [mean Reduction.mean reduce_axis_m1 reduce_axis_m1' map item SliceIndex.slice raw_get Truncating.coer_Z_float Shape.reshape' Shape.reduce Shape.tl snd reshape_m1 reshape_snoc_split].
   vm_compute of_Z.
-  vm_compute PrimFloat.of_Z.
+  vm_compute Uint63.to_Z.
+  set (v_ := coer _).
+  rewrite <- (Prim2B_B2Prim v_).
+  set (v__ := B2Prim v_).
+  subst v_.
+  vm_compute in v__.
+  subst v__.
   cbv [RawIndex.unreshape RawIndex.unreshape' RawIndex.curry_radd RawIndex.combine_radd RawIndex.item RawIndex.snoc RawIndex.tl RawIndex.nil snd Shape.tl].
   cbv [expected_accuracy].
   cbv [error].
-  vm_compute expected_accuracy.
+
   subst all_toks_c.
   cbv beta iota delta [cartesian_prod] in true_maximum.
   cbv beta iota delta [reshape_m1 modulo PrimInt63.mod Uint63.to_Z Uint63.to_Z_rec Uint63.size Uint63.is_even Uint63.is_zero Uint63.land Uint63.eqb Uint63.compare PrimInt63.lsr Z.double Z.succ_double Z.to_nat nth_default nth_error Pos.to_nat Pos.iter_op] in true_maximum.
@@ -169,19 +199,15 @@ Proof.
   subst all_toks.
   cbv [RawIndex.item RawIndex.tl raw_get] in true_maximum.
   cbn [snd] in true_maximum.
-  change PrimFloat.sub with (@Classes.sub float float float _).
-  change PrimFloat.ltb with (@Classes.ltb float _).
-  change PrimFloat.leb with (@Classes.leb float _).
   lazymatch goal with
-  | [ |- ?ltb (abs (?x / ?y - ?z)%core) ?w = true ]
-    => cut (ltb (abs (x - y * z)%core) (w * y)%core = true)
+  | [ |- ?ltb (?abs (?sub (?x / ?y)%core ?z)) ?w = true ]
+    => cut (ltb (abs (sub x (y * z)%core)) (w * y)%core = true)
   end.
-  assert (H : forall x, (res x = 0 \/ res x = 1)%float)
+  assert (H : forall x, (res x = 0 \/ res x = 1)%core)
     by (subst res; intro; cbv beta; break_innermost_match; constructor; reflexivity).
   clearbody res; clear -H.
-  { cbv [Classes.ltb Classes.leb Classes.abs Classes.div Classes.mul Classes.sub Classes.add Classes.int_div Classes.coer Classes.zero Classes.one float_has_leb float_has_ltb float_has_mul float_has_abs float_has_sub float_has_div int_has_sub int_has_one int_has_add int_has_mul int_div].
-    From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
-    From NeuralNetInterp.Util.Arith Require Import Flocq.
+  { cbv [Classes.ltb Classes.leb Classes.abs Classes.div Classes.mul Classes.sub Classes.add Classes.int_div Classes.coer Classes.zero Classes.one float_has_leb float_has_ltb float_has_mul float_has_abs float_has_sub float_has_div int_has_sub int_has_one int_has_add int_has_mul int_div binary_float_has_mul binary_float_has_div].
+    rewrite <- !mul_equiv.
   repeat match goal with
          | [ |- context[?v] ]
            => lazymatch v with
@@ -203,19 +229,21 @@ Proof.
   | [ |- context[Reduction.sum _ _ _ ?f'] ]
     => set (f := f')
   end.
-  assert (H' : forall x, f x = 0%float \/ f x = 1%float).
+  assert (H' : forall x, (f x = 0 \/ f x = 1)%core).
   { subst f; intro x; epose (H (tt, _)) as H'; destruct H' as [H'|H']; cbv beta.
     all: rewrite H'; auto. }
   clear H; clearbody f; clear res.
   rename H' into H.
-(*   f : int -> float
-  H : forall x : int, f x = 0%float \/ f x = 1%float
+(* 1 goal (ID 6029)
+
+  f : int -> binary_float prec emax
+  H : forall x : int, f x = 0 \/ f x = 1
   ============================
-  (PrimFloat.abs (∑_(0≤i<4096)f i - 4086.5) <=? 9.75)%float = true ->
-  (PrimFloat.abs ((∑_(0≤i<4096)f i) / 4096 - 0.9976806640625) <=? 0.00238037109375)%float =
-  true
+  Bleb (Babs (Bminus mode_NE (∑_(0≤i<4096)f i) (Prim2B 4086.5))) (Prim2B 9.75) = true ->
+  Bleb (Babs (Bminus mode_NE (Bdiv mode_NE (∑_(0≤i<4096)f i) (Prim2B 4096)) (Prim2B 0.9976806640625)))
+    (Prim2B 0.00238037109375) = true
 *)
-  Local Ltac manual_rewrite lem :=
+(*  Local Ltac manual_rewrite lem :=
     lazymatch type of lem with
     | ?x = ?y
       => let x' := fresh in
@@ -564,3 +592,5 @@ Qed.
 *)
 Abort.
 *)
+*)
+Abort.
