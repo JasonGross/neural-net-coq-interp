@@ -770,6 +770,7 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
+             ==> Dependent.const (fun _ _ => True)
              ==> Dependent.idR
              ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
              | Some LN => Tensor.eqfR (s:=[d_model])
@@ -814,6 +815,7 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
+             ==> Dependent.const (fun _ _ => True)
              ==> Dependent.idR
              ==> List.Forall2 ∘ (Tensor.eqfR * Tensor.eqfR
                                  * Tensor.eqfR * Tensor.eqfR
@@ -846,9 +848,8 @@ Module HookedTransformer.
       cbv [blocks] in *; cbn [List.map firstn fold_right] in *.
       let IH := multimatch goal with H : _ |- _ => H end in
       apply IH; clear IH; repeat intro; eauto; [].
-      break_innermost_match.
-      apply Tensor.PArray.checkpoint_Proper_dep; try assumption; auto; [].
-      apply TransformerBlock.attn_only_out_Proper_dep; t.
+      break_innermost_match; rewrite ?Tensor.PArray.checkpoint_correct.
+      all: apply TransformerBlock.attn_only_out_Proper_dep; t.
     Qed.
 
     #[export] Instance blocks_cps_Proper {n_heads d_model d_head n_ctx r batch pos normalization_type A zeroA coerZ addA subA mulA divA sqrtA expA eps use_checkpoint blocks_params T R}
@@ -866,6 +867,7 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
+             ==> Dependent.const (fun _ _ => True)
              ==> Dependent.idR
              ==> Tensor.eqfR
              ==> Tensor.eqfR
@@ -895,12 +897,12 @@ Module HookedTransformer.
              ==> Tensor.eqfR)
           (@logits d_vocab d_vocab_out n_heads d_model d_head n_ctx r batch pos normalization_type).
     Proof.
-      cbv [logits]; t; [].
-      lazymatch goal with
-      | [ |- ?R (?f ?i) (?g ?i) ]
-        => revert i; change ((fun F G => forall i, R (F i) (G i)) f g)
-      end.
-      eapply blocks_cps_Proper_dep; [ eassumption | .. ].
+      cbv [logits]; t.
+      all: lazymatch goal with
+           | [ |- ?R (?f ?i) (?g ?i) ]
+             => revert i; change ((fun F G => forall i, R (F i) (G i)) f g)
+           end.
+      all: eapply blocks_cps_Proper_dep; [ eassumption | .. ].
       all: repeat intro; subst; t.
       all: try now eapply Forall2_length, blocks_Proper_dep; eassumption.
       all: first [ apply resid_postembed_Proper_dep | apply embed_Proper_dep | apply pos_embed_Proper_dep | apply ln_final_Proper_dep | apply unembed_Proper_dep ]; t.
@@ -921,6 +923,7 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
+             ==> Dependent.const (fun _ _ => True)
              ==> Dependent.idR
              ==> Tensor.eqfR
              ==> Tensor.eqfR
@@ -965,6 +968,7 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
+             ==> Dependent.const (fun _ _ => True)
              ==> Dependent.idR
              ==> List.Forall2 ∘ (Tensor.eqfR * Tensor.eqfR
                                  * Tensor.eqfR * Tensor.eqfR
@@ -1004,6 +1008,7 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
+             ==> Dependent.const (fun _ _ => True)
              ==> Dependent.idR
              ==> List.Forall2 ∘ (Tensor.eqfR * Tensor.eqfR
                                  * Tensor.eqfR * Tensor.eqfR
@@ -1043,6 +1048,7 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
+             ==> Dependent.const (fun _ _ => True)
              ==> Dependent.idR
              ==> Tensor.eqfR
              ==> Tensor.eqfR
@@ -1072,7 +1078,7 @@ Module HookedTransformer.
                   (epose proof (List.nth_error_Proper_dep_Forall2
                                   _ _ _
                                   xs ys
-                                  (blocks_attn_masked_attn_scores_Proper_dep _ _ _ _ _ _ _ _ _ _ _ _ _)
+                                  (blocks_attn_masked_attn_scores_Proper_dep _ _ _ _ _ _ _ _ _ _ _ _ _ _)
                                   n n eq_refl) as H';
                    rewrite Hx, Hy in H'; cbv [option_eq] in H'; clear Hx Hy;
                    try now exfalso);
@@ -1103,6 +1109,7 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
+             ==> Dependent.const (fun _ _ => True)
              ==> Dependent.idR
              ==> Tensor.eqfR
              ==> Tensor.eqfR
@@ -1132,7 +1139,7 @@ Module HookedTransformer.
                   (epose proof (List.nth_error_Proper_dep_Forall2
                                   _ _ _
                                   xs ys
-                                  (blocks_attn_pattern_Proper_dep _ _ _ _ _ _ _ _ _ _ _ _ _ _)
+                                  (blocks_attn_pattern_Proper_dep _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)
                                   n n eq_refl) as H';
                    rewrite Hx, Hy in H'; cbv [option_eq] in H'; clear Hx Hy;
                    try now exfalso);

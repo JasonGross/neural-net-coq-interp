@@ -19,7 +19,9 @@ Module Model.
     Context {r} {batch : Shape r} {pos}
       (s := (batch ::' pos)%shape)
       (resid_shape := (s ::' cfg.d_model)%shape)
-      {return_per_token : with_default "return_per_token" bool false}.
+      {return_per_token : with_default "return_per_token" bool false}
+      {use_checkpoint1 : with_default "use_checkpoint" bool true}
+      {use_checkpoint2 : bool}.
 
     Lemma embed_equiv (tokens : tensor s IndexType)
       : Tensor.eqfR Rf (embed tokens) (embed tokens).
@@ -61,25 +63,37 @@ Module Model.
       try reflexivity.
 
     Lemma logits_equiv (tokens : tensor s IndexType)
-      : Tensor.eqfR Rf (logits tokens) (logits tokens).
+      : Tensor.eqfR Rf
+          (logits (use_checkpoint:=use_checkpoint1) tokens)
+          (logits (use_checkpoint:=use_checkpoint2) tokens).
     Proof using Type. apply logits_Proper_dep; t. Qed.
 
     Lemma masked_attn_scores_equiv (tokens : tensor s IndexType)
-      : Tensor.eqfR Rf (masked_attn_scores tokens) (masked_attn_scores tokens).
+      : Tensor.eqfR Rf
+          (masked_attn_scores (use_checkpoint:=use_checkpoint1) tokens)
+          (masked_attn_scores (use_checkpoint:=use_checkpoint2) tokens).
     Proof using Type. apply masked_attn_scores_Proper_dep; t. Qed.
 
     Lemma attn_pattern_equiv (tokens : tensor s IndexType)
-      : Tensor.eqfR Rf (attn_pattern tokens) (attn_pattern tokens).
+      : Tensor.eqfR Rf
+          (attn_pattern (use_checkpoint:=use_checkpoint1) tokens)
+          (attn_pattern (use_checkpoint:=use_checkpoint2) tokens).
     Proof using Type. apply attn_pattern_Proper_dep; t. Qed.
 
     Lemma loss_fn_equiv (logits logits' : tensor (s ::' cfg.d_vocab_out) _)
       (tokens : tensor s IndexType)
-      : Tensor.eqfR Rf logits logits' -> Tensor.eqfR Rf (loss_fn logits tokens) (loss_fn logits' tokens).
+      : Tensor.eqfR Rf logits logits'
+        -> Tensor.eqfR Rf
+             (loss_fn (use_checkpoint:=use_checkpoint1) logits tokens)
+             (loss_fn (use_checkpoint:=use_checkpoint2) logits' tokens).
     Proof using Type. intro Hl; apply loss_fn_Proper_dep; t. Qed.
 
     Lemma acc_fn_equiv (logits logits' : tensor (s ::' cfg.d_vocab_out) _)
       (tokens : tensor s IndexType)
-      : Tensor.eqfR Rf logits logits' -> Tensor.eqfR Rf (acc_fn logits tokens) (acc_fn logits' tokens).
+      : Tensor.eqfR Rf logits logits'
+        -> Tensor.eqfR Rf
+             (acc_fn (use_checkpoint:=use_checkpoint1) logits tokens)
+             (acc_fn (use_checkpoint:=use_checkpoint2) logits' tokens).
     Proof using Type. intro Hl; apply acc_fn_Proper_dep; t. Qed.
   End with_batch.
 End Model.

@@ -61,8 +61,10 @@ Section with_batch.
     (defaultA : pointed A := @coer _ _ coerZ point)
     {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
     {ltbA : has_ltb A}
-    {oppA : has_opp A} {sqrtA : has_sqrt A} {expA : has_exp A} {lnA : has_ln A}.
+    {oppA : has_opp A} {sqrtA : has_sqrt A} {expA : has_exp A} {lnA : has_ln A}
+    {use_checkpoint : with_default "use_checkpoint" bool true}.
   #[local] Existing Instance defaultA.
+  #[local] Notation checkpoint x := (if use_checkpoint then PArray.checkpoint x else x%tensor).
 
   Let coer_tensor_float {r s} (x : @tensor r s float) : @tensor r s A
       := Tensor.map coer x.
@@ -147,13 +149,13 @@ Section with_batch.
     (tokens : tensor s IndexType)
   : tensor (if return_per_token return Shape (if return_per_token then _ else _) then Shape.squeeze batch else []) A
   := (let logits : tensor (batch ::' _) A
-        := PArray.checkpoint (logits.[…, -1, :]) in
+        := checkpoint (logits.[…, -1, :]) in
       let true_maximum : tensor (batch ::' 1) IndexType
         := reduce_axis_m1 (keepdim:=true) Reduction.max tokens in
       let log_probs
         := log_softmax_dim_m1 logits in
       let correct_log_probs
-        := PArray.checkpoint (gather_dim_m1 log_probs true_maximum) in
+        := checkpoint (gather_dim_m1 log_probs true_maximum) in
       if return_per_token return (tensor (if return_per_token return Shape (if return_per_token then _ else _) then _ else _) A)
       then -Tensor.squeeze correct_log_probs
       else -Tensor.mean correct_log_probs)%core.
@@ -163,13 +165,13 @@ Section with_batch.
     (tokens : tensor s IndexType)
     : tensor (if return_per_token return Shape (if return_per_token then _ else _) then batch else []) A
     := (let pred_logits : tensor (batch ::' _) A
-          := PArray.checkpoint (logits.[…, -1, :]) in
+          := checkpoint (logits.[…, -1, :]) in
         let pred_tokens : tensor batch IndexType
           := reduce_axis_m1 (keepdim:=false) Reduction.argmax pred_logits in
         let true_maximum : tensor batch IndexType
           := reduce_axis_m1 (keepdim:=false) Reduction.max tokens in
         let res : tensor _ A
-          := PArray.checkpoint (Tensor.of_bool (Tensor.map2 eqb pred_tokens true_maximum)) in
+          := checkpoint (Tensor.of_bool (Tensor.map2 eqb pred_tokens true_maximum)) in
         if return_per_token return (tensor (if return_per_token return Shape (if return_per_token then _ else _) then _ else _) A)
         then res
         else Tensor.mean res)%core.
