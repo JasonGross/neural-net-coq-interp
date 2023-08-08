@@ -71,9 +71,11 @@ Module LayerNorm.
     Context {r} {s : Shape r} {d_model}
       {A}
       {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A} {sqrtA : has_sqrt A} {zeroA : has_zero A} {coerZ : has_coer Z A}
+      {use_checkpoint : with_default "use_checkpoint" bool true}
       (defaultA : pointed A := @coer _ _ coerZ point)
       (eps : A) (w b : tensor [d_model] A).
     #[local] Existing Instance defaultA.
+    #[local] Notation checkpoint x := (if use_checkpoint then PArray.checkpoint x else x%tensor).
 
     Definition linpart (x : tensor (s ::' d_model) A)
       : tensor (s ::' d_model) A
@@ -97,7 +99,7 @@ Module LayerNorm.
       := let x := PArray.checkpoint (linpart x) in
          let scale := scale x in
          let x := rescale x scale in
-         PArray.checkpoint (postrescale x).
+         checkpoint (postrescale x).
   End __.
 End LayerNorm.
 
@@ -109,6 +111,7 @@ Module Attention.
       {A}
       {sqrtA : has_sqrt A} {coerZ : has_coer Z A} {addA : has_add A} {zeroA : has_zero A} {mulA : has_mul A} {divA : has_div A} {expA : has_exp A}
       (defaultA : pointed A := @coer _ _ coerZ point)
+      {use_checkpoint : with_default "use_checkpoint" bool true}
       (W_Q W_K W_V W_O : tensor [n_heads; d_model; d_head] A)
       (b_Q b_K b_V : tensor [n_heads; d_head] A)
       (b_O : tensor [d_model] A)
@@ -117,6 +120,7 @@ Module Attention.
       (maybe_n_heads := fun b : bool => (if b return Shape (if b then _ else _) then [n_heads] else [])%shape)
       (query_input key_input value_input : tensor ((batch ::' pos) ++' (maybe_n_heads use_split_qkv_input ::' d_model)) A)
       (mask : tensor [n_ctx; n_ctx] bool := to_bool (tril (A:=bool) (ones [n_ctx; n_ctx]))).
+    #[local] Notation checkpoint x := (if use_checkpoint then PArray.checkpoint x else x%tensor).
 
     (*         if self.cfg.use_split_qkv_input:
             qkv_einops_string = "batch pos head_index d_model"
@@ -152,11 +156,11 @@ Module Attention.
     #[local] Existing Instance defaultA.
 
     Definition q : tensor (batch ++' [pos; n_heads; d_head]) A
-      := PArray.checkpoint (einsum_input query_input W_Q + broadcast b_Q)%core.
+      := checkpoint (einsum_input query_input W_Q + broadcast b_Q)%core.
     Definition k : tensor (batch ++' [pos; n_heads; d_head]) A
-      := PArray.checkpoint (einsum_input key_input W_K + broadcast b_K)%core.
+      := checkpoint (einsum_input key_input W_K + broadcast b_K)%core.
     Definition v : tensor (batch ++' [pos; n_heads; d_head]) A
-      := PArray.checkpoint (einsum_input value_input W_V + broadcast b_V)%core.
+      := checkpoint (einsum_input value_input W_V + broadcast b_V)%core.
 
     Definition attn_scores : tensor (batch ::' n_heads ::' pos ::' pos) A
       := (let qk : tensor (batch ++' [n_heads; pos; pos]) A
@@ -171,7 +175,7 @@ Module Attention.
                     : tensor [n_heads; pos; pos] A)
                  q
                  k in
-          PArray.checkpoint (qk / broadcast' attn_scale))%core.
+          checkpoint (qk / broadcast' attn_scale))%core.
 
     Definition apply_causal_mask (attn_scores : tensor (batch ::' n_heads ::' pos ::' pos) A)
       : tensor (batch ::' n_heads ::' pos ::' pos) A
@@ -184,10 +188,10 @@ Module Attention.
       := apply_causal_mask attn_scores.
 
     Definition pattern : tensor (batch ::' n_heads ::' pos ::' pos) A
-      := PArray.checkpoint (softmax_dim_m1 masked_attn_scores).
+      := checkpoint (softmax_dim_m1 masked_attn_scores).
 
     Definition z : tensor (batch ::' pos ::' n_heads ::' d_head) A
-      := PArray.checkpoint
+      := checkpoint
            (Tensor.map2'
               (fun (v : tensor [pos; n_heads; d_head] A)
                    (pattern : tensor [n_heads; pos; pos] A)
@@ -211,7 +215,7 @@ Module Attention.
                              , W_O }}}
                     : tensor [pos; d_model] A)
                  z in
-          PArray.checkpoint (out + broadcast b_O))%core.
+          checkpoint (out + broadcast b_O))%core.
   End __.
 End Attention.
 
@@ -230,6 +234,7 @@ Module TransformerBlock.
       {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
       {sqrtA : has_sqrt A} {expA : has_exp A}
       (defaultA : pointed A := @coer _ _ coerZ point)
+      {use_checkpoint : with_default "use_checkpoint" bool true}
       (W_Q W_K W_V W_O : tensor [n_heads; d_model; d_head] A)
       (b_Q b_K b_V : tensor [n_heads; d_head] A)
       (b_O : tensor [d_model] A)
@@ -240,6 +245,7 @@ Module TransformerBlock.
                                  end)
       (resid_pre : tensor ((batch ::' pos) ++' [d_model]) A).
     #[local] Existing Instance defaultA.
+    #[local] Notation checkpoint x := (if use_checkpoint then PArray.checkpoint x else x%tensor).
 
 
     Definition add_head_dimension
@@ -266,7 +272,7 @@ Module TransformerBlock.
                        -> _
           with
           | Some LN => LayerNorm.forward eps
-          | Datatypes.None => fun _ _ => PArray.checkpoint
+          | Datatypes.None => fun _ _ x => checkpoint x
           end)
            (only parsing).
 
@@ -318,6 +324,7 @@ Module HookedTransformer.
       {sqrtA : has_sqrt A} {expA : has_exp A}
       (defaultA : pointed A := @coer _ _ coerZ point)
       (*{use_split_qkv_input : with_default "use_split_qkv_input" bool false}*)
+      {use_checkpoint : with_default "use_checkpoint" bool true}
       (eps : A)
 
       (W_E : tensor [d_vocab; d_model] A)
@@ -349,6 +356,7 @@ Module HookedTransformer.
       (W_U : tensor [d_model; d_vocab_out] A) (b_U : tensor [d_vocab_out] A)
     .
     #[local] Existing Instance defaultA.
+    #[local] Notation checkpoint x := (if use_checkpoint then PArray.checkpoint x else x%tensor).
 
     Definition embed (tokens : tensor s IndexType) : tensor resid_shape A
       := Embed.forward W_E tokens.
@@ -391,7 +399,7 @@ Module HookedTransformer.
     Polymorphic Definition blocks_cps {T} {n : with_default "blocks n" nat (List.length blocks)} (residual : tensor resid_shape A) (K : tensor resid_shape A -> T) : T
       := List.fold_right
            (fun block cont residual
-            => let residual := PArray.checkpoint (block residual) in
+            => let residual := checkpoint (block residual) in
                cont residual)
            K
            (List.firstn n blocks)
@@ -400,15 +408,15 @@ Module HookedTransformer.
     Definition resid_postembed (tokens : tensor s IndexType) : tensor resid_shape A
       := (let embed          := embed tokens in
           let pos_embed      := pos_embed tokens in
-          PArray.checkpoint (embed + pos_embed)%core).
+          checkpoint (embed + pos_embed)%core).
 
     Definition logits (tokens : tensor s IndexType) : tensor (s ::' d_vocab_out) A
       := (let residual       := resid_postembed tokens in
           blocks_cps
             residual
             (fun residual
-             => let residual := PArray.checkpoint (ln_final residual) in
-                let logits   := PArray.checkpoint (unembed residual) in
+             => let residual := checkpoint (ln_final residual) in
+                let logits   := checkpoint (unembed residual) in
                 logits)).
 
     Definition forward (tokens : tensor s IndexType) : tensor (s ::' d_vocab_out) A
@@ -454,7 +462,7 @@ Module HookedTransformer.
                       (n:=Nat.pred n)
                       residual
                       (fun residual
-                       => PArray.checkpoint (block_n_attn_masked_attn_scores residual)))
+                       => checkpoint (block_n_attn_masked_attn_scores residual)))
          | None => None
          end.
 
@@ -467,7 +475,7 @@ Module HookedTransformer.
                       (n:=Nat.pred n)
                       residual
                       (fun residual
-                       => PArray.checkpoint (block_n_attn_pattern residual)))
+                       => checkpoint (block_n_attn_pattern residual)))
          | None => None
          end.
   End __.
