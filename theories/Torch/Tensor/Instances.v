@@ -345,11 +345,11 @@ Definition curry {r A} {s : Shape r} : tensor A s -> @RawIndex.curriedT r A
   #[export] Instance reduce_axis_m1_Proper_2_keepdim_false {r s1 s2 A B reduction RA RB}
     {_ : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ RA ==> RB)))) reduction}
     : Proper (eqfR RA ==> eqfR RB) (@reduce_axis_m1 r s1 s2 false A B reduction)
-    := _.
+    := reduce_axis_m1_Proper_2 (keepdim:=false).
   #[export] Instance reduce_axis_m1_Proper_2_keepdim_true {r s1 s2 A B reduction RA RB}
     {_ : Proper (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ (pointwise_relation _ RA ==> RB)))) reduction}
     : Proper (eqfR RA ==> eqfR RB) (@reduce_axis_m1 r s1 s2 true A B reduction)
-    := _.
+    := reduce_axis_m1_Proper_2 (keepdim:=true).
 
   (*#[export] Instance reduce_axis_m1'_Proper' {r s1 s2 A B reduction RA} : Proper (eqfR RA ==> eqf) (@reduce_axis_m1' r s1 s2 A B reduction).
 Proof.
