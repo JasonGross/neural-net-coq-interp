@@ -29,6 +29,6 @@ Definition error : float := Eval cbv in (39 / totalf)%float.
 
 Module Accuracy.
   Local Notation abs := (@abs float float_has_abs) (only parsing).
-  Notation best := ((abs (real_accuracy - expected_accuracy) <? error)%float = true)
+  Notation best := ((abs (real_accuracy - expected_accuracy) <=? error)%float = true)
                      (only parsing).
 End Accuracy.
