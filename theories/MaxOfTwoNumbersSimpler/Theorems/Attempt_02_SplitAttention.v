@@ -175,13 +175,13 @@ Proof.
   move out at bottom.
   cbv -[map2' Reduction.sum L0_attn_W_O
           Instances.binary_float_has_add prec emax Hprec Hmax Instances.binary_float_has_mul Classes.add Classes.mul Classes.zero Classes.coer Instances.coer_float_binary_float
-          map2' raw_get v pattern L0_attn_W_O coer_tensor_float1 RawIndex.snoc RawIndex.nil
+          map2' raw_get v pattern L0_attn_W_O RawIndex.snoc RawIndex.nil
           Instances.binary_float_has_add prec emax Hprec Hmax Instances.binary_float_has_mul Classes.add Classes.mul Classes.zero Reduction.sum] in out.
   unfold Reduction.sum in (value of out) at 1.
   unfold Reduction.sum in (value of out) at 2.
   cbv -[map2' Reduction.sum L0_attn_W_O
           Instances.binary_float_has_add prec emax Hprec Hmax Instances.binary_float_has_mul Classes.add Classes.mul Classes.zero Classes.coer Instances.coer_float_binary_float
-          map2' raw_get v pattern L0_attn_W_O coer_tensor_float1 RawIndex.snoc RawIndex.nil
+          map2' raw_get v pattern L0_attn_W_O RawIndex.snoc RawIndex.nil
           Instances.binary_float_has_add prec emax Hprec Hmax Instances.binary_float_has_mul Classes.add Classes.mul Classes.zero Reduction.sum] in out.
   cbv [mean Reduction.mean reduce_axis_m1 reduce_axis_m1' map item SliceIndex.slice raw_get Truncating.coer_Z_float Shape.reshape' Shape.reduce Shape.tl snd reshape_m1 reshape_snoc_split].
   vm_compute of_Z.
@@ -244,7 +244,7 @@ Proof.
   set (k := PrimInt63.mod _ _) in (value of pred_logits).
   vm_compute in k; subst k.
 
-  cbv [SliceIndex.slice SliceIndex.SliceIndexType.slice Shape.tl Shape.hd Shape.snoc Shape.nil Slice.invert_index RawIndex.snoc RawIndex.hd adjust_index_for RawIndex.tl RawIndex Nat.radd PrimInt63.mod RawIndex.nil coer_tensor_float map raw_get map' reshape_app_combine reshape_app_combine' RawIndex.uncurry_radd RawIndex.split_radd reshape_app_split reshape_app_split' RawIndex.curry_radd RawIndex.combine_radd broadcast broadcast' repeat' reduce_axis_m1 reduce_axis_m1' map reshape_snoc_split map2'] in *; cbn [fst snd] in *.
+  cbv [SliceIndex.slice SliceIndex.SliceIndexType.slice Shape.tl Shape.hd Shape.snoc Shape.nil Slice.invert_index RawIndex.snoc RawIndex.hd adjust_index_for RawIndex.tl RawIndex Nat.radd PrimInt63.mod RawIndex.nil map raw_get map' reshape_app_combine reshape_app_combine' RawIndex.uncurry_radd RawIndex.split_radd reshape_app_split reshape_app_split' RawIndex.curry_radd RawIndex.combine_radd broadcast broadcast' repeat' reduce_axis_m1 reduce_axis_m1' map reshape_snoc_split map2'] in *; cbn [fst snd] in *.
   Ltac strip_one_tt H :=
     let Hv := (eval cbv delta [H] in H) in
     lazymatch Hv with

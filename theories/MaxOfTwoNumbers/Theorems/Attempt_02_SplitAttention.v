@@ -153,6 +153,7 @@ Proof.
   cbv beta iota delta [Unembed.forward] in *; let_bind_subst_shape ().
   cbv beta iota delta [all_tokens] in true_maximum; let_bind_subst_shape ().
   set (all_toks_c := PArray.checkpoint _) in (value of true_maximum).
+  (*
   set (out' := PArray.checkpoint _) in (value of out).
   do 8 lazymatch goal with
   | [ H := PArray.checkpoint _ |- _ ]
@@ -591,6 +592,7 @@ https://coq.zulipchat.com/#narrow/stream/237977-Coq-users/topic/Working.20with.2
 Qed.
 *)
 Abort.
+*)
 *)
 *)
 Abort.
