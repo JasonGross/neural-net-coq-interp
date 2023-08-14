@@ -48,3 +48,4 @@ Makefile.coq
 Makefile.coq.conf
 
 .#*
+.vscode/settings.json

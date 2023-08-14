@@ -33,11 +33,12 @@ Module ModelInstances (cfg : Config) (Model : ModelSig cfg).
              ==> Tensor.eqfR)
           (@forward r batch pos).
     Proof. cbv [forward]; repeat intro; apply forward_Proper_dep; t. Qed.
-(*
-    #[export] Instance forward_Proper {A d_vocab d_model W_E r s}
-      : Proper (Tensor.eqf ==> Tensor.eqf) (@forward A d_vocab d_model W_E r s).
-    Proof. apply forward_Proper_dep; reflexivity. Qed.
+
+    #[export] Instance forward_Proper {r batch pos A coer_float}
+      : Proper (Tensor.eqf ==> Tensor.eqf) (@forward r batch pos A coer_float).
+    Proof. apply forward_Proper_dep; repeat intro; subst; reflexivity. Qed.
   End Embed.
+  (*
   Export (hints) Embed.
 
   Module Unembed.
@@ -1046,5 +1047,4 @@ Module ModelInstances (cfg : Config) (Model : ModelSig cfg).
 End HookedTransformer.
 Export (hints) HookedTransformer.
  *)
-  End Embed.
 End ModelInstances.
