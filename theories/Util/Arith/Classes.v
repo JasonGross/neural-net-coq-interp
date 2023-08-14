@@ -152,3 +152,7 @@ Local Open Scope core_scope.
 #[export] Hint Cut [ ( _ * ) has_default_min_ltb has_default_ltb ( _ * ) ] : typeclass_instances.
 #[export] Hint Cut [ ( _ * ) has_default_max_leb has_default_leb ( _ * ) ] : typeclass_instances.
 #[export] Hint Cut [ ( _ * ) has_default_min_leb has_default_leb ( _ * ) ] : typeclass_instances.
+
+#[export] Hint Extern 0 (has_coer_to _ _ ?A)
+=> lazymatch goal with H : has_coer _ A |- _ => exact H end
+  : typeclass_instances.

@@ -12,12 +12,15 @@ Import Instances.Truncating.
 
 Notation tensor_of_list ls := (tensor_of_list ls) (only parsing).
 
-#[local] Hint Extern 0 (has_coer_to _ _ ?A)
-=> lazymatch goal with H : has_coer _ A |- _ => exact H end
-  : typeclass_instances.
-
 Module Model (cfg : Config).
   Import (hints) cfg.
+
+  Definition all_tokens {use_checkpoint : with_default "use_checkpoint" bool true}
+    : tensor [(cfg.d_vocab ^ cfg.n_ctx)%core : N; cfg.n_ctx] RawIndexType
+    := let all_toks := Tensor.arange (start:=0) (Uint63.of_Z cfg.d_vocab) in
+       let all_tokens := Tensor.cartesian_exp all_toks cfg.n_ctx in
+       (if use_checkpoint then PArray.checkpoint else fun x => x) all_tokens.
+
   Module Embed.
     Section __.
       Context {r} {batch : Shape r} {pos}
@@ -305,6 +308,11 @@ End LayerNorm.
              n tokens.
     End __.
   End HookedTransformer.
+
+  Notation model := HookedTransformer.logits (only parsing).
+
+  Definition logits_all_tokens : tensor _ float
+    := HookedTransformer.logits all_tokens.
 End Model.
 
 Module Type ModelSig (cfg : Config) := Nop <+ Model cfg.

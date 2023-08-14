@@ -72,9 +72,11 @@ theories/Util/Classes/RelationClasses/Dependent.v
 theories/Util/Classes/RelationClasses/Hetero.v
 theories/Util/Classes/RelationPairs/Dependent.v
 theories/Util/Classes/RelationPairs/Hetero.v
+theories/Util/List/Forall2Map.v
 theories/Util/List/Proofs.v
 theories/Util/List/Instances/Forall2.v
 theories/Util/List/Instances/NthError.v
+theories/Util/List/Instances/Forall2/Map.v
 theories/Util/PArray/Instances.v
 theories/Util/PArray/Proofs.v
 theories/Util/Program/Basics/Dependent.v
