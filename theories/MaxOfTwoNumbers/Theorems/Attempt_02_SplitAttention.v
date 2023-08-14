@@ -67,8 +67,8 @@ Local Ltac Proper_Tensor_eqf_t_step _
          else destruct x eqn:?, y eqn:?; subst
      | [ H : Tensor.eqfR _ ?x ?y |- _ ]
        => move H at top;
-          first [ is_var x; revert dependent x; intros x H; setoid_rewrite H; clear H x; intros
-                | is_var y; revert dependent y; intros y H; setoid_rewrite <- H; clear H y; intros ]
+          first [ is_var x; generalize dependent x; intros x H; setoid_rewrite H; clear H x; intros
+                | is_var y; generalize dependent y; intros y H; setoid_rewrite <- H; clear H y; intros ]
      | [ |- ?R ?x ?x ] => reflexivity
      end.
 Local Ltac Proper_Tensor_eqf_t _ := repeat Proper_Tensor_eqf_t_step ().
@@ -456,10 +456,10 @@ https://coq.zulipchat.com/#narrow/stream/237977-Coq-users/topic/Working.20with.2
          | [ H : Tensor.eqfR _ ?x ?y |- _ ]
            => move H at top;
               is_var x;
-              revert dependent x; intros x H; setoid_rewrite H
+              generalize dependent x; intros x H; setoid_rewrite H
        end.
-              first [ is_var x; revert dependent x; intros x H; setoid_rewrite H; clear x; intros
-                    | is_var y; revert dependent y; intros y H; setoid_rewrite <- H; clear y; intros ]
+              first [ is_var x; generalize dependent x; intros x H; setoid_rewrite H; clear x; intros
+                    | is_var y; generalize dependent y; intros y H; setoid_rewrite <- H; clear y; intros ]
        end.
        setoid_rewrite H.
        reflexivity.
