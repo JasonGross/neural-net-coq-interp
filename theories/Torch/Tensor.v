@@ -6,6 +6,7 @@ Import Util.Nat.Notations.
 Import Util.Wf_Uint63.LoopNotation.
 Import Util.Wf_Uint63.Reduction.
 Import Arith.Classes.
+Import Instances.Uint63.
 Local Open Scope list_scope.
 Set Implicit Arguments.
 Import ListNotations.
@@ -117,17 +118,54 @@ Module IndexGen.
          | S r => fun xs ys zs => map3 f (hd xs) (hd ys) (hd zs) ::' f (tl xs) (tl ys) (tl zs)
          end.
 
-    Fixpoint fold_map {A B r} (f : IndexType -> A) (accum : B -> A -> B) (init : B) : Index r -> B
+    Polymorphic Fixpoint fold_map {A B r} (f : IndexType -> A) (accum : B -> A -> B) (init : B) : Index r -> B
       := match r with
          | 0%nat => fun _ => init
          | S r => fun xs => fold_map f accum (accum init (f (tl xs))) (hd xs)
          end.
 
-    Fixpoint fold_map2 {A B r} (f : IndexType -> IndexType -> A) (accum : B -> A -> B) (init : B) : Index r -> Index r -> B
+    Polymorphic Fixpoint fold_map2 {A B r} (f : IndexType -> IndexType -> A) (accum : B -> A -> B) (init : B) : Index r -> Index r -> B
       := match r with
          | 0%nat => fun _ _ => init
          | S r => fun xs ys => fold_map2 f accum (accum init (f (tl xs) (tl ys))) (hd xs) (hd ys)
          end.
+
+    Definition tuple {r} (A : IndexType -> Type) (s : Index r) : Type
+      := fold_map A (fun x y => Datatypes.prod y x) unit s.
+
+    Module Tuple.
+      Fixpoint init' {r} : forall {A B} {s : Index r},
+          (forall i, A i)
+          -> B
+          -> fold_map A (fun x y => Datatypes.prod y x) B s
+        := match r with
+           | O => fun A B s f b => b
+           | S r => fun A B s f b => @init' r A (A (tl s) * B)%type (hd s) f (f (tl s), b)
+           end.
+
+      Definition init {r A} {s : Index r} (f : forall i, A i) : @tuple r A s
+        := init' f tt.
+
+      Fixpoint to_list' {r} : forall {A B C} {s : Index r},
+          (forall i, A i -> C)
+          -> (B -> list C)
+          -> fold_map A (fun x y => Datatypes.prod y x) B s
+          -> list C
+        := match r with
+           | O => fun A B C s g f ts => f ts
+           | S r
+             => fun A B C s g f ts
+                => let f := fun ba => (g _ (fst ba) :: f (snd ba))%list in
+                   @to_list' r A (A (tl s) * B)%type C (hd s) g f ts
+           end.
+      Definition to_list {r A s} (ts : @tuple r (fun _ => A) s) : list A
+        := to_list' (fun _ x => x) (fun _ => []%list) ts.
+
+      Definition nth_error {r A s} (ts : @tuple r (fun _ => A) s) n : option A
+        := nth_error (to_list ts) n.
+      Definition nth_default {r A s} default (ts : @tuple r (fun _ => A) s) n : A
+        := nth_default default (to_list ts) n.
+    End Tuple.
 
     Fixpoint curriedT_dep {r : Rank} : (Index r -> Type) -> Type
       := match r with
@@ -924,9 +962,9 @@ Definition gather_dim_m1 {r} {ssinput ssindex : Shape r} {sinput' sindex'} {A}
 Definition squeeze {r} {s : Shape r} {A} (t : tensor s A) : tensor (Shape.squeeze s) A
   := fun idx => raw_get t (RawIndex.unsqueeze idx).
 
-Definition reshape_m1 {r} {s : Shape r} {A} (t : tensor s A) : tensor (Shape.reshape s) A
+Definition reshape_all {r} {s : Shape r} {A} (t : tensor s A) : tensor (Shape.reshape s) A
   := fun idx => raw_get t (RawIndex.unreshape s idx).
-Definition unreshape_m1 {r} {s : Shape r} {A} (t : tensor (Shape.reshape s) A) : tensor s A
+Definition unreshape_all {r} {s : Shape r} {A} (t : tensor (Shape.reshape s) A) : tensor s A
   := fun idx => raw_get t (RawIndex.reshape s idx).
 (*
 Definition reshape {A r1 r2} {s1 : Shape r1} (t : tensor s1 A) (s2 : Shape r2) : tensor s2 A
@@ -940,7 +978,7 @@ Definition of_bool {r} {s : Shape r} {A} {zero : has_zero A} {one : has_one A} (
   := map (fun x:bool => if x then 1 else 0)%core xs.
 
 Definition mean {r} {s : Shape r} {A} {B C} {zero : has_zero A} {add : has_add A} {div_by : has_div_by A B C} {coer : has_coer Z B} (t : tensor s A) : tensor [] C
-  := reduce_axis_m1 Reduction.mean (reshape_m1 t).
+  := reduce_axis_m1 Reduction.mean (reshape_all t).
 (*
 Definition arange {A B} {START STOP STEP IDX} {oneA : has_one A} {zeroStart : has_zero START} {oneStep : has_one STEP} {sub : has_sub_with STOP START A} {subA : has_sub A} {div : has_int_div_by A STEP B} {coerZ : has_coer B Z} {coerIDX : has_coer int IDX} {add : has_add_with START C D} {mul : has_mul_with STEP IDX C}
   {start : with_default "start" START 0%core} (stop : STOP) {step : with_default "step" STEP 1%core}
@@ -961,8 +999,27 @@ Definition tupleify {s1 s2 A B} (t1 : tensor [s1] A) (t2 : tensor [s2] B) : tens
   := fun '((tt, a), b) => (raw_get t1 [a], raw_get t2 [b]).
 Definition cartesian_prod {s1 s2 A} (t1 : tensor [s1] A) (t2 : tensor [s2] A) : tensor [s1 * s2; 2] A
   := fun '((tt, idx), tuple_idx)
-     => let '(a, b) := raw_get (reshape_m1 (tupleify t1 t2)) [idx] in
+     => let '(a, b) := raw_get (reshape_all (tupleify t1 t2)) [idx] in
         nth_default a [a; b] (Z.to_nat (Uint63.to_Z (tuple_idx mod 2))).
+Fixpoint ntupleify' {r} : forall {s : Shape r} {A B1 B2},
+    (B1 -> B2)
+    -> Shape.fold_map (fun s => tensor [s] A) (fun x y => (y * x)%type) B1 s
+    -> tensor s (Shape.fold_map (fun _ => A) (fun x y => (y * x)%type) B2 s)
+  := match r with
+     | O => fun s A B1 B2 f ts i => f ts
+     | S r
+       => fun s A B1 B2 f ts i
+          => let f := (fun tab1 => let '(ta, b1) := (fst tab1, snd tab1) in (raw_get ta [RawIndex.tl i], f b1)) in
+             @ntupleify' r (Shape.hd s) A (tensor [Shape.tl s] A * B1)%type (A * B2)%type f ts (RawIndex.hd i)
+     end.
+Definition ntupleify {r} {s : Shape r} {A} (ts : Shape.tuple (fun s => tensor [s] A) s) : tensor s (Shape.tuple (fun _ => A) s)
+  := ntupleify' (fun _tt => tt) ts.
+Definition cartesian_nprod {r} {s : Shape r} {A} {defaultA : pointed A} (ts : Shape.tuple (fun s => tensor [s] A) s) : tensor [Shape.fold_map id mul 1 s; Uint63.of_Z r] A
+  := fun '((tt, idx), tuple_idx)
+     => let ts := raw_get (reshape_all (ntupleify ts)) [idx] in
+        Shape.Tuple.nth_default point ts (Z.to_nat (Uint63.to_Z (tuple_idx mod Uint63.of_Z r))).
+Definition cartesian_exp {s A} {defaultA : pointed A} (t : tensor [s] A) (n : ShapeType) : tensor [(s^(n:N))%core; n] A
+  := @cartesian_nprod n (Shape.repeat s n) A _ (Shape.Tuple.init (fun _ => t)).
 
 (** Quoting https://pytorch.org/docs/stable/generated/torch.tril.html
 

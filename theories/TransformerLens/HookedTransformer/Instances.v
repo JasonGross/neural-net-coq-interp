@@ -67,8 +67,8 @@ Module HookedTransformer.
               => apply (Tensor.raw_get_Proper_dep _ _ R)
             | [ |- ?R (reshape_snoc_split _ _ _) (reshape_snoc_split _ _ _) ]
               => apply (Tensor.reshape_snoc_split_Proper_dep _ _ R)
-            | [ |- ?R (reshape_m1 _ _) (reshape_m1 _ _) ]
-              => apply Tensor.reshape_m1_Proper_dep
+            | [ |- ?R (reshape_all _ _) (reshape_all _ _) ]
+              => apply Tensor.reshape_all_Proper_dep
             | [ |- ?R (@SliceIndex.slice ?A ?ri ?ro ?idxs ?s _ _) (@SliceIndex.slice ?A ?ri ?ro ?idxs ?s _ _) ]
               => eapply (@SliceIndex.slice_Proper A ri ro idxs s R)
             | [ |- ?R (@FancyIndex.slice ?rb ?sb ?ri ?ro ?s ?A ?idxs _ _) (@FancyIndex.slice ?rb ?sb ?ri ?ro ?s ?A' ?idxs' _ _) ]

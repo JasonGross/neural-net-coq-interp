@@ -2,7 +2,7 @@ From Coq Require Import Bool Uint63 ZArith Wellfounded Wf_Z Wf_nat Lia Setoid Mo
 From NeuralNetInterp.Util Require Import Monad Notations Arith.Classes Arith.Instances Default.
 From NeuralNetInterp.Util.Tactics Require Import BreakMatch DestructHead UniquePose.
 From NeuralNetInterp.Util Require Import Wf_Uint63.
-Import Arith.Classes.
+Import Arith.Classes Arith.Instances.Uint63.
 #[local] Open Scope core_scope.
 
 Module Reduction.

@@ -1,4 +1,5 @@
 From Coq Require Import String Floats NArith QArith Lia List.
+From NeuralNetInterp.TransformerLens Require Import HookedTransformer.Config.Common.
 Local Open Scope float_scope.
 Local Open Scope string_scope.
 Local Open Scope list_scope.
@@ -7,7 +8,7 @@ Import ListNotations.
 
 #[local] Set Warnings Append "-inexact-float".
 
-Module cfg.
+Module cfg <: CommonConfig.
   Definition n_layers := 1%N.
   Definition d_model := 32%N.
   Definition n_ctx := 2%N.
@@ -31,7 +32,7 @@ Module cfg.
   Definition window_size := @None Z.
   Definition attn_types := @None (list string).
   Definition init_mode := "gpt2".
-  Definition normalization_type := "LN".
+  Definition normalization_type := Some LN.
   Definition device := "cpu".
   Definition n_devices := 1%N.
   Definition attention_dir := "causal".

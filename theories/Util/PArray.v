@@ -3,6 +3,7 @@ From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Slice Arith.Classes A
 Local Open Scope list_scope.
 Set Implicit Arguments.
 Import ListNotations.
+Import Instances.Uint63.
 Open Scope uint63_scope.
 
 #[local] Coercion is_true : bool >-> Sortclass.

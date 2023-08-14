@@ -1,6 +1,7 @@
 From Coq Require Import Sint63 Uint63.
 From NeuralNetInterp.Torch Require Import Tensor.
 From NeuralNetInterp.Util Require Import Slice Arith.Classes Arith.Instances PolymorphicOption Nat Notations.
+Import Instances.Uint63.
 Set Implicit Arguments.
 (*
 Set Universe Polymorphism.

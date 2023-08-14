@@ -39,8 +39,10 @@ Local Open Scope nat_scope.
 #[export] Instance nat_has_sqrt : has_sqrt nat := Nat.sqrt.
 
 Local Open Scope N_scope.
-#[global] Coercion N.of_nat : nat >-> N.
-#[global] Coercion N.to_nat : N >-> nat.
+#[local] Set Warnings Append "-unsupported-attributes".
+#[export] Coercion N.of_nat : nat >-> N.
+#[export] Coercion N.to_nat : N >-> nat.
+#[local] Set Warnings Append "unsupported-attributes".
 #[export] Instance N_of_nat_coer : has_coer nat N := fun x => x.
 #[export] Instance N_to_nat_coer : has_coer N nat := fun x => x.
 #[export] Hint Cut [ ( _ * ) N_of_nat_coer ( _ * ) N_to_nat_coer ( _ * ) ] : typeclass_instances.
@@ -69,7 +71,9 @@ Local Open Scope N_scope.
   := default_pow_N.
 
 Local Open Scope positive_scope.
-#[global] Coercion N.pos : positive >-> N.
+#[local] Set Warnings Append "-unsupported-attributes".
+#[export] Coercion N.pos : positive >-> N.
+#[local] Set Warnings Append "unsupported-attributes".
 #[export] Instance N_pos_coer : has_coer positive N := fun x => x.
 #[export] Hint Extern 10 (has_coer_from positive ?B) => check_unify_has_coer_from N : typeclass_instances.
 #[export] Hint Extern 10 (has_coer_to ?A N) => check_unify_has_coer_to positive : typeclass_instances.
@@ -90,7 +94,9 @@ Local Open Scope positive_scope.
   := default_pow_N.
 
 Local Open Scope Z_scope.
-#[global] Coercion Z.of_N : N >-> Z.
+#[local] Set Warnings Append "-unsupported-attributes".
+#[export] Coercion Z.of_N : N >-> Z.
+#[local] Set Warnings Append "unsupported-attributes".
 #[export] Instance Z_of_N_coer : has_coer N Z := fun x => x.
 #[export] Hint Extern 10 (has_coer_from N ?B) => check_unify_has_coer_from Z : typeclass_instances.
 #[export] Hint Extern 10 (has_coer_to ?A Z) => check_unify_has_coer_to N : typeclass_instances.
@@ -114,7 +120,9 @@ Local Open Scope Z_scope.
   := @pow_Z A oneA mulA divA.
 
 Local Open Scope Q_scope.
-#[global] Coercion inject_Z : Z >-> Q.
+#[local] Set Warnings Append "-unsupported-attributes".
+#[export] Coercion inject_Z : Z >-> Q.
+#[local] Set Warnings Append "unsupported-attributes".
 #[export] Instance inject_Z_coer : has_coer Z Q := fun x => x.
 #[export] Hint Extern 10 (has_coer_from Z ?B) => check_unify_has_coer_from Q : typeclass_instances.
 #[export] Hint Extern 10 (has_coer_to ?A Q) => check_unify_has_coer_to Z : typeclass_instances.
@@ -160,10 +168,17 @@ Module Sint63.
   #[export] Instance max : has_max int := _.
 
   #[export] Instance coer_int_float : has_coer int float := PrimFloat.of_sint63.
+  #[export] Set Warnings Append "-ambiguous-paths".
+  #[local] Set Warnings Append "-unsupported-attributes".
+  #[export] Coercion Sint63.to_Z : int >-> Z.
+  #[export] Coercion PrimFloat.of_sint63 : int >-> float.
+  #[local] Set Warnings Append "unsupported-attributes".
+  #[export] Set Warnings Append "ambiguous-paths".
 End Sint63.
 
-Module Export Uint63.
+Module Uint63.
   #[export] Instance coer_int_Z : has_coer int Z := eta1 Uint63.to_Z.
+  #[export] Instance coer_int_N : has_coer int N := fun x => Z.to_N (Uint63.to_Z x).
   #[export] Instance int_div : has_int_div int := eta2 Uint63.div.
   #[export] Instance modulo : has_mod int := eta2 Uint63.mod.
   #[export] Instance ltb : has_ltb int := eta2 Uint63.ltb.
@@ -172,6 +187,13 @@ Module Export Uint63.
   #[export] Instance max : has_max int := _.
 
   #[export] Instance coer_int_float : has_coer int float := PrimFloat.of_uint63.
+  #[local] Set Warnings Append "-unsupported-attributes".
+  #[export] Set Warnings Append "-ambiguous-paths".
+  #[export] Coercion Uint63.to_Z : int >-> Z.
+  #[export] Coercion coer_int_N' (x : int) : N := Z.to_N (Uint63.to_Z x).
+  #[export] Coercion PrimFloat.of_uint63 : int >-> float.
+  #[local] Set Warnings Append "unsupported-attributes".
+  #[export] Set Warnings Append "ambiguous-paths".
 End Uint63.
 
 Local Open Scope float_scope.
@@ -201,14 +223,18 @@ End Float.
 
 Module Truncating.
   #[local] Set Warnings Append "-unsupported-attributes".
+  #[export] Set Warnings Append "-ambiguous-paths".
   #[export] Coercion Uint63.of_Z : Z >-> Uint63.int.
+  #[export] Set Warnings Append "ambiguous-paths".
   #[local] Set Warnings Append "unsupported-attributes".
   #[export] Instance coer_Z_int : has_coer Z int := Uint63.of_Z.
   #[export] Hint Extern 10 (has_coer_from Z ?B) => check_unify_has_coer_from int : typeclass_instances.
   #[export] Hint Extern 10 (has_coer_to ?A int) => check_unify_has_coer_to Z : typeclass_instances.
 
   #[local] Set Warnings Append "-unsupported-attributes".
+  #[export] Set Warnings Append "-ambiguous-paths".
   #[export] Coercion PrimFloat.of_Z : Z >-> float.
+  #[export] Set Warnings Append "ambiguous-paths".
   #[local] Set Warnings Append "unsupported-attributes".
   #[export] Instance coer_Z_float : has_coer Z float := PrimFloat.of_Z.
   #[export] Hint Extern 10 (has_coer_from Z ?B) => check_unify_has_coer_from float : typeclass_instances.

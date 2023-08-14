@@ -8,6 +8,7 @@ Import Util.Nat.Notations.
 Import Util.Wf_Uint63.LoopNotation.
 Import Util.Wf_Uint63.
 Import Util.Wf_Uint63.Reduction.
+Import Arith.Instances.Uint63.
 Import Arith.Instances.Truncating.
 Local Open Scope float_scope.
 Local Open Scope list_scope.

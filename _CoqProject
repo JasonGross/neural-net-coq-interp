@@ -33,6 +33,7 @@ theories/TransformerLens/HookedTransformer.v
 theories/TransformerLens/HookedTransformer/Config.v
 theories/TransformerLens/HookedTransformer/Instances.v
 theories/TransformerLens/HookedTransformer/Module.v
+theories/TransformerLens/HookedTransformer/Config/Common.v
 theories/TransformerLens/HookedTransformer/Module/Instances.v
 theories/Util/Arrow.v
 theories/Util/Bool.v

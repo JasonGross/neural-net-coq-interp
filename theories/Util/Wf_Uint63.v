@@ -1,6 +1,7 @@
 From Coq Require Import Bool Uint63 ZArith Wellfounded Wf_Z Wf_nat Lia Setoid Morphisms.
 From NeuralNetInterp.Util Require Import Monad Notations Arith.Classes Arith.Instances Default.
 From NeuralNetInterp.Util.Tactics Require Import BreakMatch DestructHead.
+Import Instances.Uint63.
 (*
 Set Universe Polymorphism.
 Set Polymorphic Inductive Cumulativity.
@@ -8,17 +9,13 @@ Unset Universe Minimization ToSet.
 *)
 Local Open Scope uint63_scope.
 
-#[local] Set Warnings Append "-ambiguous-paths".
-#[local] Coercion Uint63.to_Z : int >-> Z.
-#[local] Coercion Z.to_nat : Z >-> nat.
-#[local] Set Warnings Append "ambiguous-paths".
 #[local] Coercion is_true : bool >-> Sortclass.
 Definition ltof {A} (f : A -> int) (a b : A) := f a <? f b.
 
 Lemma well_founded_ltof {A f} : well_founded (@ltof A f).
 Proof.
-  unshelve eapply well_founded_lt_compat with (fun x:A => f x:nat); cbv [is_true ltof].
-  intros *; rewrite Uint63.ltb_spec, Z2Nat.inj_lt by apply to_Z_bounded; trivial.
+  unshelve eapply well_founded_lt_compat with (fun x:A => f x:nat); cbv [is_true ltof coer_int_N' coer coer_int_N coer_int_Z].
+  intros *; rewrite Uint63.ltb_spec, Z2Nat.inj_lt, !Z_N_nat by apply to_Z_bounded; trivial.
 Qed.
 
 Lemma lt_wf : well_founded Uint63.ltb.
@@ -28,12 +25,12 @@ Qed.
 
 Lemma well_founded_gtof {A f} {bound} : well_founded (fun x y:A => (f y <? f x) && (f x <=? bound)).
 Proof.
-  apply @well_founded_lt_compat with (f:=fun x:A => bound - f x); cbv [is_true ltof].
+  apply @well_founded_lt_compat with (f:=fun x:A => bound - f x); cbv [is_true ltof coer_int_N'].
   intros x y.
   pose proof (to_Z_bounded (f y)).
   pose proof (to_Z_bounded (f x)).
   pose proof (to_Z_bounded bound).
-  rewrite andb_true_iff, Uint63.ltb_spec, Uint63.leb_spec, !Uint63.sub_spec by apply to_Z_bounded.
+  rewrite andb_true_iff, Uint63.ltb_spec, Uint63.leb_spec, !Z_N_nat, !Uint63.sub_spec by apply to_Z_bounded.
   intros; rewrite !Z.mod_small by lia; lia.
 Qed.
 

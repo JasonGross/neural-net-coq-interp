@@ -2,12 +2,13 @@ From Coq Require Import Floats Sint63 Uint63 QArith Lia List PArray Morphisms Re
 From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool Option.
 From NeuralNetInterp.Util Require Nat Wf_Uint63.
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
-From NeuralNetInterp.TransformerLens Require Import HookedTransformer.
+From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Config.
 From NeuralNetInterp.MaxOfTwoNumbers Require Import Parameters.
 Import Util.Nat.Notations.
 Import Util.Wf_Uint63.LoopNotation.
 Import Util.Wf_Uint63.
 Import Util.Wf_Uint63.Reduction.
+Import Arith.Instances.Uint63.
 Import Arith.Instances.Truncating.
 Local Open Scope float_scope.
 Local Open Scope list_scope.
@@ -17,32 +18,31 @@ Local Open Scope raw_tensor_scope.
 
 (* Based on https://colab.research.google.com/drive/1N4iPEyBVuctveCA0Zre92SpfgH6nmHXY#scrollTo=Q1h45HnKi-43, Taking the minimum or maximum of two ints *)
 
-(** Hyperparameters *)
-Definition N_LAYERS : nat := 1.
-Definition N_HEADS : nat := 1.
-Definition D_MODEL : nat := 32.
-Definition D_HEAD : nat := 32.
-(*Definition D_MLP = None*)
+Module Import cfg <: Config.
+  Include Parameters.cfg.
 
-Definition D_VOCAB : nat := 64.
+  Definition W_E : tensor _ _ := Eval cbv in tensor_of_list Parameters.W_E.
+  Definition W_pos : tensor _ _ := Eval cbv in tensor_of_list Parameters.W_pos.
+  Definition L0_attn_W_Q : tensor _ _ := Eval cbv in tensor_of_list Parameters.L0_attn_W_Q.
+  Definition L0_attn_W_K : tensor _ _ := Eval cbv in tensor_of_list Parameters.L0_attn_W_K.
+  Definition L0_attn_W_V : tensor _ _ := Eval cbv in tensor_of_list Parameters.L0_attn_W_V.
+  Definition L0_attn_W_O : tensor _ _ := Eval cbv in tensor_of_list Parameters.L0_attn_W_O.
+  Definition L0_attn_b_Q : tensor _ _ := Eval cbv in tensor_of_list Parameters.L0_attn_b_Q.
+  Definition L0_attn_b_K : tensor _ _ := Eval cbv in tensor_of_list Parameters.L0_attn_b_K.
+  Definition L0_attn_b_V : tensor _ _ := Eval cbv in tensor_of_list Parameters.L0_attn_b_V.
+  Definition L0_attn_b_O : tensor _ _ := Eval cbv in tensor_of_list Parameters.L0_attn_b_O.
+  Definition L0_ln1_b : tensor _ _ := Eval cbv in tensor_of_list Parameters.L0_ln1_b.
+  Definition L0_ln1_w : tensor _ _ := Eval cbv in tensor_of_list Parameters.L0_ln1_w.
+  Definition ln_final_b : tensor _ _ := Eval cbv in tensor_of_list Parameters.ln_final_b.
+  Definition ln_final_w : tensor _ _ := Eval cbv in tensor_of_list Parameters.ln_final_w.
+  Definition W_U : tensor _ _ := Eval cbv in tensor_of_list Parameters.W_U.
+  Definition b_U : tensor _ _ := Eval cbv in tensor_of_list Parameters.b_U.
 
-Notation tensor_of_list ls := (Tensor.PArray.abstract (Tensor.PArray.concretize (Tensor.of_list ls))) (only parsing).
-Definition W_E : tensor _ _ := Eval cbv in tensor_of_list MaxOfTwoNumbers.Parameters.W_E.
-Definition W_pos : tensor _ _ := Eval cbv in tensor_of_list MaxOfTwoNumbers.Parameters.W_pos.
-Definition L0_attn_W_Q : tensor _ _ := Eval cbv in tensor_of_list MaxOfTwoNumbers.Parameters.L0_attn_W_Q.
-Definition L0_attn_W_K : tensor _ _ := Eval cbv in tensor_of_list MaxOfTwoNumbers.Parameters.L0_attn_W_K.
-Definition L0_attn_W_V : tensor _ _ := Eval cbv in tensor_of_list MaxOfTwoNumbers.Parameters.L0_attn_W_V.
-Definition L0_attn_W_O : tensor _ _ := Eval cbv in tensor_of_list MaxOfTwoNumbers.Parameters.L0_attn_W_O.
-Definition L0_attn_b_Q : tensor _ _ := Eval cbv in tensor_of_list MaxOfTwoNumbers.Parameters.L0_attn_b_Q.
-Definition L0_attn_b_K : tensor _ _ := Eval cbv in tensor_of_list MaxOfTwoNumbers.Parameters.L0_attn_b_K.
-Definition L0_attn_b_V : tensor _ _ := Eval cbv in tensor_of_list MaxOfTwoNumbers.Parameters.L0_attn_b_V.
-Definition L0_attn_b_O : tensor _ _ := Eval cbv in tensor_of_list MaxOfTwoNumbers.Parameters.L0_attn_b_O.
-Definition L0_ln1_b : tensor _ _ := Eval cbv in tensor_of_list MaxOfTwoNumbers.Parameters.L0_ln1_b.
-Definition L0_ln1_w : tensor _ _ := Eval cbv in tensor_of_list MaxOfTwoNumbers.Parameters.L0_ln1_w.
-Definition ln_final_b : tensor _ _ := Eval cbv in tensor_of_list MaxOfTwoNumbers.Parameters.ln_final_b.
-Definition ln_final_w : tensor _ _ := Eval cbv in tensor_of_list MaxOfTwoNumbers.Parameters.ln_final_w.
-Definition W_U : tensor _ _ := Eval cbv in tensor_of_list MaxOfTwoNumbers.Parameters.W_U.
-Definition b_U : tensor _ _ := Eval cbv in tensor_of_list MaxOfTwoNumbers.Parameters.b_U.
+  Definition blocks_params
+    := [(L0_attn_W_Q, L0_attn_W_K, L0_attn_W_V, L0_attn_W_O
+          , L0_attn_b_Q, L0_attn_b_K, L0_attn_b_V, L0_attn_b_O
+          , L0_ln1_w, L0_ln1_b)].
+End cfg.
 
 Definition all_tokens : tensor [(cfg.d_vocab ^ cfg.n_ctx)%core : N; 2] RawIndexType
   := let all_toks := Tensor.arange (start:=0) (Uint63.of_Z cfg.d_vocab) in

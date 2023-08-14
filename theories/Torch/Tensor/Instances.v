@@ -442,14 +442,14 @@ Qed.
   Proof. cbv; eauto. Qed.
   #[export] Instance squeeze_Proper {r s A R} : Proper (eqfR R ==> eqfR R) (@squeeze r s A).
   Proof. apply squeeze_Proper_dep. Qed.
-  #[export] Instance reshape_m1_Proper_dep {r s} : Dependent.Proper (eqfR ==> eqfR) (@reshape_m1 r s).
-  Proof. intros ??? ?? H ?; cbv [reshape_m1]; apply H. Qed.
-  #[export] Instance reshape_m1_Proper {r s A R} : Proper (eqfR R ==> eqfR R) (@reshape_m1 r s A).
-  Proof. apply reshape_m1_Proper_dep. Qed.
-  #[export] Instance unreshape_m1_Proper_dep {r s} : Dependent.Proper (eqfR ==> eqfR) (@unreshape_m1 r s).
-  Proof. intros ??? ?? H ?; cbv [unreshape_m1]; apply H. Qed.
-  #[export] Instance unreshape_m1_Proper {r s A R} : Proper (eqfR R ==> eqfR R) (@unreshape_m1 r s A).
-  Proof. apply unreshape_m1_Proper_dep. Qed.
+  #[export] Instance reshape_all_Proper_dep {r s} : Dependent.Proper (eqfR ==> eqfR) (@reshape_all r s).
+  Proof. intros ??? ?? H ?; cbv [reshape_all]; apply H. Qed.
+  #[export] Instance reshape_all_Proper {r s A R} : Proper (eqfR R ==> eqfR R) (@reshape_all r s A).
+  Proof. apply reshape_all_Proper_dep. Qed.
+  #[export] Instance unreshape_all_Proper_dep {r s} : Dependent.Proper (eqfR ==> eqfR) (@unreshape_all r s).
+  Proof. intros ??? ?? H ?; cbv [unreshape_all]; apply H. Qed.
+  #[export] Instance unreshape_all_Proper {r s A R} : Proper (eqfR R ==> eqfR R) (@unreshape_all r s A).
+  Proof. apply unreshape_all_Proper_dep. Qed.
 
   #[export] Instance to_bool_Proper_dep {r s} : Dependent.Proper (Dependent.idR ==> (Dependent.idR ==> Dependent.idR ==> Dependent.const eq) ==> eqfR ==> Dependent.const eqf) (@to_bool r s).
   Proof.
@@ -483,7 +483,7 @@ Qed.
   Proof.
     cbv [mean]; repeat intro.
     eapply reduce_axis_m1_Proper_dep; repeat intro; hnf in *.
-    2: eapply reshape_m1_Proper_dep; repeat intro; hnf in *.
+    2: eapply reshape_all_Proper_dep; repeat intro; hnf in *.
     1: eapply Reduction.mean_Proper_dep; repeat intro; hnf in *.
     all: try eassumption.
     all: cbv in *; eauto.
@@ -500,7 +500,7 @@ Definition tupleify {s1 s2 A B} (t1 : tensor A [s1]) (t2 : tensor B [s2]) : tens
   := fun '((tt, a), b) => (raw_get t1 [a], raw_get t2 [b]).
 Definition cartesian_prod {s1 s2 A} (t1 : tensor A [s1]) (t2 : tensor A [s2]) : tensor A [s1 * s2; 2]
   := fun '((tt, idx), tuple_idx)
-     => let '(a, b) := raw_get (reshape_m1 (tupleify t1 t2)) [idx] in
+     => let '(a, b) := raw_get (reshape_all (tupleify t1 t2)) [idx] in
         nth_default a [a; b] (Z.to_nat (Uint63.to_Z (tuple_idx mod 2))).
    *)
   #[export] Instance tril_Proper_dep {rnk s r c} : Dependent.Proper (Dependent.idR ==> Dependent.const eq ==> eqfR ==> eqfR) (@tril rnk s r c).
