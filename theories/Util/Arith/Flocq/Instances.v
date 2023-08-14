@@ -3,7 +3,7 @@ From Coq.Floats Require Import Floats.
 From Flocq.Core Require Import Raux Generic_fmt Zaux FLX.
 From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
 From NeuralNetInterp.Util Require Import Arith.Classes Arith.Instances.
-From NeuralNetInterp.Util.Arith.FlocqArith Require Import Definitions.
+From NeuralNetInterp.Util.Arith.Flocq Require Import Definitions.
 
 #[export] Instance coer_float_binary_float : has_coer float _ := Prim2B.
 #[export] Instance binary_float_has_leb {prec emax} : has_leb (binary_float prec emax) := Bleb.

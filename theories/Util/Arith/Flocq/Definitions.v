@@ -435,7 +435,6 @@ Lemma ln_ext_equiv x
   : (let '(x, y) := PrimFloat.ln_ext x in (Prim2B x, Prim2B y)) = Bln_ext x.
 Proof.
   cbv beta delta [Bln_ext PrimFloat.ln_ext]; autorewrite with prim2b.
-  Set Printing Coercions.
   repeat first [ rewrite ltb_equiv
                | match goal with
                  | [ |- context[Z.frexp ?x] ]
@@ -467,6 +466,7 @@ Proof.
   Unshelve.
   all: repeat first [ progress subst
                     | reflexivity
+                    | progress destruct_head'_and
                     | match goal with
                       | [ H : (_, _) = (_, _) |- _ ] => inversion H; clear H
                       end
@@ -474,7 +474,10 @@ Proof.
                     | match goal with
                       | [ |- Prim2B ?x = ?y ] => subst x y
                       end
-                    | break_innermost_match_hyps_step ].
+                    | break_innermost_match_hyps_step
+                    | match goal with
+                      | [ H : ?x = (_, _) |- _ ] => rewrite (surjective_pairing x) in H; inversion H; clear H
+                      end ].
 Qed.
 #[export] Hint Rewrite ln_ext_equiv : prim2b.
 

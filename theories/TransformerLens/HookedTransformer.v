@@ -2,6 +2,7 @@ From Coq Require Import Floats Sint63 Uint63 QArith Lia List PArray Morphisms Re
 From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool.
 From NeuralNetInterp.Util Require Nat Wf_Uint63.
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
+From NeuralNetInterp.TransformerLens Require Export HookedTransformer.Config.
 Import Util.Nat.Notations.
 Import Util.Wf_Uint63.LoopNotation.
 Import Util.Wf_Uint63.
@@ -12,9 +13,6 @@ Local Open Scope list_scope.
 Set Implicit Arguments.
 Import ListNotations.
 Local Open Scope raw_tensor_scope.
-
-(** Coq infra *)
-#[local] Coercion Uint63.of_Z : Z >-> Uint63.int.
 
 Notation tensor_of_list ls := (Tensor.PArray.abstract (Tensor.PArray.concretize (Tensor.of_list ls))) (only parsing).
 
@@ -218,8 +216,6 @@ Module Attention.
           checkpoint (out + broadcast b_O))%core.
   End __.
 End Attention.
-
-Variant NormalizationType := LN (*| LNPre*).
 
 Module TransformerBlock.
   Section __.

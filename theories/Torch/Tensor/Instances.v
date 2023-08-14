@@ -10,6 +10,9 @@ Import Dependent.ProperNotations.
 Import (hints) Morphisms.Dependent RelationClasses.Dependent.
 
 Module Tensor.
+  #[export] Set Warnings Append "-uniform-inheritance,-ambiguous-paths".
+  Export (hints,coercions) Torch.Tensor.
+  #[export] Set Warnings Append "uniform-inheritance,ambiguous-paths".
   Definition eqfR_rank {r} : Dependent.relation (@tensor_of_rank r)
     := fun A B R x y => forall i, R (x i) (y i).
   #[global] Arguments eqfR_rank {r} [A B] R x y.
@@ -514,4 +517,6 @@ Definition cartesian_prod {s1 s2 A} (t1 : tensor A [s1]) (t2 : tensor A [s2]) : 
   #[export] Instance : Params (@Tensor.map2) 6 := {}.
   #[export] Instance : Params (@Tensor.of_bool) 5 := {}.
 End Tensor.
-Export (hints) Tensor.
+#[export] Set Warnings Append "-uniform-inheritance,-ambiguous-paths".
+Export (hints,coercions) Tensor.
+#[export] Set Warnings Append "uniform-inheritance,ambiguous-paths".

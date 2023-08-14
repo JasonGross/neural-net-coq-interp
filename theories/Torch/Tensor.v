@@ -1016,3 +1016,11 @@ Definition triu {rnk} {s : Shape rnk} {r c} {A} {zero : has_zero A}
         then 0%core
         else input idxs.
 #[global] Arguments triu {rnk%nat s%shape} {r c}%uint63 {A%type_scope zero} {diagonal}%sint63 input%tensor.
+
+Definition coer_tensor {r s A B} {coerAB : has_coer A B} : @tensor r s A -> @tensor r s B
+  := Tensor.map coer.
+#[export] Set Warnings Append "-uniform-inheritance,-ambiguous-paths".
+#[local] Set Warnings Append "-unsupported-attributes".
+#[export] Coercion coer_tensor : tensor >-> tensor.
+#[local] Set Warnings Append "unsupported-attributes".
+#[export] Set Warnings Append "uniform-inheritance,ambiguous-paths".

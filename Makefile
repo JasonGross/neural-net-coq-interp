@@ -16,7 +16,8 @@ MOD_NAME := NeuralNetInterp
 SORT_COQPROJECT = sed 's,[^/]*/,~&,g' | env LC_COLLATE=C sort | sed 's,~,,g'
 EXISTING_COQPROJECT_CONTENTS_SORTED:=$(shell cat _CoqProject 2>&1 | $(SORT_COQPROJECT))
 WARNINGS_PLUS := +implicit-core-hint-db,+implicits-in-term,+non-reversible-notation,+deprecated-intros-until-0,+deprecated-focus,+unused-intro-pattern,+variable-collision,+unexpected-implicit-declaration,+omega-is-deprecated,+deprecated-instantiate-syntax,+non-recursive,+undeclared-scope,+deprecated-hint-rewrite-without-locality,+deprecated-hint-without-locality,+deprecated-instance-without-locality,+deprecated-typeclasses-transparency-without-locality
-WARNINGS := $(WARNINGS_PLUS),unsupported-attributes
+WARNINGS_MINUS := -ltac2-missing-notation-var
+WARNINGS := $(WARNINGS_PLUS),$(WARNINGS_MINUS),unsupported-attributes
 COQPROJECT_CMD:=(printf -- '-R $(SRC_DIR) $(MOD_NAME)\n'; printf -- '-arg -w -arg $(WARNINGS)\n'; find $(SRC_DIR) -type f -name '*.v' | grep -v '\#' | $(SORT_COQPROJECT))
 NEW_COQPROJECT_CONTENTS_SORTED:=$(shell $(COQPROJECT_CMD) | $(SORT_COQPROJECT))
 

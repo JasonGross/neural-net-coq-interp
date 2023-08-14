@@ -17,9 +17,6 @@ Local Open Scope raw_tensor_scope.
 
 (* Based on https://colab.research.google.com/drive/1N4iPEyBVuctveCA0Zre92SpfgH6nmHXY#scrollTo=Q1h45HnKi-43, Taking the minimum or maximum of two ints *)
 
-(** Coq infra *)
-#[local] Coercion Uint63.of_Z : Z >-> Uint63.int.
-
 (** Hyperparameters *)
 Definition N_LAYERS : nat := 1.
 Definition N_HEADS : nat := 1.

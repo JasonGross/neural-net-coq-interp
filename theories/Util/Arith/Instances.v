@@ -8,6 +8,10 @@ Set Implicit Arguments.
 #[export] Instance default_pow_N {A} {oneA : has_one A} {mulA : has_mul A} : has_pow_by A N A
   := @pow_N A 1%core mul.
 
+Local Open Scope core_scope.
+#[export] Instance lift_coer_has_zero {A B} {coerAB : has_coer_to (tycons B tynil) A B} {zeroA : has_zero A} : has_zero B := @coer A B coerAB 0.
+#[export] Instance lift_coer_has_one {A B} {coerAB : has_coer_to (tycons B tynil) A B} {oneA : has_one A} : has_one B := @coer A B coerAB 1.
+
 Local Open Scope bool_scope.
 #[export] Instance bool_has_eqb : has_eqb bool := Bool.eqb.
 #[export] Instance bool_has_add : has_add bool := orb.
@@ -196,10 +200,16 @@ Module Float.
 End Float.
 
 Module Truncating.
+  #[local] Set Warnings Append "-unsupported-attributes".
+  #[export] Coercion Uint63.of_Z : Z >-> Uint63.int.
+  #[local] Set Warnings Append "unsupported-attributes".
   #[export] Instance coer_Z_int : has_coer Z int := Uint63.of_Z.
   #[export] Hint Extern 10 (has_coer_from Z ?B) => check_unify_has_coer_from int : typeclass_instances.
   #[export] Hint Extern 10 (has_coer_to ?A int) => check_unify_has_coer_to Z : typeclass_instances.
 
+  #[local] Set Warnings Append "-unsupported-attributes".
+  #[export] Coercion PrimFloat.of_Z : Z >-> float.
+  #[local] Set Warnings Append "unsupported-attributes".
   #[export] Instance coer_Z_float : has_coer Z float := PrimFloat.of_Z.
   #[export] Hint Extern 10 (has_coer_from Z ?B) => check_unify_has_coer_from float : typeclass_instances.
   #[export] Hint Extern 10 (has_coer_to ?A float) => check_unify_has_coer_to Z : typeclass_instances.

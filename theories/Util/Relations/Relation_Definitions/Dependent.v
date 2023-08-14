@@ -6,10 +6,12 @@ From NeuralNetInterp.Util.Relations Require Import Relation_Definitions.Hetero.
 #[local] Unset Universe Minimization ToSet.
 #[local] Set Polymorphic Inductive Cumulativity.
 
+#[export] Set Warnings Append "-overwriting-delimiting-key".
 Declare Scope dependent_signature_scope.
 Declare Scope dependent2_signature_scope.
 Declare Scope dependent3_signature_scope.
 Declare Scope dependent4_signature_scope.
+#[export] Set Warnings Append "overwriting-delimiting-key".
 
 Definition relation (F : type_function)
   := forall A B, Hetero.relation A B -> Hetero.relation (F A) (F B).
@@ -29,6 +31,7 @@ Definition lift_comp {F} (R : relation F) {G} (R' : relation G) : relation (F âˆ
 
 Module Export RelationsNotations.
 
+  #[export] Set Warnings Append "-overwriting-delimiting-key".
   Delimit Scope dependent_signature_scope with dependent_signature.
   Delimit Scope dependent_signature_scope with signatureD.
   Bind Scope dependent_signature_scope with relation.
@@ -44,6 +47,7 @@ Module Export RelationsNotations.
   Delimit Scope dependent4_signature_scope with dependent4_signature.
   Delimit Scope dependent4_signature_scope with signatureD4.
   Bind Scope dependent4_signature_scope with relation4.
+  #[export] Set Warnings Append "overwriting-delimiting-key".
 
   Notation "R âˆ˜ R'" := (fun (A B : Type) (RAB : Hetero.relation A B) => R%dependent_signature _ _ (R'%dependent_signature A B RAB)) : dependent_signature_scope.
 End RelationsNotations.

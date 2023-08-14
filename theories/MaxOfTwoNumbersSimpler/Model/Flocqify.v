@@ -2,14 +2,12 @@ From Coq Require Import ZArith.
 From Coq.Floats Require Import Floats.
 From Flocq.Core Require Import Raux Generic_fmt Zaux FLX.
 From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
-From NeuralNetInterp.Util Require Import Default Arith.Classes Arith.Instances Arith.Flocq Arith.Flocq.Instances Arith.FlocqArith.Definitions.
+From NeuralNetInterp.Util Require Import Default Arith.Classes Arith.Instances Arith.Flocq Arith.Flocq.Instances Arith.Flocq.Definitions.
 From NeuralNetInterp.Util.Tactics Require Import Head.
 From NeuralNetInterp.Torch Require Import Tensor Tensor.Instances.
 From NeuralNetInterp.MaxOfTwoNumbersSimpler Require Import Parameters Model Model.Instances.
 Import Dependent.ProperNotations.
 Import Arith.Instances.Truncating Arith.Flocq.Instances.Truncating.
-
-#[local] Coercion Uint63.of_Z : Z >-> Uint63.int.
 
 Module Model.
   Export Model.Instances.Model.

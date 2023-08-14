@@ -72,6 +72,7 @@ Definition pointwise_relation A {B} (R : relation B) : relation (A -> B) :=
 Module Export ProperNotations.
   Export Relation_Definitions.Dependent.RelationsNotations.
 
+  #[export] Set Warnings Append "-overwriting-delimiting-key".
   Delimit Scope dependent_signature_scope with dependent_signature.
   Delimit Scope dependent_signature_scope with signatureD.
 
@@ -83,6 +84,7 @@ Module Export ProperNotations.
 
   Delimit Scope dependent4_signature_scope with dependent4_signature.
   Delimit Scope dependent4_signature_scope with signatureD4.
+  #[export] Set Warnings Append "overwriting-delimiting-key".
 
   Notation " R ++> R' " := (@respectful _ _ (R%dependent_signature) (R'%dependent_signature))
     (right associativity, at level 55) : dependent_signature_scope.
