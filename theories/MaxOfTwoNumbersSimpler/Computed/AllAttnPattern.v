@@ -1,8 +1,10 @@
+From Coq Require Import Floats.
 From NeuralNetInterp.MaxOfTwoNumbersSimpler Require Import Model.
 From NeuralNetInterp.Torch Require Import Tensor.
-From NeuralNetInterp.Util Require Import Pointed ValueExtraction.
+From NeuralNetInterp.Util Require Import Default Pointed ValueExtraction Arith.Classes Arith.Instances.
+Import Instances.Truncating.
 
-Local Notation prea := (attn_pattern all_tokens) (only parsing).
+Local Notation prea := (attn_pattern all_tokens : tensor _ float) (only parsing).
 Local Notation prev := (PArray.concretize prea) (only parsing).
 Local Definition pre := prev.
 
