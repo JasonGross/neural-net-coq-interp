@@ -1,4 +1,5 @@
 From Coq Require Vector.
+From Coq Require Import Derive.
 From Coq.Structures Require Import Equalities.
 From Coq Require Import Floats Uint63 ZArith NArith.
 From NeuralNetInterp.Util Require Export Default Pointed.
@@ -310,7 +311,163 @@ End LayerNorm.
   End HookedTransformer.
 
   Notation model := HookedTransformer.logits (only parsing).
+(*
+  Local Ltac set_step _ :=
+    match goal with
+    | [ |- context G[let s : ?T := ?v in @?f s] ]
+      => lazymatch T with
+         | Shape _ => idtac
+         | float -> _ => idtac
+         | int => idtac
+         | N => idtac
+         end;
+         let G := context G [f v] in
+         change G; cbv beta iota
+    | [ |- context G[let s : ?T := ?v in @?f s] ]
+      => lazymatch goal with
+         | [ s' := v |- _ ]
+           => let G := context G [f s'] in
+              change G; cbv beta iota
+         end
+    | [ |- context G[let s := Definitions.PrimFloat.of_Z 0 in @?f s] ]
+      => let G := context G[f 0%float] in
+         change G; cbv beta iota
+    | [ |- context G[let s : ?T := ?v in @?f s] ]
+      => lazymatch T with
+         | match cfg.normalization_type with _ => _ end -> match cfg.normalization_type with _ => _ end => idtac
+         | tensor _ _ => idtac
+         end;
+         lazymatch v with
+         | context[let _ := _ in _] => fail
+         | _ => idtac
+         end;
+         let s := fresh s in
+         pose v as s;
+         let G := context G [f s] in
+         change G; cbv beta iota
+    end.
+  From Ltac2 Require Import Ltac2 Printf.
+  Derive logits_all_tokens SuchThat (logits_all_tokens = HookedTransformer.logits all_tokens :> tensor _ float) As eq_logits_all_tokens.
+  Proof.
+    Ltac2 rec step_cbv (term : constr) (k : constr -> constr) :=
+      lazy_match! term with
+      | ?f (let x : ?t := ?v in @?body x)
+        => let x' := Fresh.in_goal @x' in
+           let new_body := Constr.in_context x' t (fun () => Control.refine (fun () => k constr:($f ($body &x')))) in
+           let res := constr:(let x := $v in $new_body) in
+           let res := (eval cbv beta in $res) in
+           res
+      | (let x : ?t := ?v in @?body x) ?y
+        => let x' := Fresh.in_goal @x' in
+           let new_body := Constr.in_context x' t (fun () => Control.refine (fun () => k constr:($body &x' $y))) in
+           let res := constr:(let x := $v in $new_body) in
+           let res := (eval cbv beta in $res) in
+           printf "%t" res;
+           k res
+      | let y := (let x := ?v in @?body x) in @?body' y
+        => let res := constr:(let x := $v in let y := $body x in $body' y) in
+           let res := (eval cbv beta in $res) in
+           k res
+      | (let x : ?t := ?v in @?body x)
+        => let x' := Fresh.in_goal @x' in
+           let new_body := Constr.in_context x' t (fun () => Control.refine (fun () => step_cbv constr:($body &x') k)) in
+           let res := constr:(let x := $v in $new_body) in
+           let res := (eval cbv beta in $res) in
+           res
+      | ?f ?x
+        => step_cbv
+             f
+             (fun f'
+              => let res := constr:($f' $x) in
+                 let res := (eval cbv beta in $res) in
+                 k res)
+      | _
+        => match Constr.Unsafe.kind term with
+           | Constr.Unsafe.App f args
+             => step_cbv
+                  f
+                  (fun f =>
+                     let res := Constr.Unsafe.make (Constr.Unsafe.App f args) in
+                     let res := (eval cbv beta in $res) in
+                     k res)
+           | Constr.Unsafe.Constant c _
+             => let c := Std.ConstRef c in
+                let res := (eval cbv delta [$c] in $term) in
+                k res
+           | _ => k term
+           end
+      end.
+    Ltac2 rec stepn_cbv (n : int) (term : constr)
+      := if Int.le n 0
+         then term
+         else stepn_cbv (Int.sub n 1) (step_cbv term (fun x => x)).
+    lazy_match! goal with
+    | [ |- _ = ?rhs ]
+      => let rhs' := stepn_cbv 14 rhs in
+         printf "%t" rhs'
+    end.
+      lazymatch term with
+      | ?f ?x => let f' := step_cbv term in
+                 constr:(f' x)
+      | let x :=
+    cbv beta iota delta [HookedTransformer.logits].
+    Set Printing Coercions.
+    cbv beta iota delta [HookedTransformer.logits
+                           HookedTransformer.HookedTransformer.logits HookedTransformer.HookedTransformer.resid_postembed
+                           HookedTransformer.HookedTransformer.embed
+                           HookedTransformer.HookedTransformer.pos_embed
+                           HookedTransformer.HookedTransformer.ln_final
+                           HookedTransformer.HookedTransformer.unembed
+                           HookedTransformer.Embed.forward
+                           HookedTransformer.PosEmbed.forward
+                           Classes.add Classes.pow
+                           tensor_add
+                           map2
+                           float_has_add N_has_pow
+                           coer_refl
+                           HookedTransformer.coer_blocks_params
+                           Slicing.FancyIndex.slice Slicing.FancyIndex.slice_ Slicing.SliceIndex.slice Slicing.FancyIndex.broadcast
+                           RawIndex.split_radd
+                           reshape_app_combine' map_dep
+                           RawIndex.uncurry_radd
+                           repeat repeat' reshape_app_combine
+                           Nat.radd
+                           coer_tensor Tensor.map
+                           coer coer_Z_float point default_Z];
+      repeat first [ set_step ()
+                   | progress cbv beta iota delta [Slicing.SliceIndex.SliceIndexType.slice Slice.invert_index Slice.concretize Slice.norm_concretize PolymorphicOption.Option.sequence_return Slice.step Shape.tl Shape.hd Shape.nil Shape.snoc Slice.start int_has_one int_has_zero Slice.Concrete.normalize Slice.stop Slice.Concrete.start Slicing.FancyIndex.FancyIndexType.broadcast repeat' map adjust_index_for] in *; cbn beta iota delta [fst snd] in * ];
+      cbv beta iota zeta in embed, pos_embed;
+      match goal with
+      | [ |- ?x = ?f ?y ]
+        => let y' := open_constr:(_) in
+           let H := fresh in
+           assert (H : forall a, y a = y' a);
+           [ intro | clear H; transitivity (f y') ]
+      end;
+      repeat match goal with H : _ |- _ => clear H end;
+      cbv beta iota delta [
+                           HookedTransformer.HookedTransformer.blocks_cps
+                           HookedTransformer.HookedTransformer.blocks
+                           HookedTransformer.Unembed.forward
+                           map'];
+      repeat set_step ().
+    clear.
+    cbv beta iota delta [HookedTransformer.HookedTransformer.blocks_cps].
+    Print HookedTransformer.Hook
+      | [ |- context G[let s : ?T := ?v in @?f s] ]
+             => lazymatch T with
+                | match cfg.normalization_type with _ => _ end -> match cfg.normalization_type with _ => _ end => idtac
+                | tensor _ _ => idtac
+                end;
+                let s := fresh s in
+                pose v as s;
+                let G := context G [f s] in
+                change G; cbv beta iota
+           end.
 
+    | [ |-
+        =>
+*)
   Definition logits_all_tokens : tensor _ float
     := HookedTransformer.logits all_tokens.
 End Model.
