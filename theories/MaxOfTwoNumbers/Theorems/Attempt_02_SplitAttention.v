@@ -135,10 +135,9 @@ Proof.
   assert (m' = raw_get m) by (clearbody m; reflexivity).
   clearbody m'; subst m' m.
   cbv beta iota delta [acc_fn]; let_bind_subst_shape ().
-  cbv beta iota delta [logits] in *; let_bind_subst_shape ().
-  cbv beta iota delta [HookedTransformer.logits] in *; let_bind_subst_shape ().
-  cbv beta iota delta [blocks_params] in *.
-  cbv beta iota delta [HookedTransformer.blocks_cps fold_right Datatypes.length List.firstn HookedTransformer.blocks List.map] in *; let_bind_subst_shape ().
+  cbv beta iota delta [logits HookedTransformer.logits HookedTransformer.HookedTransformer.logits] in *; let_bind_subst_shape ().
+  cbv beta iota delta [coer_blocks_params cfg.blocks_params] in *.
+  cbv beta iota delta [HookedTransformer.blocks_cps HookedTransformer.HookedTransformer.blocks_cps fold_right Datatypes.length List.firstn HookedTransformer.HookedTransformer.blocks HookedTransformer.blocks List.map] in *; let_bind_subst_shape ().
   vm_compute Shape.tl in *.
   vm_compute of_Z in *.
   vm_compute SliceIndex.transfer_shape in *.
@@ -149,7 +148,7 @@ Proof.
   cbv beta iota delta [Attention.z] in *; let_bind_subst_shape ().
   set (v := Attention.v _ _ _) in *.
   set (pattern := Attention.pattern _ _ _ _ _ _) in *.
-  cbv beta iota delta [HookedTransformer.unembed] in *; let_bind_subst_shape ().
+  cbv beta iota delta [HookedTransformer.HookedTransformer.unembed HookedTransformer.unembed] in *; let_bind_subst_shape ().
   cbv beta iota delta [Unembed.forward] in *; let_bind_subst_shape ().
   cbv beta iota delta [all_tokens] in true_maximum; let_bind_subst_shape ().
   set (all_toks_c := PArray.checkpoint _) in (value of true_maximum).

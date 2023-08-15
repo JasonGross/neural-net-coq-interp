@@ -115,7 +115,7 @@ From Interval Require Import Tactic_float.
 #[local] Set Warnings Append "+undeclared-scope".
 
 From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
-From NeuralNetInterp.Util.Arith Require Import Flocq Flocq.Instances.
+From NeuralNetInterp.Util.Arith Require Import Flocq Flocq.Instances Flocq.Notations.
 
 Theorem good_accuracy : TheoremStatement.Accuracy.best (* (abs (real_accuracy - expected_accuracy) <? error)%float = true *).
 Proof.
@@ -135,10 +135,9 @@ Proof.
   assert (m' = raw_get m) by (clearbody m; reflexivity).
   clearbody m'; subst m' m.
   cbv beta iota delta [acc_fn]; let_bind_subst_shape ().
-  cbv beta iota delta [logits] in *; let_bind_subst_shape ().
-  cbv beta iota delta [HookedTransformer.logits] in *; let_bind_subst_shape ().
-  cbv beta iota delta [blocks_params] in *.
-  cbv beta iota delta [HookedTransformer.blocks_cps fold_right Datatypes.length List.firstn HookedTransformer.blocks List.map] in *; let_bind_subst_shape ().
+  cbv beta iota delta [logits HookedTransformer.logits HookedTransformer.HookedTransformer.logits] in *; let_bind_subst_shape ().
+  cbv beta iota delta [coer_blocks_params cfg.blocks_params] in *.
+  cbv beta iota delta [HookedTransformer.blocks_cps HookedTransformer.HookedTransformer.blocks_cps fold_right Datatypes.length List.firstn HookedTransformer.HookedTransformer.blocks HookedTransformer.blocks List.map] in *; let_bind_subst_shape ().
   vm_compute Shape.tl in *.
   vm_compute of_Z in *.
   vm_compute SliceIndex.transfer_shape in *.
@@ -149,7 +148,7 @@ Proof.
   cbv beta iota delta [Attention.z] in *; let_bind_subst_shape ().
   set (v := Attention.v _ _ _) in *.
   set (pattern := Attention.pattern _ _ _ _ _ _) in *.
-  cbv beta iota delta [HookedTransformer.unembed] in *; let_bind_subst_shape ().
+  cbv beta iota delta [HookedTransformer.HookedTransformer.unembed HookedTransformer.unembed] in *; let_bind_subst_shape ().
   cbv beta iota delta [Unembed.forward] in *; let_bind_subst_shape ().
   cbv beta iota delta [all_tokens] in true_maximum; let_bind_subst_shape ().
   set (all_toks_c := PArray.checkpoint _) in (value of true_maximum).
@@ -157,8 +156,8 @@ Proof.
   | [ H := PArray.checkpoint _ |- _ ]
     => setoid_rewrite (Tensor.eqf) Tensor.PArray.checkpoint_correct_eqf in (value of H)
     end.
-  cbv beta iota delta [HookedTransformer.ln_final] in *; let_bind_subst_shape ().
-  cbv beta iota delta [TransformerBlock.ln1] in *; let_bind_subst_shape ().
+  cbv beta iota delta [HookedTransformer.HookedTransformer.ln_final HookedTransformer.ln_final] in *; let_bind_subst_shape ().
+  cbv beta iota delta [cfg.normalization_type TransformerBlock.ln1] in *; let_bind_subst_shape ().
   cbv beta iota delta [Attention.pattern Attention.masked_attn_scores Attention.apply_causal_mask Attention.attn_scores] in *; let_bind_subst_shape ().
   cbv beta iota delta [Attention.v Attention.q Attention.k] in *; let_bind_subst_shape ().
   cbv beta iota delta [Attention.einsum_input TransformerBlock.add_head_dimension TransformerBlock.value_input TransformerBlock.query_input TransformerBlock.key_input] in *; let_bind_subst_shape ().
@@ -173,6 +172,7 @@ Proof.
   cbv beta iota delta [Reduction.max max has_default_max_leb leb] in true_maximum.
   cbv -[PrimInt63.leb all_toks_c] in true_maximum.
   move out at bottom.
+  (*
   cbv -[map2' Reduction.sum L0_attn_W_O
           Instances.binary_float_has_add prec emax Hprec Hmax Instances.binary_float_has_mul Classes.add Classes.mul Classes.zero Classes.coer Instances.coer_float_binary_float
           map2' raw_get v pattern L0_attn_W_O RawIndex.snoc RawIndex.nil
@@ -500,5 +500,6 @@ Proof.
   Ltac push_pair_idx H :=
     lazymatch (eval cbv [H] in H) with
     | fun i : RawIndexType
+*)
 *)
 Abort.
