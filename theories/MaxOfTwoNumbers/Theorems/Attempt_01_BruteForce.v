@@ -21,7 +21,9 @@ Defined.
 Compute abs (computed_accuracy - expected_accuracy). (*      = 0.0023193359375%float *)
 Compute (abs (computed_accuracy - expected_accuracy) * totalf)%float. (* = 19 *) (* probably from floating point assoc issues, etc *)
 Compute Qred (PrimFloat.to_Q (computed_accuracy * totalf)) / Qred (PrimFloat.to_Q totalf). (*      = 8154 # 8192 *)
-Theorem good_accuracy : TheoremStatement.Accuracy.best (* (abs (real_accuracy - expected_accuracy) <? error)%float = true *).
+Compute abs (computed_accuracy / expected_accuracy). (*      = 0.99767527223785635%float *)
+Compute (abs (1 - computed_accuracy / expected_accuracy) * totalf)%float. (* = 19.0441698274808%float *) (* probably from floating point assoc issues, etc *)
+Theorem good_accuracy : TheoremStatement.Accuracy.best (* (abs (real_accuracy / expected_accuracy - 1) <=? error)%float = true *).
 Proof.
   rewrite <- computed_accuracy_eq.
   vm_compute; reflexivity.

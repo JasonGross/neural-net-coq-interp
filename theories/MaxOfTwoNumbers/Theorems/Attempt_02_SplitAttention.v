@@ -121,7 +121,7 @@ Theorem good_accuracy : TheoremStatement.Accuracy.best (* (abs (real_accuracy - 
 Proof.
   cbv [real_accuracy].
   cbv [Classes.abs Classes.leb Classes.ltb Classes.sub item float_has_abs float_has_sub].
-  rewrite leb_equiv, abs_equiv, sub_equiv.
+  rewrite leb_equiv, abs_equiv, sub_equiv, div_equiv.
   cbv [raw_get].
   (* convert from prim float to flocq *)
   let lem := constr:(Model.acc_fn_equiv (use_checkpoint2:=false) (logits all_tokens) (logits (use_checkpoint:=false) all_tokens) all_tokens (Model.logits_equiv _) tt) in
