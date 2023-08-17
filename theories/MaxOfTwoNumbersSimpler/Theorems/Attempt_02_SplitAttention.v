@@ -36,7 +36,7 @@ Local Ltac let_bind_subst_shape _ :=
 #[local] Typeclasses Transparent
   relation Hetero.relation fst snd
   Classes.max Instances.Uint63.max has_default_max_leb
-  Classes.leb Instances.Uint63.leb
+  Classes.leb Instances.Uint63.int_has_leb
   Classes.one
   Shape ShapeType Shape.nil Shape.snoc Shape.app Shape.broadcast2 Shape.broadcast3 Shape.map Shape.map2 Shape.map3 Shape.hd Shape.tl Shape.ones Shape.repeat Shape.ShapeType.one
   RawIndex RawIndexType RawIndex.nil RawIndex.snoc RawIndex.app RawIndex.hd RawIndex.tl
