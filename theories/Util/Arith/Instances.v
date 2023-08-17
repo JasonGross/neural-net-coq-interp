@@ -37,6 +37,9 @@ Local Open Scope nat_scope.
 #[export] Instance nat_has_zero : has_zero nat := 0.
 #[export] Instance nat_has_one : has_one nat := 1.
 #[export] Instance nat_has_sqrt : has_sqrt nat := Nat.sqrt.
+#[export] Instance nat_has_get_sign : has_get_sign nat := fun _ => false.
+#[export] Instance nat_has_is_nan : has_is_nan nat := fun _ => false.
+#[export] Instance nat_has_is_infinity : has_is_infinity nat := fun _ => false.
 
 Local Open Scope N_scope.
 #[local] Set Warnings Append "-unsupported-attributes".
@@ -66,6 +69,9 @@ Local Open Scope N_scope.
 #[export] Instance N_has_zero : has_zero N := 0.
 #[export] Instance N_has_one : has_one N := 1.
 #[export] Instance N_has_sqrt : has_sqrt N := N.sqrt.
+#[export] Instance N_has_get_sign : has_get_sign N := fun _ => false.
+#[export] Instance N_has_is_nan : has_is_nan N := fun _ => false.
+#[export] Instance N_has_is_infinity : has_is_infinity N := fun _ => false.
 
 #[export] Instance default_pow_nat {A} {oneA : has_one A} {mulA : has_mul A} : has_pow_by A nat A | 10
   := default_pow_N.
@@ -89,6 +95,9 @@ Local Open Scope positive_scope.
 #[export] Instance positive_has_abs : has_abs positive := fun x => x.
 #[export] Instance positive_has_one : has_one positive := 1.
 #[export] Instance positive_has_sqrt : has_sqrt positive := Pos.sqrt.
+#[export] Instance positive_has_get_sign : has_get_sign positive := fun _ => false.
+#[export] Instance positive_has_is_nan : has_is_nan positive := fun _ => false.
+#[export] Instance positive_has_is_infinity : has_is_infinity positive := fun _ => false.
 
 #[export] Instance default_pow_positive {A} {oneA : has_one A} {mulA : has_mul A} : has_pow_by A positive A | 10
   := default_pow_N.
@@ -115,6 +124,8 @@ Local Open Scope Z_scope.
 #[export] Instance Z_has_zero : has_zero Z := 0.
 #[export] Instance Z_has_one : has_one Z := 1.
 #[export] Instance Z_has_sqrt : has_sqrt Z := Z.sqrt.
+#[export] Instance Z_has_is_nan : has_is_nan Z := fun _ => false.
+#[export] Instance Z_has_is_infinity : has_is_infinity Z := fun _ => false.
 
 #[export] Instance default_pow_Z {A} {oneA : has_one A} {mulA : has_mul A} {divA : has_div A} : has_pow_by A Z A | 10
   := @pow_Z A oneA mulA divA.
@@ -138,6 +149,8 @@ Local Open Scope Q_scope.
 #[export] Instance Q_has_sqrt : has_sqrt Q := Qsqrt.
 #[export] Instance Q_has_pow_Z : has_pow_by Q Z Q := Qpower.
 #[export] Instance Q_has_exp : has_exp Q := Qexp.
+#[export] Instance Q_has_is_nan : has_is_nan Q := fun _ => false.
+#[export] Instance Q_has_is_infinity : has_is_infinity Q := fun _ => false.
 
 Local Open Scope int63_scope.
 (* eta expand to get around COQBUG(https://github.com/coq/coq/issues/17663) *)
@@ -151,6 +164,8 @@ Local Open Scope int63_scope.
 #[export] Instance int_has_zero : has_zero int := 0.
 #[export] Instance int_has_one : has_one int := 1.
 #[export] Instance int_has_sqrt : has_sqrt int := eta1 Uint63.sqrt.
+#[export] Instance int_has_is_nan : has_is_nan int := fun _ => false.
+#[export] Instance int_has_is_infinity : has_is_infinity int := fun _ => false.
 
 #[export] Hint Extern 10 (has_coer_from int ?B) => check_unify_has_coer_from Z : typeclass_instances.
 #[export] Hint Extern 10 (has_coer_to ?A Z) => check_unify_has_coer_to int : typeclass_instances.
@@ -160,12 +175,13 @@ Local Open Scope int63_scope.
 
 Module Sint63.
   #[export] Instance coer_int_Z : has_coer int Z := eta1 Sint63.to_Z.
-  #[export] Instance int_div : has_int_div int := eta2 Sint63.div.
-  #[export] Instance modulo : has_mod int := eta2 Sint63.rem.
-  #[export] Instance ltb : has_ltb int := eta2 Sint63.ltb.
-  #[export] Instance leb : has_leb int := eta2 Sint63.leb.
+  #[export] Instance int_has_int_div : has_int_div int := eta2 Sint63.div.
+  #[export] Instance int_has_modulo : has_mod int := eta2 Sint63.rem.
+  #[export] Instance int_has_ltb : has_ltb int := eta2 Sint63.ltb.
+  #[export] Instance int_has_leb : has_leb int := eta2 Sint63.leb.
   #[export] Instance min : has_min int := _.
   #[export] Instance max : has_max int := _.
+  #[export] Instance get_sign : has_get_sign int := _.
 
   #[export] Instance coer_int_float : has_coer int float := PrimFloat.of_sint63.
   #[export] Set Warnings Append "-ambiguous-paths".
@@ -179,12 +195,13 @@ End Sint63.
 Module Uint63.
   #[export] Instance coer_int_Z : has_coer int Z := eta1 Uint63.to_Z.
   #[export] Instance coer_int_N : has_coer int N := fun x => Z.to_N (Uint63.to_Z x).
-  #[export] Instance int_div : has_int_div int := eta2 Uint63.div.
-  #[export] Instance modulo : has_mod int := eta2 Uint63.mod.
-  #[export] Instance ltb : has_ltb int := eta2 Uint63.ltb.
-  #[export] Instance leb : has_leb int := eta2 Uint63.leb.
+  #[export] Instance int_has_int_div : has_int_div int := eta2 Uint63.div.
+  #[export] Instance int_has_modulo : has_mod int := eta2 Uint63.mod.
+  #[export] Instance int_has_ltb : has_ltb int := eta2 Uint63.ltb.
+  #[export] Instance int_has_leb : has_leb int := eta2 Uint63.leb.
   #[export] Instance min : has_min int := _.
   #[export] Instance max : has_max int := _.
+  #[export] Instance int_has_get_sign : has_get_sign int := fun _ => false.
 
   #[export] Instance coer_int_float : has_coer int float := PrimFloat.of_uint63.
   #[local] Set Warnings Append "-unsupported-attributes".
@@ -210,6 +227,11 @@ Local Open Scope float_scope.
 #[export] Instance float_has_one : has_one float := 1.
 #[export] Instance float_has_exp : has_exp float := eta1 PrimFloat.exp.
 #[export] Instance float_has_ln : has_ln float := eta1 PrimFloat.ln.
+#[export] Instance float_has_is_nan : has_is_nan float := eta1 PrimFloat.is_nan.
+#[export] Instance float_has_nan : has_nan float := PrimFloat.nan.
+#[export] Instance float_has_is_infinity : has_is_infinity float := eta1 PrimFloat.is_infinity.
+#[export] Instance float_has_infinity : has_infinity float := fun is_neg => if is_neg then PrimFloat.neg_infinity else PrimFloat.infinity.
+#[export] Instance float_has_get_sign : has_get_sign float := eta1 PrimFloat.get_sign.
 
 Module Float.
   Module IEEE754Eq.
@@ -222,7 +244,6 @@ Module Float.
 End Float.
 
 #[local] Open Scope R_scope.
-Search (R -> bool).
 #[export] Instance R_has_leb : has_leb R := Rleb.
 #[export] Instance R_has_ltb : has_ltb R := Rltb.
 #[export] Instance R_has_opp : has_opp R := Ropp.
@@ -240,6 +261,14 @@ Search (R -> bool).
 #[export] Instance R_has_one : has_one R := 1.
 #[export] Instance R_has_exp : has_exp R := Rtrigo_def.exp.
 #[export] Instance R_has_ln : has_ln R := Rpower.ln.
+#[export] Instance R_has_is_nan : has_is_nan R := fun _ => false.
+#[export] Instance R_has_is_infinity : has_is_infinity R := fun _ => false.
+#[local] Set Warnings Append "-unsupported-attributes".
+#[export] Coercion Q2R : Q >-> R.
+#[local] Set Warnings Append "unsupported-attributes".
+#[export] Instance Q2R_coer : has_coer Q R := fun x => x.
+#[export] Hint Extern 10 (has_coer_from Q ?B) => check_unify_has_coer_from R : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_to ?A R) => check_unify_has_coer_to Q : typeclass_instances.
 
 Module Truncating.
   #[local] Set Warnings Append "-unsupported-attributes".
@@ -260,7 +289,6 @@ Module Truncating.
   #[export] Hint Extern 10 (has_coer_from Z ?B) => check_unify_has_coer_from float : typeclass_instances.
   #[export] Hint Extern 10 (has_coer_to ?A float) => check_unify_has_coer_to Z : typeclass_instances.
 End Truncating.
-
 
 Local Open Scope list_scope.
 Scheme Equality for list.

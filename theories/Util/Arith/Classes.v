@@ -31,6 +31,11 @@ Class has_exp_to A B := exp : A -> B.
 Notation has_exp A := (has_exp_to A A).
 Class has_ln_to A B := ln : A -> B.
 Notation has_ln A := (has_ln_to A A).
+Class has_get_sign A := get_sign : A -> bool.
+Class has_nan A := nan : A.
+Class has_is_nan A := is_nan : A -> bool.
+Class has_is_infinity A := is_infinity : A -> bool.
+Class has_infinity A := signed_infinity : forall is_neg : bool, A.
 Class has_coer A B := coer : A -> B.
 Definition has_coer_from (avoid : TyList) := has_coer.
 Definition has_coer_to (avoid : TyList) := has_coer.
@@ -44,6 +49,8 @@ Definition gtb {A} {ltbA : has_ltb A} (x y : A) : bool := ltb y x.
 Definition geb {A} {lebA : has_leb A} (x y : A) : bool := leb y x.
 Definition neqb {A} {eqbA : has_eqb A} (x y : A) : bool := negb (eqb x y).
 Definition sqr {A} {mulA : has_mul A} (x : A) : A := mul x x.
+Definition infinity {A} {infA : has_infinity A} : A := signed_infinity false.
+Definition neg_infinity {A} {infA : has_infinity A} : A := signed_infinity true.
 
 Infix "<?" := ltb : core_scope.
 Infix "<=?" := leb : core_scope.
@@ -61,6 +68,8 @@ Infix "*" := mul : core_scope.
 Infix "/" := div : core_scope.
 Infix "//" := int_div : core_scope.
 Infix "^" := pow : core_scope.
+Notation "∞" := infinity : core_scope.
+Notation "-∞" := neg_infinity : core_scope.
 Notation "x ²" := (sqr x) : core_scope.
 Notation "√ x" := (sqrt x) : core_scope.
 Notation "- x" := (opp x) : core_scope.
@@ -91,6 +100,11 @@ Notation "1" := one : core_scope.
 #[export] Hint Mode has_mod ! : typeclass_instances.
 #[export] Hint Mode has_abs ! : typeclass_instances.
 #[export] Hint Mode has_sqrt ! : typeclass_instances.
+#[export] Hint Mode has_get_sign ! : typeclass_instances.
+#[export] Hint Mode has_nan ! : typeclass_instances.
+#[export] Hint Mode has_is_nan ! : typeclass_instances.
+#[export] Hint Mode has_infinity ! : typeclass_instances.
+#[export] Hint Mode has_is_infinity ! : typeclass_instances.
 #[export] Hint Mode has_coer ! ! : typeclass_instances.
 #[export] Hint Mode has_coer_can_trans ! ! : typeclass_instances.
 #[export] Hint Mode has_coer_from + ! - : typeclass_instances.
@@ -142,6 +156,12 @@ Local Open Scope core_scope.
   := fun x y => if x ≤? y then x else y.
 #[export] Instance has_default_abs {A} {opp : has_opp A} {max : has_max A} : has_abs A
   := fun x => max x (opp x).
+#[export] Instance has_default_is_nan {A} {eqbA : has_eqb A} {nanA : has_nan A} : has_is_nan A | 10
+  := fun x => (x ≠? x) || (x =? nan).
+#[export] Instance has_default_is_infinity {A} {eqbA : has_eqb A} {infA : has_infinity A} : has_is_infinity A | 10
+  := fun x => (x =? ∞) || (x =? -∞).
+#[export] Instance has_default_get_sign {A} {ltbA : has_ltb A} {zeroA : has_zero A} : has_get_sign A | 10
+  := fun x => x <? 0.
 
 #[export] Hint Cut [ ( _ * ) has_default_sub ( _ * ) has_default_sub ( _ * ) ] : typeclass_instances.
 #[export] Hint Cut [ ( _ * ) has_default_opp ( _ * ) has_default_opp ( _ * ) ] : typeclass_instances.

@@ -6,6 +6,9 @@ From NeuralNetInterp.Util Require Import Arith.Classes Arith.Instances.
 From NeuralNetInterp.Util.Arith.Flocq Require Import Definitions.
 
 #[export] Instance coer_float_binary_float : has_coer float _ := Prim2B.
+#[local] Set Warnings Append "-unsupported-attributes".
+#[export] Coercion Prim2B : float >-> binary_float.
+#[local] Set Warnings Append "unsupported-attributes".
 #[export] Instance binary_float_has_leb {prec emax} : has_leb (binary_float prec emax) := Bleb.
 #[export] Instance binary_float_has_ltb {prec emax} : has_ltb (binary_float prec emax) := Bltb.
 #[export] Instance binary_float_has_opp {prec emax} : has_opp (binary_float prec emax) := Bopp.
@@ -20,6 +23,15 @@ From NeuralNetInterp.Util.Arith.Flocq Require Import Definitions.
 #[export] Existing Instances Hprec Hmax.
 #[export] Instance binary_float_has_exp : has_exp (binary_float _ _) := Bexp.
 #[export] Instance binary_float_has_ln : has_ln (binary_float _ _) := Bln.
+#[export] Instance binary_float_has_is_nan {prec emax} : has_is_nan (binary_float prec emax) := BinarySingleNaN.is_nan.
+#[export] Instance binary_float_has_nan {prec emax} : has_nan (binary_float prec emax) := B754_nan.
+#[export] Instance binary_float_has_is_infinity {prec emax} : has_is_infinity (binary_float prec emax)
+  := fun x => match x with
+              | B754_infinity _ => true
+              | _ => false
+              end.
+#[export] Instance binary_float_has_infinity {prec emax} : has_infinity (binary_float prec emax) := B754_infinity.
+#[export] Instance binary_float_has_get_sign {prec emax} : has_get_sign (binary_float prec emax) := Bsign.
 
 Module Float.
   Module IEEE754Eq.
