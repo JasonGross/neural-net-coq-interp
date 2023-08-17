@@ -63,6 +63,7 @@ theories/Util/Wf_Uint63.v
 theories/Util/Arith/Classes.v
 theories/Util/Arith/Flocq.v
 theories/Util/Arith/Instances.v
+theories/Util/Arith/Interval.v
 theories/Util/Arith/QArith.v
 theories/Util/Arith/ZArith.v
 theories/Util/Arith/ExtendedReals/Definitions.v
