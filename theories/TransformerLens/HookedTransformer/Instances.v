@@ -24,6 +24,29 @@ Local Open Scope raw_tensor_scope.
 Module HookedTransformer.
   Export HookedTransformer.
 
+  Definition ln_tensor_genR d_model nt : Dependent.relation (ln_tensor_gen d_model nt)
+    := match nt with
+       | Some LN => Tensor.eqfR (s:=[d_model])
+       | None => Dependent.const eq
+       end.
+
+  #[export] Instance ln_tensor_genR_refl_dep {d_model nt} : Dependent.Reflexive (ln_tensor_genR d_model nt).
+  Proof. cbv [ln_tensor_genR]; break_innermost_match; hnf; exact _. Qed.
+  #[export] Instance ln_tensor_genR_refl {d_model nt A R} {_ : @Reflexive A R} : Reflexive (ln_tensor_genR d_model nt R)
+    := ln_tensor_genR_refl_dep _.
+
+  Definition block_params_type_genR n_heads d_model d_head nt : Dependent.relation (block_params_type_gen n_heads d_model d_head nt)
+    := (Tensor.eqfR * Tensor.eqfR
+        * Tensor.eqfR * Tensor.eqfR
+        * Tensor.eqfR * Tensor.eqfR
+        * Tensor.eqfR * Tensor.eqfR
+        * ln_tensor_genR d_model nt * ln_tensor_genR d_model nt)%dependent_signature.
+
+  #[export] Instance block_params_type_genR_refl_dep {n_heads d_model d_head nt} : Dependent.Reflexive (@block_params_type_genR n_heads d_model d_head nt).
+  Proof. cbv [block_params_type_genR]; break_innermost_match; hnf; exact _. Qed.
+  #[export] Instance block_params_type_genR_refl {n_heads d_model d_head nt A R} {_ : @Reflexive A R} : Reflexive (@block_params_type_genR n_heads d_model d_head nt _ _ R)
+    := block_params_type_genR_refl_dep _.
+
   Ltac t_step :=
     first [ match goal with
             | [ |- ?x = ?x ] => reflexivity
@@ -262,9 +285,7 @@ Module HookedTransformer.
              ==> Dependent.idR
              ==> Tensor.eqfR ==> Tensor.eqfR ==> Tensor.eqfR ==> Tensor.eqfR)
           (@forward r s d_model).
-    Proof. cbv [forward]; t.
-
-    Qed.
+    Proof. cbv [forward]; t. Qed.
   End LayerNorm.
   Export (hints) LayerNorm.
 
@@ -523,14 +544,8 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR)
              ==> Dependent.const (fun _ _ => True)
              ==> Dependent.idR
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
+             ==> ln_tensor_genR d_model normalization_type
+             ==> ln_tensor_genR d_model normalization_type
              ==> Tensor.eqfR
              ==> Tensor.eqfR)
           (@ln1 r batch pos n_heads d_model use_split_qkv_input normalization_type).
@@ -551,14 +566,8 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR)
              ==> Dependent.const (fun _ _ => True)
              ==> Dependent.idR
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
+             ==> ln_tensor_genR d_model normalization_type
+             ==> ln_tensor_genR d_model normalization_type
              ==> Tensor.eqfR
              ==> Tensor.eqfR)
           (@ln2 r batch pos n_heads d_model use_split_qkv_input normalization_type).
@@ -588,14 +597,8 @@ Module HookedTransformer.
              ==> Tensor.eqfR
              ==> Tensor.eqfR
              ==> Dependent.idR
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
+             ==> ln_tensor_genR d_model normalization_type
+             ==> ln_tensor_genR d_model normalization_type
              ==> Tensor.eqfR
              ==> Tensor.eqfR)
           (@attn_only_out r batch pos n_heads d_model d_head n_ctx use_split_qkv_input normalization_type).
@@ -625,14 +628,8 @@ Module HookedTransformer.
              ==> Tensor.eqfR
              ==> Tensor.eqfR
              ==> Dependent.idR
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
+             ==> ln_tensor_genR d_model normalization_type
+             ==> ln_tensor_genR d_model normalization_type
              ==> Tensor.eqfR
              ==> Tensor.eqfR)
           (@HookedTransformer.TransformerBlock.attn_masked_attn_scores r batch pos n_heads d_model d_head n_ctx use_split_qkv_input normalization_type).
@@ -663,14 +660,8 @@ Module HookedTransformer.
              ==> Tensor.eqfR
              ==> Tensor.eqfR
              ==> Dependent.idR
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
+             ==> ln_tensor_genR d_model normalization_type
+             ==> ln_tensor_genR d_model normalization_type
              ==> Tensor.eqfR
              ==> Tensor.eqfR)
           (@HookedTransformer.TransformerBlock.attn_pattern r batch pos n_heads d_model d_head n_ctx use_split_qkv_input normalization_type).
@@ -734,18 +725,7 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR)
              ==> Dependent.const (fun _ _ => True)
              ==> Dependent.idR
-             ==> List.Forall2 ∘ (Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end)
+             ==> List.Forall2 ∘ @block_params_type_genR n_heads d_model d_head normalization_type
              ==> List.Forall2 ∘ (Tensor.eqfR ==> Tensor.eqfR))
           (@blocks n_heads d_model d_head n_ctx r batch pos normalization_type).
     Proof.
@@ -753,7 +733,7 @@ Module HookedTransformer.
       repeat first [ lazymatch goal with H : Forall2 _ _ _ |- _ => fail 1 end | intro ].
       let H := match goal with H : Forall2 _ _ _ |- _ => H end in
       induction H; cbn [List.map]; constructor; auto; [].
-      destruct_head'_prod; intros.
+      destruct_head_hnf' Datatypes.prod; intros.
       apply TransformerBlock.attn_only_out_Proper_dep; t.
     Qed.
 
@@ -772,14 +752,8 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR)
              ==> Dependent.const (fun _ _ => True)
              ==> Dependent.idR
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
+             ==> ln_tensor_genR d_model normalization_type
+             ==> ln_tensor_genR d_model normalization_type
              ==> Tensor.eqfR
              ==> Tensor.eqfR)
           (@ln_final d_model r batch pos normalization_type).
@@ -817,18 +791,7 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR)
              ==> Dependent.const (fun _ _ => True)
              ==> Dependent.idR
-             ==> List.Forall2 ∘ (Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end)
+             ==> List.Forall2 ∘ @block_params_type_genR n_heads d_model d_head normalization_type
              ==> Dependent.forall_relation
              (Dependent.const2 (@eq nat (* strip dependency of with_default *))
                 ==> Dependent.lift2_1 Tensor.eqfR
@@ -871,26 +834,9 @@ Module HookedTransformer.
              ==> Dependent.idR
              ==> Tensor.eqfR
              ==> Tensor.eqfR
-             ==> List.Forall2 ∘ (Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end)
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
+             ==> List.Forall2 ∘ @block_params_type_genR n_heads d_model d_head normalization_type
+             ==> ln_tensor_genR d_model normalization_type
+             ==> ln_tensor_genR d_model normalization_type
              ==> Tensor.eqfR
              ==> Tensor.eqfR
              ==> Dependent.const Tensor.eqf
@@ -927,26 +873,9 @@ Module HookedTransformer.
              ==> Dependent.idR
              ==> Tensor.eqfR
              ==> Tensor.eqfR
-             ==> List.Forall2 ∘ (Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end)
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
+             ==> List.Forall2 ∘ @block_params_type_genR n_heads d_model d_head normalization_type
+             ==> ln_tensor_genR d_model normalization_type
+             ==> ln_tensor_genR d_model normalization_type
              ==> Tensor.eqfR
              ==> Tensor.eqfR
              ==> Dependent.const Tensor.eqf
@@ -970,18 +899,7 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR)
              ==> Dependent.const (fun _ _ => True)
              ==> Dependent.idR
-             ==> List.Forall2 ∘ (Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end)
+             ==> List.Forall2 ∘ @block_params_type_genR n_heads d_model d_head normalization_type
              ==> List.Forall2 ∘ (Tensor.eqfR ==> Tensor.eqfR))
           (@HookedTransformer.HookedTransformer.blocks_attn_masked_attn_scores n_heads d_model d_head n_ctx r batch pos normalization_type).
     Proof.
@@ -989,7 +907,7 @@ Module HookedTransformer.
       repeat first [ lazymatch goal with H : Forall2 _ _ _ |- _ => fail 1 end | intro ].
       let H := match goal with H : Forall2 _ _ _ |- _ => H end in
       induction H; cbn [List.map]; constructor; auto; [].
-      destruct_head'_prod.
+      destruct_head_hnf' Datatypes.prod.
       apply TransformerBlock.attn_masked_attn_scores_Proper_dep; t.
     Qed.
 
@@ -1010,18 +928,7 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR)
              ==> Dependent.const (fun _ _ => True)
              ==> Dependent.idR
-             ==> List.Forall2 ∘ (Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end)
+             ==> List.Forall2 ∘ @block_params_type_genR n_heads d_model d_head normalization_type
              ==> List.Forall2 ∘ (Tensor.eqfR ==> Tensor.eqfR))
           (@HookedTransformer.HookedTransformer.blocks_attn_pattern n_heads d_model d_head n_ctx r batch pos normalization_type).
     Proof.
@@ -1029,7 +936,7 @@ Module HookedTransformer.
       repeat first [ lazymatch goal with H : Forall2 _ _ _ |- _ => fail 1 end | intro ].
       let H := match goal with H : Forall2 _ _ _ |- _ => H end in
       induction H; cbn [List.map]; constructor; auto; [].
-      destruct_head'_prod.
+      destruct_head_hnf' Datatypes.prod.
       apply TransformerBlock.attn_pattern_Proper_dep; t.
     Qed.
 
@@ -1052,18 +959,7 @@ Module HookedTransformer.
              ==> Dependent.idR
              ==> Tensor.eqfR
              ==> Tensor.eqfR
-             ==> List.Forall2 ∘ (Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end)
+             ==> List.Forall2 ∘ @block_params_type_genR n_heads d_model d_head normalization_type
              ==> Dependent.const eq
              ==> Dependent.const Tensor.eqf
              ==> @option_eq ∘ Tensor.eqfR)
@@ -1113,18 +1009,7 @@ Module HookedTransformer.
              ==> Dependent.idR
              ==> Tensor.eqfR
              ==> Tensor.eqfR
-             ==> List.Forall2 ∘ (Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end)
+             ==> List.Forall2 ∘ @block_params_type_genR n_heads d_model d_head normalization_type
              ==> Dependent.const eq
              ==> Dependent.const Tensor.eqf
              ==> @option_eq ∘ Tensor.eqfR)

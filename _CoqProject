@@ -1,5 +1,6 @@
 -R theories NeuralNetInterp
 -arg -w -arg +implicit-core-hint-db,+implicits-in-term,+non-reversible-notation,+deprecated-intros-until-0,+deprecated-focus,+unused-intro-pattern,+variable-collision,+unexpected-implicit-declaration,+omega-is-deprecated,+deprecated-instantiate-syntax,+non-recursive,+undeclared-scope,+deprecated-hint-rewrite-without-locality,+deprecated-hint-without-locality,+deprecated-instance-without-locality,+deprecated-typeclasses-transparency-without-locality,-ltac2-missing-notation-var,unsupported-attributes
+theories/bug_search_anom_not_found_01.v
 theories/Einops/Parsing.v
 theories/MaxOfTwoNumbers/Heuristics.v
 theories/MaxOfTwoNumbers/Model.v
@@ -34,6 +35,7 @@ theories/TransformerLens/HookedTransformer/Config.v
 theories/TransformerLens/HookedTransformer/Instances.v
 theories/TransformerLens/HookedTransformer/Module.v
 theories/TransformerLens/HookedTransformer/Config/Common.v
+theories/TransformerLens/HookedTransformer/Module/Flocqify.v
 theories/TransformerLens/HookedTransformer/Module/Instances.v
 theories/Util/Arrow.v
 theories/Util/Bool.v
@@ -60,6 +62,7 @@ theories/Util/Arith/Flocq.v
 theories/Util/Arith/Instances.v
 theories/Util/Arith/QArith.v
 theories/Util/Arith/ZArith.v
+theories/Util/Arith/ExtendedReals/Definitions.v
 theories/Util/Arith/FloatArith/Definitions.v
 theories/Util/Arith/FloatArith/Proofs.v
 theories/Util/Arith/Flocq/Definitions.v
@@ -67,6 +70,7 @@ theories/Util/Arith/Flocq/Instances.v
 theories/Util/Arith/Flocq/Notations.v
 theories/Util/Arith/Flocq/Hints/Core.v
 theories/Util/Arith/Flocq/Hints/Prim2B.v
+theories/Util/Arith/Reals/Definitions.v
 theories/Util/Classes/Morphisms/Dependent.v
 theories/Util/Classes/RelationClasses/Dependent.v
 theories/Util/Classes/RelationClasses/Hetero.v

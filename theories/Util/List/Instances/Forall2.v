@@ -1,4 +1,5 @@
 From Coq Require Import List Morphisms Program.Basics.
+From NeuralNetInterp.Util Require RelationClasses.Dependent.
 Import ListNotations.
 #[local] Open Scope list_scope.
 
@@ -7,6 +8,8 @@ Module List.
   Proof.
     intro ls; induction ls as [|?? IH]; constructor; eauto.
   Qed.
+
+  #[export] Instance Forall2_refl_dep : Dependent.Reflexive (@Forall2) := @Forall2_refl.
 
   Lemma Forall2_flip {A B R xs ys} : @Forall2 A B R xs ys -> @Forall2 B A (flip R) ys xs.
   Proof.

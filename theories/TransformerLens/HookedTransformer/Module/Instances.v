@@ -1,10 +1,11 @@
-From Coq Require Import Morphisms RelationClasses RelationPairs.
+From Coq Require Import Morphisms RelationClasses RelationPairs Relation_Definitions.
 From Coq Require Vector.
 From Coq.Structures Require Import Equalities.
 From Coq Require Import Floats Uint63 ZArith NArith.
+From NeuralNetInterp.Util.Tactics Require Import BreakMatch DestructHead.
 From NeuralNetInterp.Util Require Import Default SolveProperEqRel Option Pointed.
 From NeuralNetInterp.Util.Arith Require Import Classes Instances.
-From NeuralNetInterp.Util.List.Instances Require Import Forall2.
+From NeuralNetInterp.Util.List.Instances Require Import Forall2 Forall2.Map.
 From NeuralNetInterp.Torch Require Import Tensor Tensor.Instances Slicing Slicing.Instances.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer.
 From NeuralNetInterp.TransformerLens.HookedTransformer Require Import Config Instances Module.
@@ -15,12 +16,22 @@ Import Instances.Truncating.
 Module ModelInstances (cfg : Config) (Model : ModelSig cfg).
   Export Model.
 
+  Notation ln_tensorR := (@HookedTransformer.ln_tensor_genR cfg.d_model cfg.normalization_type).
+  Notation block_params_typeR := (@HookedTransformer.block_params_type_genR cfg.n_heads cfg.d_model cfg.d_head cfg.normalization_type).
+
   Local Ltac t :=
     try eassumption;
     auto;
     repeat intro;
     try (eapply Tensor.map_Proper_dep; try eassumption; repeat intro);
     try reflexivity.
+
+  #[export] Instance all_tokens_Proper
+    : Proper ((fun _ _ => True) ==> Tensor.eqf) (@all_tokens).
+  Proof.
+    cbv [all_tokens]; repeat intro; break_innermost_match.
+    all: rewrite ?PArray.checkpoint_correct; reflexivity.
+  Qed.
 
   Module Embed.
     Import Instances.HookedTransformer.Embed.
@@ -38,11 +49,12 @@ Module ModelInstances (cfg : Config) (Model : ModelSig cfg).
       : Proper (Tensor.eqf ==> Tensor.eqf) (@forward r batch pos A coer_float).
     Proof. apply forward_Proper_dep; repeat intro; subst; reflexivity. Qed.
   End Embed.
-  (*
   Export (hints) Embed.
 
   Module Unembed.
-    Export Unembed.
+    Import Instances.HookedTransformer.Unembed.
+    Export Model.Unembed.
+(*
     #[export] Instance forward_Proper_dep {r batch_pos d_model d_vocab_out}
       : Dependent.Proper
           ((Dependent.idR ==> Dependent.idR ==> Dependent.idR)
@@ -55,12 +67,14 @@ Module ModelInstances (cfg : Config) (Model : ModelSig cfg).
     #[export] Instance forward_Proper {A addA mulA zeroA d_model d_vocab_out W_U b_U r batch_pos}
       : Proper (Tensor.eqf ==> Tensor.eqf) (@forward A addA mulA zeroA d_model d_vocab_out W_U b_U r batch_pos).
     Proof. apply forward_Proper_dep; repeat intro; subst; reflexivity. Qed.
+    *)
   End Unembed.
   Export (hints) Unembed.
 
   Module PosEmbed.
-    Export PosEmbed.
-
+    Import Instances.HookedTransformer.PosEmbed.
+    Export Model.PosEmbed.
+    (*
     #[export] Instance forward_Proper_dep {r batch_pos tokens_length d_model n_ctx}
       : Dependent.Proper
           (Tensor.eqfR
@@ -72,12 +86,15 @@ Module ModelInstances (cfg : Config) (Model : ModelSig cfg).
     #[export] Instance forward_Proper {A d_model n_ctx W_pos r batch tokens_length}
       : Proper (Tensor.eqf ==> Tensor.eqf) (@forward A d_model n_ctx W_pos r batch tokens_length).
     Proof. cbv [forward]; t. Qed.
+    *)
   End PosEmbed.
   Export (hints) PosEmbed.
-
+(**
   Module LayerNorm.
-    Export LayerNorm.
-
+    Import Instances.HookedTransformer.LayerNorm.
+    Print Model.
+    Export Model.LayerNorm.
+(*
     #[export] Instance linpart_Proper_dep {r s d_model}
       : Dependent.Proper
           ((Dependent.idR ==> Dependent.idR ==> Dependent.idR)
@@ -149,11 +166,14 @@ Module ModelInstances (cfg : Config) (Model : ModelSig cfg).
     Proof. cbv [forward]; t.
 
     Qed.
+    *)
   End LayerNorm.
   Export (hints) LayerNorm.
 
   Module Attention.
-    Export Attention.
+    Import Instances.HookedTransformer.Attention.
+    Export Model.Attention.
+    (*
 
     #[export] Instance einsum_input_Proper_dep {r batch pos n_heads d_model d_head use_split_qkv_input}
       : Dependent.Proper
@@ -361,11 +381,14 @@ Module ModelInstances (cfg : Config) (Model : ModelSig cfg).
       : Proper (Tensor.eqf ==> Tensor.eqf ==> Tensor.eqf ==> Tensor.eqf)
           (@attn_out r batch pos n_heads d_model d_head n_ctx use_split_qkv_input A sqrtA coerZ addA zeroA mulA divA expA use_checkpoint W_Q W_K W_V W_O b_Q b_K b_V b_O).
     Proof. apply attn_out_Proper_dep; repeat intro; subst; reflexivity. Qed.
+    *)
   End Attention.
   Export (hints) Attention.
-
+*)
   Module TransformerBlock.
-    Export TransformerBlock.
+    Import Instances.HookedTransformer.TransformerBlock.
+    Export Model.TransformerBlock.
+    (*
 
     #[export] Instance add_head_dimension_Proper_dep {r batch pos n_heads d_model use_split_qkv_input}
       : Dependent.Proper
@@ -568,11 +591,14 @@ Module ModelInstances (cfg : Config) (Model : ModelSig cfg).
     #[export] Instance attn_pattern_Proper {r batch pos n_heads d_model d_head n_ctx use_split_kqv_input normalization_type A zeroA coerZ addA subA mulA divA sqrtA expA W_Q W_K b_Q b_K eps use_checkpoint ln1_w ln1_b}
       : Proper (Tensor.eqf ==> Tensor.eqf) (@HookedTransformer.TransformerBlock.attn_pattern r batch pos n_heads d_model d_head n_ctx use_split_kqv_input normalization_type A zeroA coerZ addA subA mulA divA sqrtA expA W_Q W_K b_Q b_K eps use_checkpoint ln1_w ln1_b).
     Proof. apply attn_pattern_Proper_dep; repeat intro; subst; break_innermost_match; reflexivity. Qed.
+    *)
   End TransformerBlock.
   Export (hints) TransformerBlock.
 
   Module HookedTransformer.
-    Export HookedTransformer.
+    Import Instances.HookedTransformer.HookedTransformer.
+    Export Model.HookedTransformer.
+    (*
 
     #[export] Instance embed_Proper_dep {d_vocab d_model r batch pos}
       : Dependent.Proper
@@ -740,10 +766,28 @@ Module ModelInstances (cfg : Config) (Model : ModelSig cfg).
       : Proper (eq ==> Tensor.eqf ==> (Tensor.eqf ==> R) ==> R)
           (@blocks_cps n_heads d_model d_head n_ctx r batch pos normalization_type A zeroA coerZ addA subA mulA divA sqrtA expA eps use_checkpoint blocks_params T).
     Proof. apply blocks_cps_Proper_dep; repeat intro; subst; break_innermost_match; reflexivity. Qed.
+     *)
 
-    #[export] Instance logits_Proper_dep {d_vocab d_vocab_out n_heads d_model d_head n_ctx r batch pos normalization_type}
+    #[export] Instance coer_blocks_params_Proper_dep
       : Dependent.Proper
-          (Dependent.idR
+          ((Dependent.const eq ==> Dependent.idR)
+             ==> List.Forall2 ∘ Dependent.const (block_params_typeR eq)
+             ==> List.Forall2 ∘ block_params_typeR)
+          (@coer_blocks_params).
+    Proof.
+      cbv [coer_blocks_params]; repeat intro.
+      eapply List.map_Proper_dep; [ | eassumption ].
+      repeat intro.
+      destruct_head_hnf' Datatypes.prod.
+      destruct_head_hnf' and; hnf in *.
+      repeat apply conj; hnf; cbn [fst snd] in *.
+      all: eauto; break_innermost_match; eauto.
+      all: repeat intro; hnf in *; subst; eauto.
+    Qed.
+
+    #[export] Instance logits_Proper_dep {r batch pos}
+      : Dependent.Proper
+          ((Dependent.const eq ==> Dependent.idR)
              ==> (Dependent.const eq ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
@@ -752,46 +796,16 @@ Module ModelInstances (cfg : Config) (Model : ModelSig cfg).
              ==> (Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
              ==> Dependent.const (fun _ _ => True)
-             ==> Dependent.idR
-             ==> Tensor.eqfR
-             ==> Tensor.eqfR
-             ==> List.Forall2 ∘ (Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * Tensor.eqfR * Tensor.eqfR
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end
-                                 * match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-                                   | Some LN => Tensor.eqfR (s:=[d_model])
-                                   | None => Dependent.const eq
-                                   end)
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
-             ==> match normalization_type return Dependent.relation (fun A => match normalization_type with Some LN => _ | None => _ end) with
-             | Some LN => Tensor.eqfR (s:=[d_model])
-             | None => Dependent.const eq
-             end
-             ==> Tensor.eqfR
-             ==> Tensor.eqfR
              ==> Dependent.const Tensor.eqf
              ==> Tensor.eqfR)
-          (@logits d_vocab d_vocab_out n_heads d_model d_head n_ctx r batch pos normalization_type).
+          (@logits r batch pos).
     Proof.
-      cbv [logits]; t.
-      all: lazymatch goal with
-           | [ |- ?R (?f ?i) (?g ?i) ]
-             => revert i; change ((fun F G => forall i, R (F i) (G i)) f g)
-           end.
-      all: eapply blocks_cps_Proper_dep; [ eassumption | .. ].
-      all: repeat intro; subst; t.
-      all: try now eapply Forall2_length, blocks_Proper_dep; eassumption.
-      all: first [ apply resid_postembed_Proper_dep | apply embed_Proper_dep | apply pos_embed_Proper_dep | apply ln_final_Proper_dep | apply unembed_Proper_dep ]; t.
+      cbv [logits]; repeat intro; apply logits_Proper_dep; t.
+      all: try apply coer_blocks_params_Proper_dep; eauto; try reflexivity.
+      all: match goal with |- ?R (?f ?x) (?g ?x) => generalize x end.
+      all: break_innermost_match; repeat intro; hnf in *; eauto.
     Qed.
-
+(*
     #[export] Instance logits_Proper {d_vocab d_vocab_out n_heads d_model d_head n_ctx r batch pos normalization_type A zeroA coerZ addA subA mulA divA sqrtA expA eps use_checkpoint W_E W_pos blocks_params ln_final_w ln_final_b W_U b_U}
       : Proper (Tensor.eqf ==> Tensor.eqf)
           (@logits d_vocab d_vocab_out n_heads d_model d_head n_ctx r batch pos normalization_type A zeroA coerZ addA subA mulA divA sqrtA expA eps use_checkpoint W_E W_pos blocks_params ln_final_w ln_final_b W_U b_U).
@@ -1042,9 +1056,10 @@ Module ModelInstances (cfg : Config) (Model : ModelSig cfg).
       : Proper (eq ==> Tensor.eqf ==> option_eq Tensor.eqf)
           (@HookedTransformer.HookedTransformer.attn_pattern d_vocab n_heads d_model d_head n_ctx r batch pos normalization_type A zeroA coerZ addA subA mulA divA sqrtA expA eps use_checkpoint W_E W_pos blocks_params).
     Proof. apply attn_pattern_Proper_dep; repeat intro; subst; break_innermost_match; reflexivity. Qed.
+    *)
   End HookedTransformer.
   Export (hints) HookedTransformer.
-End HookedTransformer.
-Export (hints) HookedTransformer.
- *)
+  Export HookedTransformer.
 End ModelInstances.
+
+Module Type ModelInstancesSig (cfg : Config) (Model : ModelSig cfg) := Nop <+ ModelInstances cfg Model.

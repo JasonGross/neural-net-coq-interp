@@ -1,5 +1,5 @@
-From Coq Require Import List Floats PArray Sint63 Uint63 Arith PArith NArith ZArith QArith.
-From NeuralNetInterp.Util.Arith Require Import Classes FloatArith.Definitions QArith ZArith.
+From Coq Require Import Reals List Floats PArray Sint63 Uint63 Arith PArith NArith ZArith QArith.
+From NeuralNetInterp.Util.Arith Require Import Classes FloatArith.Definitions QArith ZArith Reals.Definitions.
 Import ListNotations.
 Set Implicit Arguments.
 #[global] Set Warnings Append "-ambiguous-paths".
@@ -220,6 +220,26 @@ Module Float.
     #[export] Instance float_has_eqb : has_eqb float := eta2 PrimFloat.Leibniz.eqb.
   End Leibniz.
 End Float.
+
+#[local] Open Scope R_scope.
+Search (R -> bool).
+#[export] Instance R_has_leb : has_leb R := Rleb.
+#[export] Instance R_has_ltb : has_ltb R := Rltb.
+#[export] Instance R_has_opp : has_opp R := Ropp.
+#[export] Instance R_has_abs : has_abs R := Rabs.
+#[export] Instance R_has_sqrt : has_sqrt R
+  := fun x => match Rle_dec 0 x with
+              | left pf => Rsqrt (mknonnegreal x pf)
+              | right _ => 0
+              end.
+#[export] Instance R_has_add : has_add R := Rplus.
+#[export] Instance R_has_sub : has_sub R := Rminus.
+#[export] Instance R_has_mul : has_mul R := Rmult.
+#[export] Instance R_has_div : has_div R := Rdiv.
+#[export] Instance R_has_zero : has_zero R := 0.
+#[export] Instance R_has_one : has_one R := 1.
+#[export] Instance R_has_exp : has_exp R := Rtrigo_def.exp.
+#[export] Instance R_has_ln : has_ln R := Rpower.ln.
 
 Module Truncating.
   #[local] Set Warnings Append "-unsupported-attributes".

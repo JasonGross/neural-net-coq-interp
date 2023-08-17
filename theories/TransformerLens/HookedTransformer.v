@@ -235,10 +235,7 @@ Module TransformerBlock.
       (b_Q b_K b_V : tensor [n_heads; d_head] A)
       (b_O : tensor [d_model] A)
       (eps : A)
-      (ln1_w ln1_b ln2_w ln2_b : match normalization_type with
-                                 | Some LN => tensor [d_model] A
-                                 | Datatypes.None => with_default "()" True I
-                                 end)
+      (ln1_w ln1_b ln2_w ln2_b : ln_tensor_gen d_model normalization_type A)
       (resid_pre : tensor ((batch ::' pos) ++' [d_model]) A).
     #[local] Existing Instance defaultA.
     #[local] Notation checkpoint x := (if use_checkpoint then PArray.checkpoint x else x%tensor).
@@ -263,9 +260,7 @@ Module TransformerBlock.
 
     #[local] Notation LayerNorm_forward
       := (match normalization_type
-                return match normalization_type with Some LN => _ | _ => _ end
-                       -> match normalization_type with Some LN => _ | _ => _ end
-                       -> _
+                return ln_tensor_gen _ normalization_type _ -> ln_tensor_gen _ normalization_type _ -> _
           with
           | Some LN => LayerNorm.forward eps
           | Datatypes.None => fun _ _ x => checkpoint x
@@ -327,27 +322,13 @@ Module HookedTransformer.
       (W_pos : tensor [n_ctx; d_model] A)
 
       (blocks_params
-        : list ((* (W_Q W_K W_V W_O : tensor [n_heads; d_model; d_head] A)
+        : list (block_params_type_gen n_heads d_model d_head normalization_type A)
+            (* (W_Q W_K W_V W_O : tensor [n_heads; d_model; d_head] A)
       (b_Q b_K b_V : tensor [n_heads; d_head] A)
       (b_O : tensor [d_model] A)
-      (ln1_w ln1_b : tensor [d_model] A) *)
-              tensor [n_heads; d_model; d_head] A * tensor [n_heads; d_model; d_head] A * tensor [n_heads; d_model; d_head] A * tensor [n_heads; d_model; d_head] A
-              * tensor [n_heads; d_head] A * tensor [n_heads; d_head] A * tensor [n_heads; d_head] A
-              * tensor [d_model] A
-              * match normalization_type with
-                | Some LN => tensor [d_model] A
-                | Datatypes.None => with_default "()" True I
-                end
-              * match normalization_type with
-                | Some LN => tensor [d_model] A
-                | Datatypes.None => with_default "()" True I
-                end))
+      (ln1_w ln1_b : tensor [d_model] A) *))
 
-      (ln_final_w ln_final_b
-        : match normalization_type with
-          | Some LN => tensor [d_model] A
-          | Datatypes.None => with_default "()" True I
-          end)
+      (ln_final_w ln_final_b : ln_tensor_gen d_model normalization_type A)
 
       (W_U : tensor [d_model; d_vocab_out] A) (b_U : tensor [d_vocab_out] A)
     .
@@ -377,9 +358,7 @@ Module HookedTransformer.
 
     #[local] Notation LayerNorm_forward
       := (match normalization_type
-                return match normalization_type with Some LN => _ | _ => _ end
-                       -> match normalization_type with Some LN => _ | _ => _ end
-                       -> _
+                return ln_tensor_gen _ normalization_type _ -> ln_tensor_gen _ normalization_type _ -> _
           with
           | Some LN => LayerNorm.forward eps
           | Datatypes.None => fun _ _ t => t

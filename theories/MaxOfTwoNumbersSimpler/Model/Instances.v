@@ -3,26 +3,29 @@ From NeuralNetInterp.Util Require Import Default SolveProperEqRel Option.
 From NeuralNetInterp.Util.Tactics Require Import Head DestructHead.
 From NeuralNetInterp.Util.List.Instances Require Import Forall2 Forall2.Map.
 From NeuralNetInterp.Torch Require Import Tensor Tensor.Instances Slicing Slicing.Instances.
-From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Instances.
+From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Instances HookedTransformer.Module.Instances.
 From NeuralNetInterp.MaxOfTwoNumbersSimpler Require Import Model.
 Import Dependent.ProperNotations Dependent.RelationPairsNotations.
 
 Module Model.
   Export Model.
+  Include ModelInstances cfg Model.
+  Include HookedTransformer.
 
-  Local Ltac t :=
+  Local Ltac t' :=
     try eassumption;
     auto;
     repeat intro;
     try (eapply Tensor.map_Proper_dep; try eassumption; repeat intro);
-    try reflexivity.
+    try reflexivity;
+    auto.
 
   #[export] Instance embed_Proper_dep {r batch pos}
     : Dependent.Proper
         ((Dependent.const eq ==> Dependent.idR)
            ==> Dependent.const Tensor.eqf
            ==> Tensor.eqfR) (@embed r batch pos).
-  Proof. cbv [embed]; repeat intro; apply HookedTransformer.HookedTransformer.embed_Proper_dep; t. Qed.
+  Proof. cbv [embed]; repeat intro; apply HookedTransformer.HookedTransformer.embed_Proper_dep; t'. Qed.
 
   #[export] Instance embed_Proper {r batch pos A coer_float}
     : Proper (Tensor.eqf ==> Tensor.eqf) (@embed r batch pos A coer_float)
@@ -33,7 +36,7 @@ Module Model.
         ((Dependent.const eq ==> Dependent.idR)
            ==> Dependent.const Tensor.eqf
            ==> Tensor.eqfR) (@pos_embed r batch pos).
-  Proof. cbv [pos_embed]; repeat intro; apply HookedTransformer.HookedTransformer.pos_embed_Proper_dep; t. Qed.
+  Proof. cbv [pos_embed]; repeat intro; apply HookedTransformer.HookedTransformer.pos_embed_Proper_dep; t'. Qed.
 
   #[export] Instance pos_embed_Proper {r batch pos A coer_float}
     : Proper (Tensor.eqf ==> Tensor.eqf) (@pos_embed r batch pos A coer_float)
@@ -52,7 +55,7 @@ Module Model.
            ==> Tensor.eqfR
            ==> Tensor.eqfR)
         (@ln_final r batch pos).
-  Proof. cbv [ln_final cfg.normalization_type]; repeat intro; apply HookedTransformer.HookedTransformer.ln_final_Proper_dep; t. Qed.
+  Proof. cbv [ln_final cfg.normalization_type]; repeat intro; apply HookedTransformer.HookedTransformer.ln_final_Proper_dep; t'. Qed.
 
   #[export] Instance ln_final_Proper {r batch pos A coer_float coerZ addA subA mulA divA sqrtA use_checkpoint}
     : Proper (Tensor.eqf ==> Tensor.eqf) (@ln_final r batch pos A coer_float coerZ addA subA mulA divA sqrtA use_checkpoint).
@@ -67,59 +70,11 @@ Module Model.
            ==> Tensor.eqfR
            ==> Tensor.eqfR)
         (@unembed r batch pos).
-  Proof. cbv [unembed]; repeat intro; apply HookedTransformer.HookedTransformer.unembed_Proper_dep; t. Qed.
+  Proof. cbv [unembed]; repeat intro; apply HookedTransformer.HookedTransformer.unembed_Proper_dep; t'. Qed.
 
   #[export] Instance unembed_Proper {r batch pos A coer_float coerZ addA mulA}
     : Proper (Tensor.eqf ==> Tensor.eqf) (@unembed r batch pos A coer_float coerZ addA mulA).
   Proof. cbv [unembed]; apply HookedTransformer.HookedTransformer.unembed_Proper. Qed.
-
-  #[export] Instance blocks_params_Proper
-    : Proper (List.Forall2 (Tensor.eqf * Tensor.eqf
-                            * Tensor.eqf * Tensor.eqf
-                            * Tensor.eqf * Tensor.eqf
-                            * Tensor.eqf * Tensor.eqf
-                            * @eq True * @eq True)%signature)
-        (@cfg.blocks_params).
-  Proof. hnf; apply reflexivity. Qed.
-
-  #[export] Instance coer_blocks_params_Proper_dep
-    : Dependent.Proper
-        ((Dependent.const eq ==> Dependent.idR)
-           ==> Dependent.const (List.Forall2 (Tensor.eqf * Tensor.eqf
-                                              * Tensor.eqf * Tensor.eqf
-                                              * Tensor.eqf * Tensor.eqf
-                                              * Tensor.eqf * Tensor.eqf
-                                              * @eq True * @eq True)%signature)
-           ==> List.Forall2 ∘ (Tensor.eqfR * Tensor.eqfR
-                               * Tensor.eqfR * Tensor.eqfR
-                               * Tensor.eqfR * Tensor.eqfR
-                               * Tensor.eqfR * Tensor.eqfR
-                               * Dependent.const (@eq True) * Dependent.const (@eq True)))
-        (@coer_blocks_params).
-  Proof.
-    cbv [coer_blocks_params cfg.normalization_type]; t.
-    eapply List.map_Proper_dep; try eassumption; [].
-    repeat intro; destruct_head'_prod.
-    cbv [Dependent.lift2_1 Dependent.lift2_2 Dependent.RelProd Dependent.relation_conjunction Dependent.RelCompFun RelProd RelCompFun relation_conjunction predicate_intersection pointwise_extension] in *; cbn [fst snd] in *.
-    destruct_head'_and.
-    repeat apply conj; t.
-  Qed.
-
-  #[export] Instance logits_Proper_dep {r batch pos}
-    : Dependent.Proper
-        ((Dependent.const eq ==> Dependent.idR)
-           ==> (Dependent.const eq ==> Dependent.idR)
-           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
-           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
-           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
-           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
-           ==> (Dependent.idR ==> Dependent.idR)
-           ==> (Dependent.idR ==> Dependent.idR)
-           ==> Dependent.const (fun _ _ => True)
-           ==> Dependent.const Tensor.eqf
-           ==> Tensor.eqfR)
-        (@logits r batch pos).
-  Proof. cbv [logits cfg.normalization_type]; repeat intro; apply HookedTransformer.HookedTransformer.logits_Proper_dep; try apply coer_blocks_params_Proper_dep; t. Qed.
 
   #[export] Instance logits_Proper {r batch pos A coer_float coerZ addA subA mulA divA sqrtA expA use_checkpoint}
     : Proper (Tensor.eqf ==> Tensor.eqf) (@logits r batch pos A coer_float coerZ addA subA mulA divA sqrtA expA use_checkpoint)
@@ -153,8 +108,10 @@ Module Model.
          refine (@invert_Some_Proper_dep _ _ (Tensor.eqfR R') x y H i)
     end.
     Unshelve.
-    all: cbv beta iota; t.
-    all: try apply coer_blocks_params_Proper_dep; t.
+    all: cbv beta iota; t'.
+    all: try apply HookedTransformer.coer_blocks_params_Proper_dep; t'.
+    all: try (apply Dependent.reflexivity; try exact _).
+    all: try apply HookedTransformer.block_params_type_genR_refl.
   Qed.
 
   #[export] Instance masked_attn_scores_Proper {r batch pos A coer_float coerZ addA subA mulA divA sqrtA expA use_checkpoint}
@@ -189,8 +146,10 @@ Module Model.
          refine (@invert_Some_Proper_dep _ _ (Tensor.eqfR R') x y H i)
     end.
     Unshelve.
-    all: cbv beta iota; t.
-    all: try apply coer_blocks_params_Proper_dep; t.
+    all: cbv beta iota; t'.
+    all: try apply HookedTransformer.coer_blocks_params_Proper_dep; t'.
+    all: try (apply Dependent.reflexivity; try exact _).
+    all: try apply HookedTransformer.block_params_type_genR_refl.
   Qed.
 
   #[export] Instance attn_pattern_Proper {r batch pos A coer_float coerZ addA subA mulA divA sqrtA expA use_checkpoint}

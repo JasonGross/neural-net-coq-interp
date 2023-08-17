@@ -13,30 +13,31 @@ Module Type ExtraListConfig (Import cfg : CommonConfig).
   Parameter b_U : List.concrete_tensor [d_vocab_out] float.
 End ExtraListConfig.
 *)
+Definition ln_tensor_gen d_model (nt : with_default "normalization_type" (Some LN)) A
+  := (match nt with
+      | Some LN => tensor [d_model] A
+      | Datatypes.None => with_default "()" True I
+      end).
+Definition block_params_type_gen n_heads d_model d_head (nt : with_default "normalization_type" (Some LN)) A
+  := ((* (W_Q W_K W_V W_O : tensor [n_heads; d_model; d_head] A)
+                         (b_Q b_K b_V : tensor [n_heads; d_head] A)
+                         (b_O : tensor [d_model] A)
+                         (ln1_w ln1_b : tensor [d_model] A) *)
+    tensor [n_heads; d_model; d_head] A * tensor [n_heads; d_model; d_head] A * tensor [n_heads; d_model; d_head] A * tensor [n_heads; d_model; d_head] A
+    * tensor [n_heads; d_head] A * tensor [n_heads; d_head] A * tensor [n_heads; d_head] A
+    * tensor [d_model] A
+    * ln_tensor_gen d_model nt A
+    * ln_tensor_gen d_model nt A)%type.
 Module Type ExtraConfig (Import cfg : CommonConfig).
   Parameter W_E : tensor [d_vocab; d_model] float.
   Parameter W_pos : tensor [n_ctx; d_model] float.
   Parameter W_U : tensor [d_model; d_vocab_out] float.
   Parameter b_U : tensor [d_vocab_out] float.
-  Notation ln_tensor_gen nt A := (match nt with
-                           | Some LN => tensor [d_model] A
-                           | Datatypes.None => with_default "()" True I
-                           end).
-  Notation ln_tensor A := (ln_tensor_gen normalization_type A).
+  Notation ln_tensor A := (ln_tensor_gen d_model normalization_type A).
   Parameter ln_final_w : ln_tensor float.
   Parameter ln_final_b : ln_tensor float.
-  Notation block_params_type A
-    := ((* (W_Q W_K W_V W_O : tensor [n_heads; d_model; d_head] A)
-                         (b_Q b_K b_V : tensor [n_heads; d_head] A)
-                         (b_O : tensor [d_model] A)
-                         (ln1_w ln1_b : tensor [d_model] A) *)
-      tensor [n_heads; d_model; d_head] A * tensor [n_heads; d_model; d_head] A * tensor [n_heads; d_model; d_head] A * tensor [n_heads; d_model; d_head] A
-      * tensor [n_heads; d_head] A * tensor [n_heads; d_head] A * tensor [n_heads; d_head] A
-      * tensor [d_model] A
-      * ln_tensor A
-      * ln_tensor A)%type.
-  Parameter blocks_params
-    : list (block_params_type float).
+  Notation block_params_type A := (block_params_type_gen n_heads d_model d_head normalization_type A).
+  Parameter blocks_params : list (block_params_type float).
   Notation n_layers := (List.length blocks_params).
 End ExtraConfig.
 

@@ -195,7 +195,7 @@ End LayerNorm.
       #[local] Coercion coerA' : float >-> A.
 
       Let coer_ln_tensor : cfg.ln_tensor float -> cfg.ln_tensor A
-          := match cfg.normalization_type as nt return cfg.ln_tensor_gen nt float -> cfg.ln_tensor_gen nt A with
+          := match cfg.normalization_type as nt return Config.ln_tensor_gen _ nt float -> Config.ln_tensor_gen _ nt A with
              | Some LN
              | Datatypes.None
                => fun x => x
@@ -240,7 +240,7 @@ End LayerNorm.
       #[local] Coercion coerA' : float >-> A.
 
       Let coer_ln_tensor : cfg.ln_tensor float -> cfg.ln_tensor A
-          := match cfg.normalization_type as nt return cfg.ln_tensor_gen nt float -> cfg.ln_tensor_gen nt A with
+          := match cfg.normalization_type as nt return Config.ln_tensor_gen _ nt float -> Config.ln_tensor_gen _ nt A with
              | Some LN
              | Datatypes.None
                => fun x => x
