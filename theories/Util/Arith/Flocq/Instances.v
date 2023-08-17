@@ -1,4 +1,4 @@
-From Coq Require Import PArith ZArith.
+From Coq Require Import Reals PArith ZArith.
 From Coq.Floats Require Import Floats.
 From Flocq.Core Require Import Raux Generic_fmt Zaux FLX.
 From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
@@ -6,9 +6,17 @@ From NeuralNetInterp.Util Require Import Arith.Classes Arith.Instances.
 From NeuralNetInterp.Util.Arith.Flocq Require Import Definitions.
 
 #[export] Instance coer_float_binary_float : has_coer float _ := Prim2B.
+#[export] Instance coer_binary_float_R {prec emax} : has_coer (binary_float prec emax) R := B2R.
 #[local] Set Warnings Append "-unsupported-attributes".
 #[export] Coercion Prim2B : float >-> binary_float.
+#[export] Set Warnings Append "-ambiguous-paths".
+#[export] Coercion B2R : binary_float >-> R.
+#[export] Set Warnings Append "ambiguous-paths".
 #[local] Set Warnings Append "unsupported-attributes".
+#[export] Hint Extern 10 (has_coer_from _ float ?B) => check_unify_has_coer_from (binary_float prec emax) : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_to _ ?A (binary_float _ _)) => check_unify_has_coer_to float : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_from _ (binary_float _ _) ?B) => check_unify_has_coer_from R : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_to _ ?A R) => check_unify_has_coer_to (binary_float prec emax) : typeclass_instances.
 #[export] Instance binary_float_has_leb {prec emax} : has_leb (binary_float prec emax) := Bleb.
 #[export] Instance binary_float_has_ltb {prec emax} : has_ltb (binary_float prec emax) := Bltb.
 #[export] Instance binary_float_has_opp {prec emax} : has_opp (binary_float prec emax) := Bopp.

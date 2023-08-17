@@ -25,6 +25,7 @@ theories/MaxOfTwoNumbersSimpler/Computed/AllLogits.v
 theories/MaxOfTwoNumbersSimpler/Computed/AllMaskedAttnScores.v
 theories/MaxOfTwoNumbersSimpler/Model/Flocqify.v
 theories/MaxOfTwoNumbersSimpler/Model/Instances.v
+theories/MaxOfTwoNumbersSimpler/Model/Rify.v
 theories/MaxOfTwoNumbersSimpler/Theorems/Attempt_01_BruteForce.v
 theories/MaxOfTwoNumbersSimpler/Theorems/Attempt_02_SplitAttention.v
 theories/Torch/Einsum.v

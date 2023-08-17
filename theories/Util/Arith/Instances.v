@@ -50,10 +50,10 @@ Local Open Scope N_scope.
 #[export] Instance N_to_nat_coer : has_coer N nat := fun x => x.
 #[export] Hint Cut [ ( _ * ) N_of_nat_coer ( _ * ) N_to_nat_coer ( _ * ) ] : typeclass_instances.
 #[export] Hint Cut [ ( _ * ) N_to_nat_coer ( _ * ) N_of_nat_coer ( _ * ) ] : typeclass_instances.
-#[export] Hint Extern 10 (has_coer_from nat ?B) => check_unify_has_coer_from N : typeclass_instances.
-#[export] Hint Extern 10 (has_coer_from N ?B) => check_unify_has_coer_from nat : typeclass_instances.
-#[export] Hint Extern 10 (has_coer_to ?A nat) => check_unify_has_coer_to N : typeclass_instances.
-#[export] Hint Extern 10 (has_coer_to ?A N) => check_unify_has_coer_to nat : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_from _ nat ?B) => check_unify_has_coer_from N : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_from _ N ?B) => check_unify_has_coer_from nat : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_to _ ?A nat) => check_unify_has_coer_to N : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_to _ ?A N) => check_unify_has_coer_to nat : typeclass_instances.
 #[export] Instance N_has_ltb : has_ltb N := N.ltb.
 #[export] Instance N_has_leb : has_leb N := N.leb.
 #[export] Instance N_has_eqb : has_eqb N := N.eqb.
@@ -81,8 +81,8 @@ Local Open Scope positive_scope.
 #[export] Coercion N.pos : positive >-> N.
 #[local] Set Warnings Append "unsupported-attributes".
 #[export] Instance N_pos_coer : has_coer positive N := fun x => x.
-#[export] Hint Extern 10 (has_coer_from positive ?B) => check_unify_has_coer_from N : typeclass_instances.
-#[export] Hint Extern 10 (has_coer_to ?A N) => check_unify_has_coer_to positive : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_from _ positive ?B) => check_unify_has_coer_from N : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_to _ ?A N) => check_unify_has_coer_to positive : typeclass_instances.
 #[export] Instance positive_has_ltb : has_ltb positive := Pos.ltb.
 #[export] Instance positive_has_leb : has_leb positive := Pos.leb.
 #[export] Instance positive_has_eqb : has_eqb positive := Pos.eqb.
@@ -107,8 +107,8 @@ Local Open Scope Z_scope.
 #[export] Coercion Z.of_N : N >-> Z.
 #[local] Set Warnings Append "unsupported-attributes".
 #[export] Instance Z_of_N_coer : has_coer N Z := fun x => x.
-#[export] Hint Extern 10 (has_coer_from N ?B) => check_unify_has_coer_from Z : typeclass_instances.
-#[export] Hint Extern 10 (has_coer_to ?A Z) => check_unify_has_coer_to N : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_from _ N ?B) => check_unify_has_coer_from Z : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_to _ ?A Z) => check_unify_has_coer_to N : typeclass_instances.
 #[export] Instance Z_has_ltb : has_ltb Z := Z.ltb.
 #[export] Instance Z_has_leb : has_leb Z := Z.leb.
 #[export] Instance Z_has_eqb : has_eqb Z := Z.eqb.
@@ -167,11 +167,11 @@ Local Open Scope int63_scope.
 #[export] Instance int_has_is_nan : has_is_nan int := fun _ => false.
 #[export] Instance int_has_is_infinity : has_is_infinity int := fun _ => false.
 
-#[export] Hint Extern 10 (has_coer_from int ?B) => check_unify_has_coer_from Z : typeclass_instances.
-#[export] Hint Extern 10 (has_coer_to ?A Z) => check_unify_has_coer_to int : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_from _ int ?B) => check_unify_has_coer_from Z : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_to _ ?A Z) => check_unify_has_coer_to int : typeclass_instances.
 
-#[export] Hint Extern 10 (has_coer_from int ?B) => check_unify_has_coer_from float : typeclass_instances.
-#[export] Hint Extern 10 (has_coer_to ?A float) => check_unify_has_coer_to int : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_from _ int ?B) => check_unify_has_coer_from float : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_to _ ?A float) => check_unify_has_coer_to int : typeclass_instances.
 
 Module Sint63.
   #[export] Instance coer_int_Z : has_coer int Z := eta1 Sint63.to_Z.
@@ -232,6 +232,15 @@ Local Open Scope float_scope.
 #[export] Instance float_has_is_infinity : has_is_infinity float := eta1 PrimFloat.is_infinity.
 #[export] Instance float_has_infinity : has_infinity float := fun is_neg => if is_neg then PrimFloat.neg_infinity else PrimFloat.infinity.
 #[export] Instance float_has_get_sign : has_get_sign float := eta1 PrimFloat.get_sign.
+(* N.B. does not agree with B2R on negative 0 *)
+#[export] Instance coer_float_Q : has_coer float Q := PrimFloat.to_Q.
+#[local] Set Warnings Append "-unsupported-attributes".
+#[export] Set Warnings Append "-uniform-inheritance".
+#[export] Coercion PrimFloat.to_Q : float >-> Q.
+#[export] Set Warnings Append "uniform-inheritance".
+#[local] Set Warnings Append "unsupported-attributes".
+#[export] Hint Extern 10 (has_coer_from _ float ?B) => check_unify_has_coer_from Q : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_to _ ?A Q) => check_unify_has_coer_to float : typeclass_instances.
 
 Module Float.
   Module IEEE754Eq.
@@ -267,8 +276,8 @@ End Float.
 #[export] Coercion Q2R : Q >-> R.
 #[local] Set Warnings Append "unsupported-attributes".
 #[export] Instance Q2R_coer : has_coer Q R := fun x => x.
-#[export] Hint Extern 10 (has_coer_from Q ?B) => check_unify_has_coer_from R : typeclass_instances.
-#[export] Hint Extern 10 (has_coer_to ?A R) => check_unify_has_coer_to Q : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_from _ Q ?B) => check_unify_has_coer_from R : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_to _ ?A R) => check_unify_has_coer_to Q : typeclass_instances.
 
 Module Truncating.
   #[local] Set Warnings Append "-unsupported-attributes".
@@ -277,8 +286,8 @@ Module Truncating.
   #[export] Set Warnings Append "ambiguous-paths".
   #[local] Set Warnings Append "unsupported-attributes".
   #[export] Instance coer_Z_int : has_coer Z int := Uint63.of_Z.
-  #[export] Hint Extern 10 (has_coer_from Z ?B) => check_unify_has_coer_from int : typeclass_instances.
-  #[export] Hint Extern 10 (has_coer_to ?A int) => check_unify_has_coer_to Z : typeclass_instances.
+  #[export] Hint Extern 10 (has_coer_from _ Z ?B) => check_unify_has_coer_from int : typeclass_instances.
+  #[export] Hint Extern 10 (has_coer_to _ ?A int) => check_unify_has_coer_to Z : typeclass_instances.
 
   #[local] Set Warnings Append "-unsupported-attributes".
   #[export] Set Warnings Append "-ambiguous-paths".
@@ -286,8 +295,8 @@ Module Truncating.
   #[export] Set Warnings Append "ambiguous-paths".
   #[local] Set Warnings Append "unsupported-attributes".
   #[export] Instance coer_Z_float : has_coer Z float := PrimFloat.of_Z.
-  #[export] Hint Extern 10 (has_coer_from Z ?B) => check_unify_has_coer_from float : typeclass_instances.
-  #[export] Hint Extern 10 (has_coer_to ?A float) => check_unify_has_coer_to Z : typeclass_instances.
+  #[export] Hint Extern 10 (has_coer_from _ Z ?B) => check_unify_has_coer_from float : typeclass_instances.
+  #[export] Hint Extern 10 (has_coer_to _ ?A float) => check_unify_has_coer_to Z : typeclass_instances.
 End Truncating.
 
 Local Open Scope list_scope.
