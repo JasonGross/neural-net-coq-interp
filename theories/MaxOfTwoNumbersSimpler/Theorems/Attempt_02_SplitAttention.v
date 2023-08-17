@@ -1,10 +1,11 @@
-From Coq Require Import Floats Sint63 Uint63 QArith Lia List PArray Derive.
+From Coq Require Import Reals Floats Sint63 Uint63 QArith Lia List PArray Derive.
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
+From NeuralNetInterp.Util.Tactics Require Import IsFloat IsUint63.
 From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Wf_Uint63.Instances SolveProperEqRel Default.
-From NeuralNetInterp.Util.Arith Require Import Classes Instances FloatArith.Definitions.
+From NeuralNetInterp.Util.Arith Require Import Classes Instances FloatArith.Definitions Reals.Definitions.
 From NeuralNetInterp.Torch Require Import Tensor.Instances Slicing.Instances.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Instances.
-From NeuralNetInterp.MaxOfTwoNumbersSimpler Require Import Parameters Model Heuristics TheoremStatement Model.Instances Model.Flocqify.
+From NeuralNetInterp.MaxOfTwoNumbersSimpler Require Import Parameters Model Heuristics TheoremStatement Model.Instances Model.Flocqify Model.Rify.
 Import LoopNotation.
 (*From NeuralNetInterp.MaxOfTwoNumbersSimpler.Computed Require Import AllLogits.*)
 Local Open Scope uint63_scope.
@@ -29,7 +30,9 @@ Local Ltac let_bind _ := repeat first [ progress cbv beta iota in * | let_bind_1
 Local Ltac let_bind_subst_shape _ :=
   let_bind ();
   repeat match goal with H : Shape _ |- _ => subst H end;
-  repeat match goal with H : forall b : bool, Shape _ |- _ => subst H end.
+  repeat match goal with H : forall b : bool, Shape _ |- _ => subst H end;
+  repeat match goal with H := ?x |- _ => is_var x; subst H end;
+  repeat match goal with H := ?x, H' := ?y |- _ => constr_eq x y; change H' with H in *; clear H' end.
 
 #[export] Existing Instance reflexive_eq_dom_reflexive.
 #[local] Hint Constants Opaque : typeclass_instances.
@@ -115,6 +118,7 @@ From Interval Require Import Tactic_float.
 #[local] Set Warnings Append "+undeclared-scope".
 
 From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
+From Flocq Require Import Raux.
 From NeuralNetInterp.Util.Arith Require Import Flocq Flocq.Instances Flocq.Notations.
 
 Theorem good_accuracy : TheoremStatement.Accuracy.best (* (abs (real_accuracy - expected_accuracy) <? error)%float = true *).
@@ -124,12 +128,38 @@ Proof.
   cbv [item raw_get].
   (* convert from prim float to flocq *)
   rewrite leb_equiv, abs_equiv, sub_equiv, div_equiv.
-  let lem := constr:(Model.acc_fn_equiv (use_checkpoint2:=false) logits_all_tokens (logits (use_checkpoint:=false) all_tokens) all_tokens (Model.logits_equiv _) tt) in
+  let lem := constr:(Model.acc_fn_equiv
+                       (use_checkpoint2:=false)
+                       logits_all_tokens
+                       (logits (use_checkpoint:=false) (all_tokens (use_checkpoint:=false)))
+                       all_tokens (all_tokens (use_checkpoint:=false))
+                       (Model.logits_equiv (Model.all_tokens_Proper _ _ I))
+                       (Model.all_tokens_Proper _ _ I)
+                       tt) in
   rewrite lem.
   (* Now I'd like to convert to R, but this means I need to prove lack of exceptions, I think *)
   (* So for now instead I'm playing around without really knowing what
   I'm doing. My first attempt failed when I cound't even turn [abs (x
   / y - z) < w] into [abs (x - z * y) < w*y]... *)
+  pose proof (Rify.Model.acc_fn_equiv_bounded (use_checkpoint1:=false) (use_checkpoint2:=false) tt) as lem.
+  cbv beta iota zeta in lem.
+  change Babs with (Classes.abs : has_abs (binary_float prec emax)); cbv beta.
+  change (Bminus mode_NE) with (Classes.sub : has_sub (binary_float prec emax)); cbv beta.
+  change (Bdiv mode_NE) with (Classes.div : has_div (binary_float prec emax)); cbv beta.
+  change (Bleb) with (Classes.leb : has_leb (binary_float prec emax)); cbv beta.
+  lazymatch goal with
+  | [ H : (abs (B2R ?x - ?y) <=? ?err)%core = true |- (abs (?x' / ?e - ?one) <=? ?err')%core = true ]
+    => first [ constr_eq x x' | fail 1 x "≠" x' ];
+       cut ((abs ((y:R) / (e:R) - (one:R)) <=? ((err':R) + (err:R) / (e:R))) = true)%core;
+       cbv beta; [ | clear H ];
+       [ revert H; generalize x y err err' e one | ]
+  end.
+  { cbv [Classes.abs Classes.leb Classes.sub Classes.div
+           R_has_abs R_has_leb R_has_sub R_has_div
+           binary_float_has_abs binary_float_has_leb binary_float_has_sub binary_float_has_div].
+    intros.
+    rewrite Bleb_correct_full, B2R_Babs, is_finite_Babs, B2R_Bminus, is_nan_Babs, Bsign_Babs, B2R_Bdiv.
+    admit. (* XXX FIXME TODO rounding error *)  }
   set (m := acc_fn _ _).
   set (m' := m).
   assert (m' = raw_get m) by (clearbody m; reflexivity).
@@ -151,27 +181,367 @@ Proof.
   cbv beta iota delta [HookedTransformer.HookedTransformer.unembed HookedTransformer.unembed] in *; let_bind_subst_shape ().
   cbv beta iota delta [Unembed.forward] in *; let_bind_subst_shape ().
   cbv beta iota delta [all_tokens] in true_maximum; let_bind_subst_shape ().
-  set (all_toks_c := PArray.checkpoint _) in (value of true_maximum).
-  do 1 lazymatch goal with
-  | [ H := PArray.checkpoint _ |- _ ]
-    => setoid_rewrite (Tensor.eqf) Tensor.PArray.checkpoint_correct_eqf in (value of H)
-    end.
+  cbv beta iota delta [Model.all_tokens] in *; let_bind_subst_shape ().
   cbv beta iota delta [HookedTransformer.HookedTransformer.ln_final HookedTransformer.ln_final] in *; let_bind_subst_shape ().
   cbv beta iota delta [cfg.normalization_type TransformerBlock.ln1] in *; let_bind_subst_shape ().
   cbv beta iota delta [Attention.pattern Attention.masked_attn_scores Attention.apply_causal_mask Attention.attn_scores] in *; let_bind_subst_shape ().
   cbv beta iota delta [Attention.v Attention.q Attention.k] in *; let_bind_subst_shape ().
   cbv beta iota delta [Attention.einsum_input TransformerBlock.add_head_dimension TransformerBlock.value_input TransformerBlock.query_input TransformerBlock.key_input] in *; let_bind_subst_shape ().
   cbv beta iota delta [softmax_dim_m1] in *; let_bind_subst_shape ().
+  cbv beta iota delta [HookedTransformer.Attention.masked_attn_scores Attention.apply_causal_mask HookedTransformer.Attention.attn_scores] in *; let_bind_subst_shape ().
+  cbv beta iota delta [Attention.q Attention.k Attention.v] in *; let_bind_subst_shape ().
+  cbv beta iota delta [Attention.einsum_input] in *; let_bind_subst_shape ().
+  cbv beta iota delta [HookedTransformer.HookedTransformer.resid_postembed HookedTransformer.HookedTransformer.embed HookedTransformer.HookedTransformer.pos_embed HookedTransformer.Embed.forward HookedTransformer.PosEmbed.forward] in *; let_bind_subst_shape ().
 
+  cbv beta iota in *.
 
   cbv beta iota delta [of_bool map map2] in res.
   move true_maximum at bottom.
-  move all_toks_c at bottom.
-  move all_toks at bottom.
   cbv beta iota delta [reduce_axis_m1 reduce_axis_m1' reshape_snoc_split RawIndex.curry_radd RawIndex.combine_radd map RawIndex] in true_maximum.
   cbv beta iota delta [Reduction.max max has_default_max_leb leb] in true_maximum.
-  cbv -[PrimInt63.leb all_toks_c] in true_maximum.
+  rename all_tokens1 into all_tokens.
+  cbv -[PrimInt63.leb all_tokens] in true_maximum.
   move out at bottom.
+  cbv beta iota delta [HookedTransformer.Unembed.forward] in *.
+  cbv [map' map2' reshape_app_combine reshape_app_combine' RawIndex.uncurry_radd map reshape_app_split reshape_app_split' RawIndex.curry_radd map2 raw_get get reduce_axis_m1 reduce_axis_m1' map RawIndex.split_radd RawIndex.combine_radd RawIndex.snoc RawIndex.nil reshape_snoc_split reshape_snoc_combine map' broadcast broadcast' repeat' repeat Nat.radd Shape.nil] in *.
+  pose (fun i => res (tt, i)) as res'.
+  set (me := mean).
+  replace (me res tt) with (me (fun i => res' (RawIndex.tl i)) tt); subst me.
+  2: { subst res'; cbv [mean]; set (k:=Reduction.mean); clearbody res k; clear.
+       cbv -[of_Z to_Z Z.modulo Z.opp Z.mul]; reflexivity. }
+  subst res.
+  cbv beta in *.
+  Ltac strip_one_tt H :=
+    let Hv := (eval cbv delta [H] in H) in
+    lazymatch Hv with
+    | context[?f (tt, _)]
+      => lazymatch Hv with
+         | context C[f]
+           => let f' := fresh f in
+              rename f into f';
+              pose (fun i => f' (tt, i)) as f;
+              let T := type of f' in
+              let T := lazymatch (eval hnf in T) with ?T -> _ => T end in
+              let C := context C[fun i : T => f (snd i)] in
+              change C in (value of H); cbv [f'] in f; clear f'; cbn [snd] in H, f
+         end
+    end.
+  Ltac strip_two_tt H :=
+    let Hv := (eval cbv delta [H] in H) in
+    lazymatch Hv with
+    | context[?f ((tt, _), _)]
+      => let f' := fresh f in
+         rename f into f';
+         let Hv := (eval cbv delta [H] in H) in
+         pose (fun i j => f' ((tt, i), j)) as f;
+         let T := type of f' in
+         let T := lazymatch (eval hnf in T) with ?T -> _ => T end in
+         cbv [f'] in f;
+         repeat lazymatch (eval cbv delta [H] in H) with
+           | context C[f']
+             => let C := context C[fun i : T => f (snd (fst i)) (snd i)] in
+                progress change C in (value of H); cbn [fst snd] in H
+           end;
+         clear f'
+    end.
+  Ltac strip_three_tt H :=
+    let Hv := (eval cbv delta [H] in H) in
+    match Hv with
+    | context[?f (((tt, _), _), _)]
+      => let f' := fresh f in
+         rename f into f';
+         let Hv := (eval cbv delta [H] in H) in
+         pose (fun i j k => f' (((tt, i), j), k)) as f;
+         let T := type of f' in
+         let T := lazymatch (eval hnf in T) with ?T -> _ => T end in
+         cbv [f'] in f;
+         lazymatch Hv with
+         | context C[f']
+           => let C := context C[fun i : T => f (snd (fst (fst i))) (snd (fst i)) (snd i)] in
+              progress change C in (value of H); cbn [fst snd] in H
+         end;
+         clear f'
+    end.
+  Ltac strip_three_tt' H :=
+    let Hv := (eval cbv delta [H] in H) in
+    match Hv with
+    | context[?f (((tt, _), _), _)]
+      => let f' := fresh f in
+         rename f into f';
+         let Hv := (eval cbv delta [H] in H) in
+         pose (fun i j k => f' (((tt, i), j), k)) as f;
+         let T := type of f' in
+         let T := lazymatch (eval hnf in T) with ?T -> _ => T end in
+         cbv [f'] in f;
+         idtac f;
+         repeat match goal with
+           | [ H' := context C[f'] |- _ ]
+             => let body := (eval cbv delta [H'] in H') in
+                lazymatch body with context[f' (((tt, _), _), _)] => idtac end;
+                let C := context C[fun i : T => f (snd (fst (fst i))) (snd (fst i)) (snd i)] in
+                progress change C in (value of H'); cbn [fst snd] in H'
+           end;
+         clear f'
+    end.
+  Ltac strip_two_tt' H :=
+    let Hv := (eval cbv delta [H] in H) in
+    match Hv with
+    | context[?f ((tt, _), _)]
+      => let f' := fresh f in
+         rename f into f';
+         let Hv := (eval cbv delta [H] in H) in
+         pose (fun i j => f' ((tt, i), j)) as f;
+         let T := type of f' in
+         let T := lazymatch (eval hnf in T) with ?T -> _ => T end in
+         cbv [f'] in f;
+         idtac f;
+         repeat match goal with
+           | [ H' := context C[f'] |- _ ]
+             => let body := (eval cbv delta [H'] in H') in
+                lazymatch body with context[f' ((tt, _), _)] => idtac end;
+                let C := context C[fun i : T => f (snd (fst i)) (snd i)] in
+                progress change C in (value of H'); cbn [fst snd] in H'
+           end;
+         clear f'
+    end.
+  Ltac strip_one_tt' H :=
+    let Hv := (eval cbv delta [H] in H) in
+    match Hv with
+    | context[?f (tt, _)]
+      => let f' := fresh f in
+         rename f into f';
+         let Hv := (eval cbv delta [H] in H) in
+         pose (fun i => f' (tt, i)) as f;
+         let T := type of f' in
+         let T := lazymatch (eval hnf in T) with ?T -> _ => T end in
+         cbv [f'] in f;
+         idtac f;
+         repeat match goal with
+           | [ H' := context C[f'] |- _ ]
+             => let body := (eval cbv delta [H'] in H') in
+                lazymatch body with context[f' (tt, _)] => idtac end;
+                let C := context C[fun i : T => f (snd i)] in
+                progress change C in (value of H'); cbn [fst snd] in H'
+           end;
+         clear f'
+    end.
+  Ltac move_int_const_early_2 H :=
+    let Hv := (eval cbv delta [H] in H) in
+    match Hv with
+    | context[?f _ ?x]
+      => is_uint63 x;
+         let f' := fresh f in
+         rename f into f';
+         pose (fun a b => f' b a) as f;
+         repeat match goal with
+           | [ H' := context[f'] |- _ ]
+             => assert_fails constr_eq H' f;
+                change f' with (fun a b => f b a) in H'
+           end;
+         cbv [f'] in f; clear f'; cbv beta in *
+    end.
+  Ltac strip_const H :=
+    let Hv := (eval cbv delta [H] in H) in
+    match Hv with
+    | context[?f ?x]
+      => is_uint63 x; is_var f;
+         let f' := fresh f in
+         rename f into f';
+         set (f := f' x) in *;
+         cbv [f'] in f; clear f'
+    end.
+  Ltac strip_four_tt H :=
+    let Hv := (eval cbv delta [H] in H) in
+    match Hv with
+    | context[?f ((((tt, _), _), _), _)]
+      => let f' := fresh f in
+         rename f into f';
+         let Hv := (eval cbv delta [H] in H) in
+         pose (fun i j k l => f' ((((tt, i), j), k), l)) as f;
+         let T := type of f' in
+         let T := lazymatch (eval hnf in T) with ?T -> _ => T end in
+         cbv [f'] in f;
+         lazymatch Hv with
+         | context C[f']
+           => let C := context C[fun i : T => f (snd (fst (fst (fst i)))) (snd (fst (fst i))) (snd (fst i)) (snd i)] in
+              progress change C in (value of H); cbn [fst snd] in H
+         end;
+         clear f'
+    end.
+  Ltac strip_four_tt' H :=
+    let Hv := (eval cbv delta [H] in H) in
+    match Hv with
+    | context[?f ((((tt, _), _), _), _)]
+      => let f' := fresh f in
+         rename f into f';
+         let Hv := (eval cbv delta [H] in H) in
+         pose (fun i j k l => f' ((((tt, i), j), k), l)) as f;
+         let T := type of f' in
+         let T := lazymatch (eval hnf in T) with ?T -> _ => T end in
+         cbv [f'] in f;
+         repeat match goal with
+           | [ H' := context C[f'] |- _ ]
+             => idtac H';
+                let C := context C[fun i : T => f (snd (fst (fst (fst i)))) (snd (fst (fst i))) (snd (fst i)) (snd i)] in
+                progress change C in (value of H'); cbn [fst snd] in H'
+           end;
+         clear f'
+    end.
+  Ltac move_int_const_early_3 H :=
+    let Hv := (eval cbv delta [H] in H) in
+    match Hv with
+    | context[?f _ _ ?x]
+      => is_uint63 x;
+         let f' := fresh f in
+         rename f into f';
+         pose (fun c a b => f' a b c) as f;
+         change f' with (fun a b c => f c a b) in H;
+         cbv [f'] in f; clear f'; cbv beta in *
+    end.
+  repeat match goal with H : _ |- _ => strip_one_tt H end.
+  move all_tokens at bottom.
+  repeat match goal with H : _ |- _ => strip_two_tt H end.
+  cbv -[logits0] in pred_logits.
+  subst logits0; cbv beta in *.
+  cbv [get raw_get Classes.add tensor_add map2 R_has_add] in pred_logits.
+  repeat match goal with H : _ |- _ => strip_three_tt H end.
+  cbv [tensor_add Classes.add Classes.div tensor_div_by map2 R_has_add R_has_div] in *.
+  subst residual0.
+  cbv beta in *.
+  repeat match goal with H : _ |- _ => strip_three_tt H end.
+  move attn_out at bottom.
+  move_int_const_early_2 pred_logits.
+  strip_const pred_logits.
+  move_int_const_early_2 attn_out.
+  strip_const attn_out.
+  subst attn_out.
+  subst out.
+  cbv beta in *.
+  repeat match goal with H : _ |- _ => strip_four_tt' H end.
+  repeat match goal with H : _ |- _ => strip_two_tt' H end.
+  repeat match goal with H : _ |- _ => strip_one_tt' H end.
+  cbv [RawIndex.hd RawIndex.nil Shape.nil] in *.
+  cbn [fst snd] in *.
+
+  move_int_const_early_3 pred_logits.
+  strip_const pred_logits.
+  move_int_const_early_3 pattern.
+  strip_const pattern.
+  subst sum_exp_t.
+  move_int_const_early_3 pattern.
+  strip_const pattern.
+  cbv [Nat.radd] in *.
+  move qk at bottom.
+  subst qk.
+  cbv [where_] in *.
+  cbv [map3] in *.
+  repeat match goal with H : _ |- _ => strip_three_tt' H end.
+  move_int_const_early_2 exp_t.
+  vm_compute in mask.
+  cbv [SliceIndex.slice SliceIndex.SliceIndexType.slice Slice.invert_index RawIndex.tl RawIndex.hd SliceIndex.transfer_shape RawIndex.snoc RawIndex.nil] in *.
+  cbn [fst snd] in *.
+  strip_two_tt exp_t.
+  strip_const exp_t.
+  set (s2 := Reduction.sum 0 2 1) in *.
+  set (s1 := Reduction.sum 0 1 1) in *.
+  cbv -[Rplus] in s2, s1.
+  subst s1 s2; cbv beta in *.
+  move_int_const_early_2 pred_logits.
+  move_int_const_early_2 pred_logits.
+  strip_const pred_logits.
+  move_int_const_early_3 pred_logits.
+  strip_const pred_logits.
+  move_int_const_early_2 pred_logits.
+  move_int_const_early_2 pattern.
+  strip_const pattern.
+  move_int_const_early_2 pattern.
+  move residual at bottom.
+  cbv [Classes.exp R_has_exp] in *.
+  cbv [FancyIndex.slice reshape_app_combine' FancyIndex.slice_ RawIndex.uncurry_radd RawIndex.split_radd map_dep SliceIndex.slice Shape.snoc Shape.nil map2 SliceIndex.SliceIndexType.slice repeat' FancyIndex.FancyIndexType.broadcast map Shape.tl Shape.hd adjust_index_for Slice.invert_index RawIndex.tl FancyIndex.broadcast] in *.
+  cbn [fst snd] in *.
+  repeat match goal with H : _ |- _ => strip_two_tt' H end.
+  move_int_const_early_2 true_maximum.
+  cbv [cartesian_exp cartesian_nprod Shape.Tuple.init] in *.
+  cbv [Uint63.coer_int_N'] in *.
+  vm_compute of_Z in all_tokens.
+  vm_compute Z.to_N in all_tokens.
+  vm_compute N.to_nat in all_tokens.
+  cbv [reshape_all ntupleify Shape.Tuple.init' ntupleify' Shape.repeat RawIndex.unreshape RawIndex.unreshape' Shape.Tuple.nth_default Shape.Tuple.to_list Shape.Tuple.to_list' RawIndex.snoc RawIndex.nil RawIndex.hd RawIndex.tl RawIndex.item Shape.tl Shape.hd Shape.snoc Shape.nil get raw_get] in all_tokens.
+  cbn [fst snd] in *.
+  repeat (set (k := to_Z _) in (value of all_tokens) at 1; vm_compute in k; subst k).
+  cbv [Classes.int_div Z_has_int_div] in *.
+  strip_one_tt' all_tokens.
+  cbv [arange] in all_toks0.
+  cbv [RawIndex.item RawIndex.tl] in *.
+  cbn [fst snd] in *.
+  subst all_toks0.
+  cbv beta in *.
+  vm_compute in mask.
+  move true_maximum at bottom.
+  subst pos_embed0; cbv beta in *.
+  Ltac change01 f :=
+    let f' := fresh f in
+    rename f into f';
+    pose (fun i => if (i =? 0)%uint63 then f' 0%uint63 else f' 1%uint63) as f;
+    repeat match goal with
+      | [ H := context[f'] |- _ ]
+        => assert_fails constr_eq H f;
+           progress (change (f' 0%uint63) with (f 0%uint63) in (value of H);
+                     change (f' 1%uint63) with (f 1%uint63) in (value of H))
+      end;
+    match goal with
+    | [ H := context[f'] |- _ ]
+      => assert_fails constr_eq H f;
+         fail 1 H
+    | _ => idtac
+    end;
+    subst f'; cbv beta in f.
+  change01 pattern.
+  change01 exp_t.
+  change01 v.
+  change01 residual.
+  move_int_const_early_2 residual.
+  change01 embed0.
+  change01 all_tokens.
+  change01 mask.
+  vm_compute in mask.
+  vm_compute Z.to_nat in all_tokens.
+  cbv [nth_default nth_error] in all_tokens.
+  subst embed0; cbv beta iota in *.
+  cbv [Uint63.eqb] in *.
+  HERE
+    (*
+  move residual at bottom.
+  change01 residual.
+         progress (change (f' 0%uint63) with (f 0%uint63) in (value of H);
+  rename
+  match goal with
+  | [ H := context[?f 0%uint63] |- _ ]
+    => is_var f;
+       lazymatch goal with
+       | [ f' := fun x => if (x =? 0)%uint63 then f else _ ] =>
+  vm_compute to_Z in all_tokens.
+
+  cbv -[to_Z Z.to_nat all_toks0] in all_tokens.
+  strip_two_tt'
+  Set Printing All.
+  move_int_const_early_3 pattern.
+
+  move_int_const_early_3 pred_logits.
+
+  unfold Reduction.sum in (va
+  subst mask3; cbv beta iota in *.
+  cbv
+  cbv [ones tril] in *.
+  cbv [mask]
+  strip_three_tt' exp_t.
+
+
+  strip_three_tt pred_logits.
+  subst logits0.
+  cbv beta iota delta [map' reshape_app_combine reshape_app_combine' RawIndex.uncurry_radd map] in *.
+
+
   (*
   cbv -[map2' Reduction.sum L0_attn_W_O
           Instances.binary_float_has_add prec emax Hprec Hmax Instances.binary_float_has_mul Classes.add Classes.mul Classes.zero Classes.coer Instances.coer_float_binary_float
@@ -245,55 +615,7 @@ Proof.
   vm_compute in k; subst k.
 
   cbv [SliceIndex.slice SliceIndex.SliceIndexType.slice Shape.tl Shape.hd Shape.snoc Shape.nil Slice.invert_index RawIndex.snoc RawIndex.hd adjust_index_for RawIndex.tl RawIndex Nat.radd PrimInt63.mod RawIndex.nil map raw_get map' reshape_app_combine reshape_app_combine' RawIndex.uncurry_radd RawIndex.split_radd reshape_app_split reshape_app_split' RawIndex.curry_radd RawIndex.combine_radd broadcast broadcast' repeat' reduce_axis_m1 reduce_axis_m1' map reshape_snoc_split map2'] in *; cbn [fst snd] in *.
-  Ltac strip_one_tt H :=
-    let Hv := (eval cbv delta [H] in H) in
-    lazymatch Hv with
-    | context[?f (tt, _)]
-      => lazymatch Hv with
-         | context C[f]
-           => let f' := fresh f in
-              rename f into f';
-              pose (fun i => f' (tt, i)) as f;
-              let T := type of f' in
-              let T := lazymatch (eval hnf in T) with ?T -> _ => T end in
-              let C := context C[fun i : T => f (snd i)] in
-              change C in (value of H); cbv [f'] in f; clear f'; cbn [snd] in H, f
-         end
-    end.
-  Ltac strip_two_tt H :=
-    let Hv := (eval cbv delta [H] in H) in
-    lazymatch Hv with
-    | context[?f ((tt, _), _)]
-      => lazymatch Hv with
-         | context C[f]
-           => let f' := fresh f in
-              rename f into f';
-              pose (fun i j => f' ((tt, i), j)) as f;
-              let T := type of f' in
-              let T := lazymatch (eval hnf in T) with ?T -> _ => T end in
-              let C := context C[fun i : T => f (snd (fst i)) (snd i)] in
-              change C in (value of H); cbv [f'] in f; clear f'; cbn [fst snd] in H, f
-         end
-    end.
   strip_two_tt pred_tokens.
-  Ltac strip_three_tt H :=
-    let Hv := (eval cbv delta [H] in H) in
-    match Hv with
-    | context[?f (((tt, _), _), _)]
-      => let f' := fresh f in
-         rename f into f';
-         let Hv := (eval cbv delta [H] in H) in
-         pose (fun i j k => f' (((tt, i), j), k)) as f;
-         let T := type of f' in
-         let T := lazymatch (eval hnf in T) with ?T -> _ => T end in
-         cbv [f'] in f;
-         lazymatch Hv with
-         | context C[f']
-           => let C := context C[fun i : T => f (snd (fst (fst i))) (snd (fst i)) (snd i)] in
-              progress change C in (value of H); cbn [fst snd] in H
-         end;
-         clear f'
-    end.
   strip_three_tt pred_logits.
   subst logits; cbv iota beta in pred_logits.
   cbv [add] in pred_logits.
@@ -306,32 +628,6 @@ Proof.
   change (@Classes.div _ _ _ (@tensor_div_by ?r ?sA ?sB ?A ?B ?C ?a)) with (@tensor_div_by r sA sB A B C a) in *.
   cbv [tensor_add tensor_div_by map2] in *.
   From NeuralNetInterp.Util.Tactics Require Import IsUint63.
-  Ltac move_int_const_early_2 H :=
-    let Hv := (eval cbv delta [H] in H) in
-    match Hv with
-    | context[?f _ ?x]
-      => is_uint63 x;
-         let f' := fresh f in
-         rename f into f';
-         pose (fun a b => f' b a) as f;
-         repeat match goal with
-           | [ H' := context[f'] |- _ ]
-             => assert_fails constr_eq H' f;
-                change f' with (fun a b => f b a) in H'
-           end;
-         cbv [f'] in f; clear f'; cbv beta in *
-    end.
-  move_int_const_early_2 pred_logits.
-  Ltac strip_const H :=
-    let Hv := (eval cbv delta [H] in H) in
-    match Hv with
-    | context[?f ?x]
-      => is_uint63 x; is_var f;
-         let f' := fresh f in
-         rename f into f';
-         set (f := f' x) in *;
-         cbv [f'] in f; clear f'
-    end.
   strip_const pred_logits.
   move residual at bottom.
   cbv [map2'] in *.
@@ -341,56 +637,6 @@ Proof.
   strip_three_tt attn_out.
   move_int_const_early_2 attn_out.
   strip_const attn_out.
-  Ltac strip_four_tt H :=
-    let Hv := (eval cbv delta [H] in H) in
-    match Hv with
-    | context[?f ((((tt, _), _), _), _)]
-      => let f' := fresh f in
-         rename f into f';
-         let Hv := (eval cbv delta [H] in H) in
-         pose (fun i j k l => f' ((((tt, i), j), k), l)) as f;
-         let T := type of f' in
-         let T := lazymatch (eval hnf in T) with ?T -> _ => T end in
-         cbv [f'] in f;
-         lazymatch Hv with
-         | context C[f']
-           => let C := context C[fun i : T => f (snd (fst (fst (fst i)))) (snd (fst (fst i))) (snd (fst i)) (snd i)] in
-              progress change C in (value of H); cbn [fst snd] in H
-         end;
-         clear f'
-    end.
-  Ltac strip_four_tt' H :=
-    let Hv := (eval cbv delta [H] in H) in
-    match Hv with
-    | context[?f ((((tt, _), _), _), _)]
-      => let f' := fresh f in
-         rename f into f';
-         let Hv := (eval cbv delta [H] in H) in
-         pose (fun i j k l => f' ((((tt, i), j), k), l)) as f;
-         let T := type of f' in
-         let T := lazymatch (eval hnf in T) with ?T -> _ => T end in
-         cbv [f'] in f;
-         repeat match goal with
-           | [ H' := context C[f'] |- _ ]
-             => idtac H';
-                let C := context C[fun i : T => f (snd (fst (fst (fst i)))) (snd (fst (fst i))) (snd (fst i)) (snd i)] in
-                progress change C in (value of H'); cbn [fst snd] in H'
-           end;
-         clear f'
-    end.
-  strip_four_tt' out.
-  strip_four_tt' out.
-  Ltac move_int_const_early_3 H :=
-    let Hv := (eval cbv delta [H] in H) in
-    match Hv with
-    | context[?f _ _ ?x]
-      => is_uint63 x;
-         let f' := fresh f in
-         rename f into f';
-         pose (fun c a b => f' a b c) as f;
-         change f' with (fun a b c => f c a b) in H;
-         cbv [f'] in f; clear f'; cbv beta in *
-    end.
   move_int_const_early_3 out.
   strip_const out.
   move_int_const_early_3 out.
@@ -429,27 +675,6 @@ Proof.
   subst attn_out.
   subst residual1.
   cbv beta in *.
-  Ltac strip_three_tt' H :=
-    let Hv := (eval cbv delta [H] in H) in
-    match Hv with
-    | context[?f (((tt, _), _), _)]
-      => let f' := fresh f in
-         rename f into f';
-         let Hv := (eval cbv delta [H] in H) in
-         pose (fun i j k => f' (((tt, i), j), k)) as f;
-         let T := type of f' in
-         let T := lazymatch (eval hnf in T) with ?T -> _ => T end in
-         cbv [f'] in f;
-         idtac f;
-         repeat match goal with
-           | [ H' := context C[f'] |- _ ]
-             => let body := (eval cbv delta [H'] in H') in
-                lazymatch body with context[f' (((tt, _), _), _)] => idtac end;
-                let C := context C[fun i : T => f (snd (fst (fst i))) (snd (fst i)) (snd i)] in
-                progress change C in (value of H'); cbn [fst snd] in H'
-           end;
-         clear f'
-    end.
   move v1 at bottom.
   strip_three_tt' pred_logits.
   move_int_const_early_2 pred_logits.
@@ -501,5 +726,5 @@ Proof.
     lazymatch (eval cbv [H] in H) with
     | fun i : RawIndexType
 *)
-*)
+*)*)
 Abort.

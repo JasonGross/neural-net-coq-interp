@@ -5,14 +5,17 @@ From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
 From NeuralNetInterp.Util Require Import Default Arith.Classes Arith.Instances Arith.Flocq Arith.Flocq.Instances Arith.Flocq.Definitions.
 From NeuralNetInterp.Util.Tactics Require Import Head.
 From NeuralNetInterp.Torch Require Import Tensor Tensor.Instances.
+From NeuralNetInterp.TransformerLens Require Import HookedTransformer.
+From NeuralNetInterp.TransformerLens.HookedTransformer Require Import Instances Module.Instances Module.Flocqify.
 From NeuralNetInterp.MaxOfTwoNumbersSimpler Require Import Parameters Model Model.Instances.
 Import Dependent.ProperNotations.
 Import Arith.Instances.Truncating Arith.Flocq.Instances.Truncating.
 
 Module Model.
   Export Model.Instances.Model.
-  Notation R x y := (Prim2B x = y).
-  Notation Rf := (fun x y => R x y).
+  Include ModelFlocqify cfg Model.Model Instances.Model.
+  Include HookedTransformer.
+
   Section with_batch.
     Context {r} {batch : Shape r} {pos}
       (s := (batch ::' pos)%shape)
@@ -60,12 +63,6 @@ Module Model.
       repeat autorewrite with prim2b;
       try reflexivity.
 
-    Lemma logits_equiv (tokens : tensor s IndexType)
-      : Tensor.eqfR Rf
-          (logits (use_checkpoint:=use_checkpoint1) tokens)
-          (logits (use_checkpoint:=use_checkpoint2) tokens).
-    Proof using Type. apply logits_Proper_dep; t. Qed.
-
     Lemma masked_attn_scores_equiv (tokens : tensor s IndexType)
       : Tensor.eqfR Rf
           (masked_attn_scores (use_checkpoint:=use_checkpoint1) tokens)
@@ -79,19 +76,21 @@ Module Model.
     Proof using Type. apply attn_pattern_Proper_dep; t. Qed.
 
     Lemma loss_fn_equiv (logits logits' : tensor (s ::' cfg.d_vocab_out) _)
-      (tokens : tensor s IndexType)
+      (tokens tokens' : tensor s IndexType)
       : Tensor.eqfR Rf logits logits'
+        -> Tensor.eqf tokens tokens'
         -> Tensor.eqfR Rf
              (loss_fn (use_checkpoint:=use_checkpoint1) logits tokens)
-             (loss_fn (use_checkpoint:=use_checkpoint2) logits' tokens).
-    Proof using Type. intro Hl; apply loss_fn_Proper_dep; t. Qed.
+             (loss_fn (use_checkpoint:=use_checkpoint2) logits' tokens').
+    Proof using Type. intros; apply loss_fn_Proper_dep; t. Qed.
 
     Lemma acc_fn_equiv (logits logits' : tensor (s ::' cfg.d_vocab_out) _)
-      (tokens : tensor s IndexType)
+      (tokens tokens' : tensor s IndexType)
       : Tensor.eqfR Rf logits logits'
+        -> Tensor.eqf tokens tokens'
         -> Tensor.eqfR Rf
              (acc_fn (use_checkpoint:=use_checkpoint1) logits tokens)
-             (acc_fn (use_checkpoint:=use_checkpoint2) logits' tokens).
-    Proof using Type. intro Hl; apply acc_fn_Proper_dep; t. Qed.
+             (acc_fn (use_checkpoint:=use_checkpoint2) logits' tokens').
+    Proof using Type. intros; apply acc_fn_Proper_dep; t. Qed.
   End with_batch.
 End Model.

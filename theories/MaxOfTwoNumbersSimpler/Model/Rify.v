@@ -22,7 +22,7 @@ Module Model.
     (acc1 := acc_fn (use_checkpoint:=use_checkpoint1) logits1 tokens1)
     (acc2 := acc_fn (use_checkpoint:=use_checkpoint2) logits2 tokens2)
     : Tensor.eqfR
-        (fun (x:float) (y:R) => (abs ((x:R) - y) <=? (total_rounding_error:R)) = true)
+        (fun (x:binary_float prec emax) (y:R) => (abs ((x:R) - y) <=? (total_rounding_error:R)) = true)
         acc1 acc2.
   Proof.
   Admitted. (* XXX FIXME *)
