@@ -88,4 +88,17 @@ Module Reduction.
  *)
   Abort.
 
+  Definition in_bounds (start stop step i : int) : bool
+    := ((start <=? i) && ((i =? start) || (i <? stop)) && (((i - start) mod step) =? 0)).
+
+  Lemma argmax_spec {A} {ltbA : has_ltb A} {start stop step f v}
+    : @argmax A ltbA start stop step f = v
+      <-> (in_bounds start stop step v = true
+           /\ forall j,
+              in_bounds start stop step j = true
+              -> (((f j <? f v) = true)
+                  \/ (f j = f v /\ (v <=? j) = true))).
+  Proof.
+    (* XXX FIXME *)
+  Admitted.
 End Reduction.
