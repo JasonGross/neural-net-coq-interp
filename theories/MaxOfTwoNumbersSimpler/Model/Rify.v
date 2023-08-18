@@ -25,5 +25,8 @@ Module Model.
         (fun (x:binary_float prec emax) (y:R) => (abs ((x:R) - y) <=? (total_rounding_error:R)) = true)
         acc1 acc2.
   Proof.
+    intro i.
+    repeat match goal with H := _ |- _ => subst H end.
+    cbv [Classes.abs Classes.sub Classes.leb R_has_abs R_has_sub R_has_leb].
   Admitted. (* XXX FIXME *)
 End Model.

@@ -1,4 +1,5 @@
 From Coq Require Import Reals List Floats PArray Sint63 Uint63 Arith PArith NArith ZArith QArith.
+From Flocq.Core Require Import Raux.
 From NeuralNetInterp.Util.Arith Require Import Classes FloatArith.Definitions QArith ZArith Reals.Definitions.
 Import ListNotations.
 Set Implicit Arguments.
@@ -253,8 +254,8 @@ Module Float.
 End Float.
 
 #[local] Open Scope R_scope.
-#[export] Instance R_has_leb : has_leb R := Rleb.
-#[export] Instance R_has_ltb : has_ltb R := Rltb.
+#[export] Instance R_has_leb : has_leb R := Rle_bool.
+#[export] Instance R_has_ltb : has_ltb R := Rlt_bool.
 #[export] Instance R_has_opp : has_opp R := Ropp.
 #[export] Instance R_has_abs : has_abs R := Rabs.
 #[export] Instance R_has_sqrt : has_sqrt R
