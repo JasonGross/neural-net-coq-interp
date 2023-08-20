@@ -118,6 +118,7 @@ Local Open Scope Z_scope.
 #[export] Instance Z_has_sub : has_sub Z := Z.sub.
 #[export] Instance Z_has_mul : has_mul Z := Z.mul.
 #[export] Instance Z_has_int_div : has_int_div Z := Z.div.
+#[export] Instance Z_has_abs : has_abs Z := Z.abs.
 #[export] Instance Z_has_mod : has_mod Z := Z.modulo.
 #[export] Instance Z_has_max : has_max Z := Z.max.
 #[export] Instance Z_has_min : has_min Z := Z.min.

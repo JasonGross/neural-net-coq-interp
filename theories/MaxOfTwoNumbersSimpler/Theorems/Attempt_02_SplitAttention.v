@@ -1,8 +1,8 @@
-From Coq Require Import ZifyUint63 Qreals Lqa Lra Reals Floats Sint63 Uint63 QArith Lia List PArray Derive.
+From Coq Require Import Zify PreOmega ZifyUint63 Qreals Lqa Lra Reals Floats Sint63 Uint63 QArith Lia List PArray Derive.
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
-From NeuralNetInterp.Util.Tactics Require Import IsFloat IsUint63.
-From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Wf_Uint63.Instances SolveProperEqRel Default.
-From NeuralNetInterp.Util.Arith Require Import Classes Instances FloatArith.Definitions Reals.Definitions.
+From NeuralNetInterp.Util.Tactics Require Import IsFloat IsUint63 BreakMatch DestructHead.
+From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Wf_Uint63.Instances Wf_Uint63.Proofs SolveProperEqRel Default.
+From NeuralNetInterp.Util.Arith Require Import Classes Instances Classes.Laws Instances.Laws FloatArith.Definitions Reals.Definitions.
 From NeuralNetInterp.Torch Require Import Tensor.Instances Slicing.Instances.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Instances.
 From NeuralNetInterp.MaxOfTwoNumbersSimpler Require Import Parameters Model Heuristics TheoremStatement Model.Instances Model.Flocqify Model.Rify.
@@ -120,6 +120,8 @@ From Interval Require Import Tactic_float.
 From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
 From Flocq Require Import Raux.
 From NeuralNetInterp.Util.Arith Require Import Flocq Flocq.Instances Flocq.Notations.
+
+Ltac zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
 
 Theorem good_accuracy : TheoremStatement.Accuracy.best (* (abs (real_accuracy - expected_accuracy) <? error)%float = true *).
 Proof.
@@ -624,14 +626,115 @@ Proof.
        set (all_tokens1 := y) in *
   end.
   assert (Hbounds : ((0 <=? all_tokens0) && (all_tokens0 <? 64) && (0 <=? all_tokens1) && (all_tokens1 <? 64))%uint63 = true).
-  { clear; subst all_tokens0 all_tokens1. nia. }
+  { clear; subst all_tokens0 all_tokens1.
+    zify.
+    Print Ltac zify.
+    Print Ltac zify_to_euclidean_division_equations.
+    Print Ltac zify_internal_to_euclidean_division_equations.
+    Z.to_euclidean_division_equations.
+    nia. }
   clearbody all_tokens0 all_tokens1.
   rename all_tokens0 into x, all_tokens1 into y.
   subst all_tokens; cbv beta in *.
   change (0 =? 0)%uint63 with true in *;
     change (1 =? 0)%uint63 with false in *;
     cbv beta iota in *.
-  (* HERE
+  subst pred_tokens.
+
+  apply Reduction.argmax_spec.
+  split.
+  { clear -Hbounds; cbv in *; break_innermost_match; break_innermost_match_hyps.
+    all: repeat match goal with H : _ |- _ => apply eqb_correct in H end.
+    all: subst.
+    all: cbv in *.
+    all: try reflexivity.
+    all: lia. }
+  intros j Hj.
+
+  subst v; cbv beta in *.
+  change (0 =? 0)%uint63 with true in *;
+    change (1 =? 0)%uint63 with false in *;
+    cbv beta iota in *.
+
+  let pl2 := open_constr:(_) in
+  assert (Hl : forall i, pred_logits i = pl2 i).
+  { subst pred_logits; intro i'; instantiate (1:=ltac:(intro)); cbv beta.
+    etransitivity.
+    { cbv [Classes.mul R_has_mul].
+      change R0 with 0%R.
+      repeat match goal with
+             | [ |- context[Rmult 0%R ?x] ] => rewrite Rmult_0_l
+             | [ |- context[Rmult ?x 0%R] ] => rewrite Rmult_0_r
+             | [ |- context[Rplus 0%R ?x] ] => rewrite Rplus_0_l
+             | [ |- context[Rplus ?x 0%R] ] => rewrite Rplus_0_r
+             | [ |- 0%R = _ ] => reflexivity
+             | [ |- Rplus _ _ = _ ] => apply f_equal2
+             | [ |- context[Reduction.sum ?start ?stop ?step (fun i => Rplus (@?f i) (@?g i))] ]
+               => change Rplus with (Classes.add (A:=R));
+                  change Rmult with (Classes.mul (A:=R));
+                  let lem := constr:(Reduction.sum_distr (R:=@eq R)) in
+                  rewrite lem;
+                  cbv [Classes.add Classes.mul R_has_add R_has_mul]
+             | [ |- Reduction.sum _ _ _ _ = _ ]
+               => eapply Reduction.sum_Proper; intro; instantiate (1:=ltac:(intro)); cbv beta
+             | [ |- Rmult (Rplus _ _) _ = _ ] => rewrite Rmult_plus_distr_r
+             | [ |- Rmult (Reduction.sum _ _ _ _) _ = _ ] => apply f_equal2
+             | [ |- coer _ = _ ] => reflexivity
+             | [ |- Rmult (coer _) (coer _) = _ ] => reflexivity
+             end.
+      all: reflexivity. }
+    change Rplus with (Classes.add (A:=R)).
+    change Rmult with (Classes.mul (A:=R)).
+    let lem := constr:(Reduction.sum_distr (R:=@eq R)) in
+    rewrite !lem.
+    etransitivity.
+    { cbv [Classes.mul Classes.add R_has_mul R_has_add].
+      repeat match goal with
+             | [ |- Rplus (Reduction.sum _ _ _ _) _ = _ ] => apply f_equal2
+             | [ |- Rmult (Reduction.sum _ _ _ _) _ = _ ] => apply f_equal2
+             | [ |- Rplus (coer _) _ = _ ] => apply f_equal2
+             | [ |- Rplus _ (coer _) = _ ] => apply f_equal2
+             | [ |- coer _ = _ ] => reflexivity
+             | [ |- Reduction.sum _ _ _ (fun _ => Rmult (coer _) (coer _)) = _ ] => reflexivity
+             | [ |- Reduction.sum _ _ _ (fun _ => Rmult (?f _ _) (coer _)) = _ ] => is_var f; reflexivity
+             end.
+      etransitivity.
+      { apply Reduction.sum_Proper; instantiate (1:=ltac:(intro)); intro; cbv beta.
+        let lem := constr:(Reduction.sum_distr (R:=@eq R)) in
+        rewrite !lem.
+        cbv [Classes.mul Classes.add R_has_mul R_has_add].
+        repeat match goal with
+               | [ |- Rmult (Rplus _ _) _ = _ ] => rewrite Rmult_plus_distr_r
+               | [ |- Rplus _ _ = _ ] => apply f_equal2
+               | [ |- Rmult _ _ = _ ] => apply f_equal2
+               | [ |- coer _ = _ ] => reflexivity
+               | [ |- Reduction.sum _ _ _ (fun i => @?f i * ?c * @?g i)%R = _ ]
+                 => etransitivity;
+                    [ apply Reduction.sum_Proper; instantiate (1:=ltac:(intro)); intro; cbv beta;
+                      rewrite Rmult_assoc, (Rmult_comm c), <- Rmult_assoc; reflexivity
+                    | change Rmult with (Classes.mul (A:=R));
+                      let lem := constr:(Reduction.mul_sum_distr_r (R:=@eq R)) in
+                      rewrite <- lem; reflexivity ]
+               end. }
+      let lem := constr:(Reduction.sum_distr (R:=@eq R)) in
+      rewrite !lem.
+      cbv [Classes.mul Classes.add R_has_mul R_has_add].
+      etransitivity.
+      { apply f_equal2.
+        all: match goal with
+             | [ |- Reduction.sum _ _ _ (fun i => @?f i * ?c * @?g i)%R = _ ]
+               => etransitivity;
+                  [ apply Reduction.sum_Proper; instantiate (1:=ltac:(intro)); intro; cbv beta;
+                    rewrite Rmult_assoc, (Rmult_comm c), <- Rmult_assoc; reflexivity
+                  | change Rmult with (Classes.mul (A:=R));
+                    let lem := constr:(Reduction.mul_sum_distr_r (R:=@eq R)) in
+                    rewrite <- lem; reflexivity ]
+             end. }
+      reflexivity. }
+    reflexivity. }
+  rewrite !Hl; clear Hl pred_logits.
+
+    (* HERE
   move
 
   match goal with

@@ -73,6 +73,7 @@ theories/Util/Arith/Flocq/Notations.v
 theories/Util/Arith/Flocq/Hints/Core.v
 theories/Util/Arith/Flocq/Hints/Prim2B.v
 theories/Util/Arith/Instances/Laws.v
+theories/Util/Arith/Instances/Zify.v
 theories/Util/Arith/Reals/Definitions.v
 theories/Util/Classes/Morphisms/Dependent.v
 theories/Util/Classes/RelationClasses/Dependent.v

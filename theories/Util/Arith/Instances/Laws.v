@@ -6,7 +6,6 @@ Set Implicit Arguments.
 
 Local Open Scope core_scope.
 
-Local Open Scope bool_scope.
 #[export] Instance bool_add_0_l : LeftId (@eq bool) add 0 := Bool.orb_false_l.
 #[export] Instance bool_add_0_r : RightId (@eq bool) add 0 := Bool.orb_false_r.
 #[export] Instance bool_mul_1_l : LeftId (@eq bool) mul 1 := Bool.andb_true_l.
@@ -20,7 +19,6 @@ Local Open Scope bool_scope.
 #[export] Instance bool_mul_add_distr_l : LeftDistributive (@eq bool) mul add := Bool.andb_orb_distrib_r.
 #[export] Instance bool_mul_add_distr_r : RightDistributive (@eq bool) mul add := Bool.andb_orb_distrib_l.
 
-Local Open Scope nat_scope.
 #[export] Instance nat_add_0_l : LeftId (@eq nat) add 0 := Nat.add_0_l.
 #[export] Instance nat_add_0_r : RightId (@eq nat) add 0 := Nat.add_0_r.
 #[export] Instance nat_mul_1_l : LeftId (@eq nat) mul 1 := Nat.mul_1_l.
@@ -34,7 +32,6 @@ Local Open Scope nat_scope.
 #[export] Instance nat_mul_add_distr_l : LeftDistributive (@eq nat) mul add := Nat.mul_add_distr_l.
 #[export] Instance nat_mul_add_distr_r : RightDistributive (@eq nat) mul add := Nat.mul_add_distr_r.
 
-Local Open Scope N_scope.
 #[export] Instance N_add_0_l : LeftId (@eq N) add 0 := N.add_0_l.
 #[export] Instance N_add_0_r : RightId (@eq N) add 0 := N.add_0_r.
 #[export] Instance N_mul_1_l : LeftId (@eq N) mul 1 := N.mul_1_l.
@@ -48,7 +45,6 @@ Local Open Scope N_scope.
 #[export] Instance N_mul_add_distr_l : LeftDistributive (@eq N) mul add := N.mul_add_distr_l.
 #[export] Instance N_mul_add_distr_r : RightDistributive (@eq N) mul add := N.mul_add_distr_r.
 
-Local Open Scope positive_scope.
 #[export] Instance positive_mul_1_l : LeftId (@eq positive) mul 1 := Pos.mul_1_l.
 #[export] Instance positive_mul_1_r : RightId (@eq positive) mul 1 := Pos.mul_1_r.
 #[export] Instance positive_add_assoc : Associative (@eq positive) add := Pos.add_assoc.
@@ -58,7 +54,6 @@ Local Open Scope positive_scope.
 #[export] Instance positive_mul_add_distr_l : LeftDistributive (@eq positive) mul add := Pos.mul_add_distr_l.
 #[export] Instance positive_mul_add_distr_r : RightDistributive (@eq positive) mul add := Pos.mul_add_distr_r.
 
-Local Open Scope Z_scope.
 #[export] Instance Z_add_0_l : LeftId (@eq Z) add 0 := Z.add_0_l.
 #[export] Instance Z_add_0_r : RightId (@eq Z) add 0 := Z.add_0_r.
 #[export] Instance Z_mul_1_l : LeftId (@eq Z) mul 1 := Z.mul_1_l.
@@ -72,7 +67,6 @@ Local Open Scope Z_scope.
 #[export] Instance Z_mul_add_distr_l : LeftDistributive (@eq Z) mul add := Z.mul_add_distr_l.
 #[export] Instance Z_mul_add_distr_r : RightDistributive (@eq Z) mul add := Z.mul_add_distr_r.
 
-Local Open Scope Q_scope.
 #[export] Instance Q_add_0_l : LeftId Qeq add 0 := Qplus_0_l.
 #[export] Instance Q_add_0_r : RightId Qeq add 0 := Qplus_0_r.
 #[export] Instance Q_mul_1_l : LeftId Qeq mul 1 := Qmult_1_l.
@@ -86,7 +80,6 @@ Local Open Scope Q_scope.
 #[export] Instance Q_mul_add_distr_l : LeftDistributive Qeq mul add := Qmult_plus_distr_r.
 #[export] Instance Q_mul_add_distr_r : RightDistributive Qeq mul add := Qmult_plus_distr_l.
 
-Local Open Scope int63_scope.
 Local Ltac zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
 #[export] Instance int_add_0_l : LeftId (@eq int) add 0 := ltac:(cbv; lia).
 #[export] Instance int_add_0_r : RightId (@eq int) add 0 := ltac:(cbv; lia).
@@ -101,7 +94,6 @@ Local Ltac zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
 #[export] Instance int_mul_add_distr_l : LeftDistributive (@eq int) mul add := ltac:(cbv; lia).
 #[export] Instance int_mul_add_distr_r : RightDistributive (@eq int) mul add := ltac:(cbv; lia).
 
-#[local] Open Scope R_scope.
 #[export] Instance R_add_0_l : LeftId (@eq R) add 0 := Rplus_0_l.
 #[export] Instance R_add_0_r : RightId (@eq R) add 0 := Rplus_0_r.
 #[export] Instance R_mul_1_l : LeftId (@eq R) mul 1 := Rmult_1_l.
