@@ -471,7 +471,10 @@ Module Import Reduction.
   Proof.
     apply @var_ext with (RA:=fun x y => F x = y) (RB:=fun x y => F x = y); eauto; repeat intro; subst; auto.
   Qed.
+
+  #[export] Hint Opaque sum prod max min argmin argmax mean var : rewrite.
 End Reduction.
+Export (hints) Reduction.
 
 Module LoopNotation.
   Include LoopNotationAlises.

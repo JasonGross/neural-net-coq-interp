@@ -412,8 +412,13 @@ Module Reduction.
              => replace (x * 0)%uint63 with 0%uint63 by nia
            | [ H : (?x =? ?y)%uint63 = true |- _ ] => apply eqb_spec in H
            | [ H : (?x + ?y = ?x)%uint63 |- _ ] => assert (y = 0)%uint63 by lia; clear H
+           | [ H : (?x = ?x + ?y)%uint63 |- _ ] => assert (y = 0)%uint63 by lia; clear H
+           | [ H : ?x = 0%uint63 |- _ ] => subst x
+           | [ H : (if ?b then _ else _) = 0%uint63 |- _ ]
+             => destruct b eqn:?
            | _ => lia
            end.
+    all: cbn [N.iter].
   Admitted.
 
   Lemma map_reduce_distr12 {A B R reduce init1 init2 start stop step} {f : int -> B -> A} {F}
@@ -503,18 +508,12 @@ Module Reduction.
       cbv [sum]. rewrite map_reduce_const; reflexivity.
     Qed.
 
-    Lemma sum_const0 [start stop step]
+    Lemma sum_const0 start stop step
       : R (sum start stop step (fun x => 0)) 0.
-    Proof.
+    Proof using R_refl R_trans addA_Proper zeroA_add_l.
       rewrite sum_const.
-      apply N.iter_invariant; intros; subst; try reflexivity.
-      apply addA_Proper.
-      apply zeroA_add_r.
-      apply id_l.
-      Search N.iter.
-      let v := match goal
-
-      cbv [sum]. rewrite map_reduce_const; reflexivity.
+      apply N.iter_invariant; intros *; try intros ->; try reflexivity.
+      auto.
     Qed.
 
     Lemma sum_const_step1 [start stop] (f : A)
@@ -565,21 +564,13 @@ Module Reduction.
     Lemma sum_swap [start1 stop1 step1 start2 stop2 step2] (f : int -> int -> A)
       : R (sum start1 stop1 step1 (fun i => sum start2 stop2 step2 (f i)))
           (sum start2 stop2 step2 (fun j => sum start1 stop1 step1 (fun i => f i j))).
-    Proof.
+    Proof using R_refl R_sym R_trans addA_Proper addA_assoc addA_comm zeroA_add_l.
       set (s1 := sum start1 stop1 step1).
       unfold sum in s1; subst s1; cbv beta.
       apply map_reduce_distr12.
-
-      2: { intros * H.
-           rewrite H, sum_distr; reflexivity. }
-      2: intros.
-
-
-      pose proof (@map_reduce_distr12 A int R add (fun _ => 0) 0 start1 stop1 step1 f).
-      apply H.
-      erewrite @map_reduce_distr1 with (F:=sum start2 stop2 step2). A R).
-      revert
+      { rewrite sum_const0; reflexivity. }
+      { intros * H.
+        rewrite H, sum_distr; reflexivity. }
+    Qed.
   End sum.
-
-
 End Reduction.

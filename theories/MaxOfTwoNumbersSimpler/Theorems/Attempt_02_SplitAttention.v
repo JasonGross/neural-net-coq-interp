@@ -659,78 +659,49 @@ Proof.
   let pl2 := open_constr:(_) in
   assert (Hl : forall i, pred_logits i = pl2 i).
   { subst pred_logits; intro i'; instantiate (1:=ltac:(intro)); cbv beta.
-    etransitivity.
-    { cbv [Classes.mul R_has_mul].
-      change R0 with 0%R.
-      repeat match goal with
-             | [ |- context[Rmult 0%R ?x] ] => rewrite Rmult_0_l
-             | [ |- context[Rmult ?x 0%R] ] => rewrite Rmult_0_r
-             | [ |- context[Rplus 0%R ?x] ] => rewrite Rplus_0_l
-             | [ |- context[Rplus ?x 0%R] ] => rewrite Rplus_0_r
-             | [ |- 0%R = _ ] => reflexivity
-             | [ |- Rplus _ _ = _ ] => apply f_equal2
-             | [ |- context[Reduction.sum ?start ?stop ?step (fun i => Rplus (@?f i) (@?g i))] ]
-               => change Rplus with (Classes.add (A:=R));
-                  change Rmult with (Classes.mul (A:=R));
-                  let lem := constr:(Reduction.sum_distr (R:=@eq R)) in
-                  rewrite lem;
-                  cbv [Classes.add Classes.mul R_has_add R_has_mul]
-             | [ |- Reduction.sum _ _ _ _ = _ ]
-               => eapply Reduction.sum_Proper; intro; instantiate (1:=ltac:(intro)); cbv beta
-             | [ |- Rmult (Rplus _ _) _ = _ ] => rewrite Rmult_plus_distr_r
-             | [ |- Rmult (Reduction.sum _ _ _ _) _ = _ ] => apply f_equal2
-             | [ |- coer _ = _ ] => reflexivity
-             | [ |- Rmult (coer _) (coer _) = _ ] => reflexivity
-             end.
-      all: reflexivity. }
+    change R0 with 0%R.
+    match goal with |- _ = ?rhs => set (RHS := rhs) end.
+    change (@Reduction.sum R 0%R) with (@Reduction.sum R R_has_zero).
     change Rplus with (Classes.add (A:=R)).
     change Rmult with (Classes.mul (A:=R)).
-    let lem := constr:(Reduction.sum_distr (R:=@eq R)) in
-    rewrite !lem.
-    etransitivity.
-    { cbv [Classes.mul Classes.add R_has_mul R_has_add].
-      repeat match goal with
-             | [ |- Rplus (Reduction.sum _ _ _ _) _ = _ ] => apply f_equal2
-             | [ |- Rmult (Reduction.sum _ _ _ _) _ = _ ] => apply f_equal2
-             | [ |- Rplus (coer _) _ = _ ] => apply f_equal2
-             | [ |- Rplus _ (coer _) = _ ] => apply f_equal2
-             | [ |- coer _ = _ ] => reflexivity
-             | [ |- Reduction.sum _ _ _ (fun _ => Rmult (coer _) (coer _)) = _ ] => reflexivity
-             | [ |- Reduction.sum _ _ _ (fun _ => Rmult (?f _ _) (coer _)) = _ ] => is_var f; reflexivity
-             end.
-      etransitivity.
-      { apply Reduction.sum_Proper; instantiate (1:=ltac:(intro)); intro; cbv beta.
-        let lem := constr:(Reduction.sum_distr (R:=@eq R)) in
-        rewrite !lem.
-        cbv [Classes.mul Classes.add R_has_mul R_has_add].
-        repeat match goal with
-               | [ |- Rmult (Rplus _ _) _ = _ ] => rewrite Rmult_plus_distr_r
-               | [ |- Rplus _ _ = _ ] => apply f_equal2
-               | [ |- Rmult _ _ = _ ] => apply f_equal2
-               | [ |- coer _ = _ ] => reflexivity
-               | [ |- Reduction.sum _ _ _ (fun i => @?f i * ?c * @?g i)%R = _ ]
-                 => etransitivity;
-                    [ apply Reduction.sum_Proper; instantiate (1:=ltac:(intro)); intro; cbv beta;
-                      rewrite Rmult_assoc, (Rmult_comm c), <- Rmult_assoc; reflexivity
-                    | change Rmult with (Classes.mul (A:=R));
-                      let lem := constr:(Reduction.mul_sum_distr_r (R:=@eq R)) in
-                      rewrite <- lem; reflexivity ]
-               end. }
-      let lem := constr:(Reduction.sum_distr (R:=@eq R)) in
-      rewrite !lem.
-      cbv [Classes.mul Classes.add R_has_mul R_has_add].
-      etransitivity.
-      { apply f_equal2.
-        all: match goal with
-             | [ |- Reduction.sum _ _ _ (fun i => @?f i * ?c * @?g i)%R = _ ]
-               => etransitivity;
-                  [ apply Reduction.sum_Proper; instantiate (1:=ltac:(intro)); intro; cbv beta;
-                    rewrite Rmult_assoc, (Rmult_comm c), <- Rmult_assoc; reflexivity
-                  | change Rmult with (Classes.mul (A:=R));
-                    let lem := constr:(Reduction.mul_sum_distr_r (R:=@eq R)) in
-                    rewrite <- lem; reflexivity ]
-             end. }
-      reflexivity. }
+    let Rid_l := constr:(id_l : forall x : R, 0 + x = x) in
+    let Rdistr_r := constr:(distr_r : forall x y z : R, _ = _) in
+    let Rsum_distr := constr:(Reduction.sum_distr (R:=@eq R)) in
+    repeat rewrite_strat (bottomup (choice Rid_l Rdistr_r Rsum_distr)).
+    let Rmul_comm := constr:(comm : forall x y : R, _) in
+    let Rmul_assoc := constr:(assoc : forall x y z : R, _) in
+    let pat_comm := constr:(fun i => Rmul_comm (pattern i)) in
+    let resid_comm := constr:(fun x y => Rmul_comm (residual x y)) in
+    let Rmul_sum_distr_r := constr:(Reduction.mul_sum_distr_r (R:=@eq R)) in
+    let Rmul_sum_distr_r := constr:(fun x start stop step f => Rmul_sum_distr_r start stop step f x) in
+    let Rmul_sum_distr_r_pattern := constr:(fun i => Rmul_sum_distr_r (pattern i)) in
+    let Rmul_sum_distr_r_resid := constr:(fun i j => Rmul_sum_distr_r (residual i j)) in
+    let Rsum_swap := constr:(Reduction.sum_swap (R:=@eq R)) in
+    let Rsum_swap := constr:(fun f start1 stop1 step1 start2 stop2 step2 => Rsum_swap start1 stop1 step1 start2 stop2 step2 f) in
+    let Rsum_swap_resid := constr:(fun f i => Rsum_swap (fun a b => f a b * residual i b)) in
+    repeat (repeat (repeat setoid_rewrite <- Rmul_assoc;
+                    repeat setoid_rewrite resid_comm;
+                    repeat setoid_rewrite <- Rmul_assoc;
+                    repeat setoid_rewrite pat_comm);
+            repeat setoid_rewrite Rmul_assoc;
+            repeat setoid_rewrite Rmul_sum_distr_r;
+            repeat setoid_rewrite <- Rmul_sum_distr_r_pattern;
+            repeat setoid_rewrite <- Rmul_sum_distr_r_resid;
+            repeat setoid_rewrite Rsum_swap_resid).
+
+    subst residual; cbv beta in *.
+    cbv [RawIndex.snoc RawIndex.nil].
+    change (0 =? 0)%uint63 with true in *;
+      change (1 =? 0)%uint63 with false in *;
+      cbv beta iota in *.
+
+    let Rid_l := constr:(id_l : forall x : R, 0 + x = x) in
+    let Rdistr_r := constr:(distr_r : forall x y z : R, _ = _) in
+    let Rdistr_l := constr:(distr_l : forall x y z : R, _ = _) in
+    let Rsum_distr := constr:(Reduction.sum_distr (R:=@eq R)) in
+    repeat rewrite_strat (bottomup (choice Rid_l Rdistr_r Rdistr_l Rsum_distr)).
+
+    subst RHS.
     reflexivity. }
   rewrite !Hl; clear Hl pred_logits.
 
