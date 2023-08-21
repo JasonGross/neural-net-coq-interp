@@ -703,6 +703,7 @@ Proof.
 
     subst RHS.
     reflexivity. }
+  cbv beta in *.
 
   assert (j = true_maximum \/ j <> true_maximum) by lia.
   destruct_head'_or; subst; [ right; split; try reflexivity; clearbody true_maximum; cbv; lia | ].
