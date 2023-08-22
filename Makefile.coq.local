@@ -1,0 +1,4 @@
+VO ?= vo
+
+.PHONY: computed
+computed: $(filter $(addsuffix %,$(wildcard theories/*/Computed/)),$(VFILES:.v=.$(VO)))
