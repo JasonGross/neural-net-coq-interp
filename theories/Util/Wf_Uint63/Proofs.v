@@ -574,3 +574,4 @@ Module Reduction.
     Qed.
   End sum.
 End Reduction.
+Export (hints) Reduction.
