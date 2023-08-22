@@ -6,6 +6,7 @@ From NeuralNetInterp.Util.Arith Require Import Classes Instances Classes.Laws In
 From NeuralNetInterp.Torch Require Import Tensor.Instances Slicing.Instances.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Instances.
 From NeuralNetInterp.MaxOfTwoNumbersSimpler Require Import Parameters Model Heuristics TheoremStatement Model.Instances Model.Flocqify Model.Rify.
+From NeuralNetInterp.Util.Compat Require Import RIneq.
 Import LoopNotation.
 (*From NeuralNetInterp.MaxOfTwoNumbersSimpler.Computed Require Import AllLogits.*)
 Local Open Scope uint63_scope.
