@@ -4,4 +4,4 @@
 
 Some experiments with doing NN interpretability in Coq
 
-[Associated Colab notebook](https://colab.research.google.com/drive/1WdvPyO-bB6l-iWq8SYjiovHp5R3834wN)
+[Associated Colab notebook](https://colab.research.google.com/drive/1WdvPyO-bB6l-iWq8SYjiovHp5R3834wN?usp=sharing)
