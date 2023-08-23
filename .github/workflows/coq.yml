@@ -40,5 +40,5 @@ jobs:
           echo '::group::install dependencies'
           opam install -y -v ${{ matrix.env.OPAM_DEPS }}
           echo '::endgroup::'
-          make pretty-timed -j2
+          make pretty-timed -j2 TGTS="${{ matrix.env.TGTS }}"
           make print-pretty-timed
