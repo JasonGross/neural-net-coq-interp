@@ -482,164 +482,209 @@ End LayerNorm.
   Definition logits_all_tokens_concrete : PArray.concrete_tensor _ float
     := PArray.concretize logits_all_tokens.
 
-  #[local] Ltac mkApp f x :=
-    lazymatch f with
-    | fun y => ?f => constr:(match x with y => f end)
-    end.
-
-  Local Ltac set_step _ :=
-    match goal with
-    | [ H := context G[let s : ?T := ?v in @?f s] |- _ ]
-      => lazymatch goal with
-         | [ s' := v |- _ ]
-           => let fs := mkApp f s' in
-              let G' := context G[fs] in
-              change G' in (value of H)
-         | _
-           => let s' := fresh s in
-              pose v as s';
-              let fs := mkApp f s' in
-              let G' := context G[fs] in
-              change G' in (value of H)
-         end;
-         cbv beta iota in H
-    | [ H := context G[let s : ?T := ?v in _] |- _ ]
-      => assert_fails is_var v;
-         lazymatch goal with
-         | [ s' := v |- _ ]
-           => change v with s' in (value of H)
-         | _
-           => let s' := fresh s in
-              pose v as s';
-              change v with s' in (value of H)
-         end;
-         cbv beta iota in H
-    | [ |- context G[let s : ?T := ?v in @?f s] ]
-      => lazymatch goal with
-         | [ s' := v |- _ ]
-           => let fs := mkApp f s' in
-              let G' := context G[fs] in
-              change G'
-         | _
-           => let s' := fresh s in
-              pose v as s';
-              let fs := mkApp f s' in
-              let G' := context G[fs] in
-              change G'
-         end;
-         cbv beta iota
-    | [ |- context G[let s : ?T := ?v in _] ]
-      => assert_fails is_var v;
-         lazymatch goal with
-         | [ s' := v |- _ ]
-           => change v with s'
-         | _
-           => let s' := fresh s in
-              pose v as s';
-              change v with s'
-         end;
-         cbv beta iota
-    end.
-  Local Ltac subst_cleanup _ :=
-    repeat match goal with
-      | [ H := ?v |- _ ] => is_var v; subst H
-      | [ H := ?x, H' := ?y |- _ ] => constr_eq x y; change H' with H in *; clear H'
-      end.
-  Local Ltac lift_lets _ := repeat set_step (); subst_cleanup ().
-  #[local] Ltac set_checkpoint _ :=
-    repeat match goal with
-      | [ H := context G[?x] |- _ ]
-        => lazymatch x with PArray.checkpoint _ => idtac end;
-           lazymatch (eval cbv delta [H] in H) with
-           | x => fail
-           | _ => idtac
-           end;
-           let x' := fresh "t" in
-           pose x as x';
-           let G' := context G[x'] in
-           change G' in (value of H)
-      | [ |- context G[?x] ]
-        => lazymatch x with PArray.checkpoint _ => idtac end;
-           let x' := fresh "t" in
-           pose x as x';
-           let G' := context G[x'] in
-           change G'
+  Module Import Optimize.
+    Ltac mkApp f x :=
+      lazymatch f with
+      | fun y => ?f => constr:(match x with y => f end)
       end.
 
-  #[local] Ltac subst_local_cleanup _ :=
-    repeat match goal with
-      | [ H := [ _ ] : ?T |- _ ]
-        => lazymatch T with
-           | Shape _ => idtac
-           | forall b, Shape _ => idtac
-           | Slice.Concrete.Slice IndexType => idtac
-           | IndexType => idtac
-           | Slice.Slice ShapeType => idtac
-           | PolymorphicOption.option IndexType => idtac
-           | Slice.Slice IndexType => idtac
+    Ltac set_step _ :=
+      match goal with
+      | [ H := context G[let s : ?T := ?v in @?f s] |- _ ]
+        => lazymatch goal with
+           | [ s' := v |- _ ]
+             => let fs := mkApp f s' in
+                let G' := context G[fs] in
+                change G' in (value of H)
+           | _
+             => let s' := fresh s in
+                pose v as s';
+                let fs := mkApp f s' in
+                let G' := context G[fs] in
+                change G' in (value of H)
            end;
-           subst H
-      | [ H := [ fun x => coer x ] : float -> float |- _ ] => cbv in H; subst H
-      | [ H := [ coer point ] : float |- _ ] => cbv in H; subst H
-      | [ H := [ coer_Z_float _ ] : float |- _ ] => cbv in H; subst H
-      | [ H := [ _ ] : ?T |- _ ]
-        => lazymatch T with
-           | has_one int => idtac
+           cbv beta iota in H
+      | [ H := context G[let s : ?T := ?v in _] |- _ ]
+        => assert_fails is_var v;
+           lazymatch goal with
+           | [ s' := v |- _ ]
+             => change v with s' in (value of H)
+           | _
+             => let s' := fresh s in
+                pose v as s';
+                change v with s' in (value of H)
            end;
-           cbv in H; subst H
-      end;
-    cbv beta iota in *.
+           cbv beta iota in H
+      | [ |- context G[let s : ?T := ?v in @?f s] ]
+        => lazymatch goal with
+           | [ s' := v |- _ ]
+             => let fs := mkApp f s' in
+                let G' := context G[fs] in
+                change G'
+           | _
+             => let s' := fresh s in
+                pose v as s';
+                let fs := mkApp f s' in
+                let G' := context G[fs] in
+                change G'
+           end;
+           cbv beta iota
+      | [ |- context G[let s : ?T := ?v in _] ]
+        => assert_fails is_var v;
+           lazymatch goal with
+           | [ s' := v |- _ ]
+             => change v with s'
+           | _
+             => let s' := fresh s in
+                pose v as s';
+                change v with s'
+           end;
+           cbv beta iota
+      end.
+    Ltac subst_cleanup _ :=
+      repeat match goal with
+        | [ H := ?v |- _ ] => is_var v; subst H
+        | [ H := ?x, H' := ?y |- _ ] => constr_eq x y; change H' with H in *; clear H'
+        end.
+    Ltac lift_lets _ := repeat set_step (); subst_cleanup ().
 
-  #[local] Strategy -100 [repeat repeat' reduce_axis_m1 map map' reduce_axis_m1' reshape_app_combine broadcast broadcast' reshape_app_combine' RawIndex.uncurry_radd RawIndex.split_radd reshape_snoc_split reshape_app_split reshape_app_split' RawIndex.curry_radd RawIndex.combine_radd RawIndex.hd RawIndex.tl
-                            adjust_index_for
-                            lift_coer_has_zero
-                           Nat.radd
-                           Classes.sqrt Classes.add Classes.sub Classes.opp Classes.mul Classes.div Classes.sqr Classes.one Classes.zero Classes.exp
-                           Tensor.get Tensor.raw_get Slicing.SliceIndex.SliceIndexType.slice Slice.invert_index Slice.concretize PolymorphicOption.Option.sequence_return Slice.step Slice.start Slice.stop Slice.Concrete.length Slicing.SliceIndex.slice Slicing.FancyIndex.slice Slicing.FancyIndex.slice_ Slicing.FancyIndex.broadcast Slicing.FancyIndex.FancyIndexType.broadcast Slice.Concrete.normalize Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.start
-                           Slice.Concrete.step int_has_one Classes.ltb Uint63.int_has_ltb PrimInt63.ltb Slice.Concrete.stop Slice.Concrete.base_len
-                           RawIndex.snoc RawIndex.nil
-                           map_dep map2 map2' map3
-                           Shape.tl Shape.hd Shape.snoc Shape.nil
+    Ltac set_checkpoint _ :=
+      repeat match goal with
+        | [ H := context G[?x] |- _ ]
+          => lazymatch x with PArray.checkpoint _ => idtac end;
+             lazymatch (eval cbv delta [H] in H) with
+             | x => fail
+             | _ => idtac
+             end;
+             let x' := fresh "t" in
+             pose x as x';
+             let G' := context G[x'] in
+             change G' in (value of H)
+        | [ |- context G[?x] ]
+          => lazymatch x with PArray.checkpoint _ => idtac end;
+             let x' := fresh "t" in
+             pose x as x';
+             let G' := context G[x'] in
+             change G'
+        end.
 
-                           fst snd Primitive.fst Primitive.snd
+    Ltac subst_local_cleanup _ :=
+      repeat match goal with
+        | [ H := [ _ ] : ?T |- _ ]
+          => lazymatch T with
+             | Shape _ => idtac
+             | forall b, Shape _ => idtac
+             | Slice.Concrete.Slice IndexType => idtac
+             | IndexType => idtac
+             | Slice.Slice ShapeType => idtac
+             | PolymorphicOption.option IndexType => idtac
+             | Slice.Slice IndexType => idtac
+             end;
+             subst H
+        | [ H := [ fun x => coer x ] : float -> float |- _ ] => cbv in H; subst H
+        | [ H := [ coer point ] : float |- _ ] => cbv in H; subst H
+        | [ H := [ coer_Z_float _ ] : float |- _ ] => cbv in H; subst H
+        | [ H := [ _ ] : ?T |- _ ]
+          => lazymatch T with
+             | has_one int => idtac
+             end;
+             cbv in H; subst H
+        end;
+      cbv beta iota in *.
 
-                       logits_all_tokens_concrete
-                       HookedTransformer.coer_blocks_params
+    Module Export Hints.
+      #[export] Strategy -100 [repeat repeat' reduce_axis_m1 map map' reduce_axis_m1' reshape_app_combine broadcast broadcast' reshape_app_combine' RawIndex.uncurry_radd RawIndex.split_radd reshape_snoc_split reshape_app_split reshape_app_split' RawIndex.curry_radd RawIndex.combine_radd RawIndex.hd RawIndex.tl
+                                 adjust_index_for
+                                 lift_coer_has_zero
+                                 Nat.radd
+                                 Classes.sqrt Classes.add Classes.sub Classes.opp Classes.mul Classes.div Classes.sqr Classes.one Classes.zero Classes.exp
+                                 Tensor.get Tensor.raw_get Slicing.SliceIndex.SliceIndexType.slice Slice.invert_index Slice.concretize PolymorphicOption.Option.sequence_return Slice.step Slice.start Slice.stop Slice.Concrete.length Slicing.SliceIndex.slice Slicing.FancyIndex.slice Slicing.FancyIndex.slice_ Slicing.FancyIndex.broadcast Slicing.FancyIndex.FancyIndexType.broadcast Slice.Concrete.normalize Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.start
+                                 Slice.Concrete.step int_has_one Classes.ltb Uint63.int_has_ltb PrimInt63.ltb Slice.Concrete.stop Slice.Concrete.base_len
+                                 RawIndex.snoc RawIndex.nil
+                                 map_dep map2 map2' map3
+                                 Shape.tl Shape.hd Shape.snoc Shape.nil
+
+                                 fst snd Primitive.fst Primitive.snd
+
+                                 logits_all_tokens_concrete
+                                 HookedTransformer.coer_blocks_params
 
 
-                       HookedTransformer.HookedTransformer.logits HookedTransformer.HookedTransformer.ln_final  HookedTransformer.HookedTransformer.unembed HookedTransformer.Unembed.forward HookedTransformer.HookedTransformer.resid_postembed HookedTransformer.HookedTransformer.pos_embed HookedTransformer.HookedTransformer.embed HookedTransformer.Embed.forward HookedTransformer.PosEmbed.forward
-                       HookedTransformer.HookedTransformer.blocks_cps
-                       HookedTransformer.HookedTransformer.blocks
-                       TransformerBlock.attn_only_out
-                       TransformerBlock.ln1 LayerNorm.forward TransformerBlock.query_input TransformerBlock.key_input TransformerBlock.value_input TransformerBlock.add_head_dimension LayerNorm.scale LayerNorm.rescale LayerNorm.linpart LayerNorm.postrescale
-                       Attention.attn_out Attention.z Attention.v Attention.pattern
-                       HookedTransformer.Attention.masked_attn_scores HookedTransformer.Attention.attn_scores Attention.einsum_input Attention.q Attention.k
-                       ones bool_has_one tril bool_has_zero to_bool Classes.eqb Classes.neqb bool_has_eqb
-                       softmax_dim_m1
-                       Bool.where_ where_ float_has_mul tensor_add float_has_add tensor_mul tensor_div_by float_has_div float_has_exp float_has_sqrt tensor_sqrt float_has_sub
-                       coer coer_Z_float
+                                 HookedTransformer.HookedTransformer.logits HookedTransformer.HookedTransformer.ln_final  HookedTransformer.HookedTransformer.unembed HookedTransformer.Unembed.forward HookedTransformer.HookedTransformer.resid_postembed HookedTransformer.HookedTransformer.pos_embed HookedTransformer.HookedTransformer.embed HookedTransformer.Embed.forward HookedTransformer.PosEmbed.forward
+                                 HookedTransformer.HookedTransformer.blocks_cps
+                                 HookedTransformer.HookedTransformer.blocks
+                                 TransformerBlock.attn_only_out
+                                 TransformerBlock.ln1 LayerNorm.forward TransformerBlock.query_input TransformerBlock.key_input TransformerBlock.value_input TransformerBlock.add_head_dimension LayerNorm.scale LayerNorm.rescale LayerNorm.linpart LayerNorm.postrescale
+                                 Attention.attn_out Attention.z Attention.v Attention.pattern
+                                 HookedTransformer.Attention.masked_attn_scores HookedTransformer.Attention.attn_scores Attention.einsum_input Attention.q Attention.k
+                                 ones bool_has_one tril bool_has_zero to_bool Classes.eqb Classes.neqb bool_has_eqb
+                                 softmax_dim_m1
+                                 Bool.where_ where_ float_has_mul tensor_add float_has_add tensor_mul tensor_div_by float_has_div float_has_exp float_has_sqrt tensor_sqrt float_has_sub
+                                 coer coer_Z_float
 
-                       Attention.attn_out
-                       LayerNorm.forward LayerNorm.scale LayerNorm.rescale LayerNorm.postrescale LayerNorm.linpart
-                       fst snd
-                       Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.start Slice.Concrete.base_len Slice.Concrete.raw_length PolymorphicOption.option_map Slice.norm_concretize PolymorphicOption.Option.sequence_return Slice.Concrete.normalize Slice.concretize Slice.Concrete.base_len Slice.start Slice.stop Slice.step Slice.Concrete.start Slice.Concrete.stop Slice.Concrete.step Slice.Concrete.base_len
-                       Slice.Concrete.base_len Slice.Concrete.step Slice.Concrete.start
-                       int_has_one
-                       ].
+                                 Attention.attn_out
+                                 LayerNorm.forward LayerNorm.scale LayerNorm.rescale LayerNorm.postrescale LayerNorm.linpart
+                                 fst snd
+                                 Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.start Slice.Concrete.base_len Slice.Concrete.raw_length PolymorphicOption.option_map Slice.norm_concretize PolymorphicOption.Option.sequence_return Slice.Concrete.normalize Slice.concretize Slice.Concrete.base_len Slice.start Slice.stop Slice.step Slice.Concrete.start Slice.Concrete.stop Slice.Concrete.step Slice.Concrete.base_len
+                                 Slice.Concrete.base_len Slice.Concrete.step Slice.Concrete.start
+                                 int_has_one
+                            ].
+    End Hints.
 
-  #[local] Ltac do_red _ :=
-    cbv beta iota delta [repeat repeat' reduce_axis_m1 map map' reduce_axis_m1' reshape_app_combine broadcast broadcast' reshape_app_combine' RawIndex.uncurry_radd RawIndex.split_radd reshape_snoc_split reshape_app_split reshape_app_split' RawIndex.curry_radd RawIndex.combine_radd RawIndex.hd RawIndex.tl
-                           adjust_index_for
-                           Nat.radd
-                           Classes.sqrt Classes.add Classes.sub Classes.opp Classes.mul Classes.div Classes.sqr Classes.one Classes.zero Classes.exp
-                           Tensor.get Tensor.raw_get Slicing.SliceIndex.SliceIndexType.slice Slice.invert_index Slice.concretize PolymorphicOption.Option.sequence_return Slice.step Slice.start Slice.stop Slice.Concrete.length Slicing.SliceIndex.slice Slicing.FancyIndex.slice Slicing.FancyIndex.slice_ Slicing.FancyIndex.broadcast Slicing.FancyIndex.FancyIndexType.broadcast Slice.Concrete.normalize Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.start
-                           Slice.Concrete.step int_has_one Classes.ltb Uint63.int_has_ltb PrimInt63.ltb Slice.Concrete.stop Slice.Concrete.base_len
-                           RawIndex.snoc RawIndex.nil
-                           map_dep map2 map2' map3
-                           Shape.tl Shape.hd Shape.snoc Shape.nil
-      ] in *;
-    cbn beta iota delta [fst snd Primitive.fst Primitive.snd] in *;
-    lift_lets (); set_checkpoint (); subst_local_cleanup ().
+    Ltac reduce _ :=
+      cbv beta iota delta [
+          repeat repeat' reduce_axis_m1 map map' reduce_axis_m1' reshape_app_combine broadcast broadcast' reshape_app_combine' RawIndex.uncurry_radd RawIndex.split_radd reshape_snoc_split reshape_app_split reshape_app_split' RawIndex.curry_radd RawIndex.combine_radd RawIndex.hd RawIndex.tl
+            adjust_index_for
+            Nat.radd
+            Classes.sqrt Classes.add Classes.sub Classes.opp Classes.mul Classes.div Classes.sqr Classes.one Classes.zero Classes.exp
+            Tensor.get Tensor.raw_get Slicing.SliceIndex.SliceIndexType.slice Slice.invert_index Slice.concretize PolymorphicOption.Option.sequence_return Slice.step Slice.start Slice.stop Slice.Concrete.length Slicing.SliceIndex.slice Slicing.FancyIndex.slice Slicing.FancyIndex.slice_ Slicing.FancyIndex.broadcast Slicing.FancyIndex.FancyIndexType.broadcast Slice.Concrete.normalize Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.start
+            Slice.Concrete.step int_has_one Classes.ltb Uint63.int_has_ltb PrimInt63.ltb Slice.Concrete.stop Slice.Concrete.base_len
+            RawIndex.snoc RawIndex.nil
+            map_dep map2 map2' map3
+            Shape.tl Shape.hd Shape.snoc Shape.nil
+        ] in *;
+      cbn beta iota delta [fst snd Primitive.fst Primitive.snd] in *.
+    Ltac do_red _ :=
+      reduce ();
+      lift_lets (); set_checkpoint (); subst_local_cleanup ().
+    (*
+    #[local] Set Primitive Projections.
+    Record dynprod := dynpair { dynA : Type ; dynB : Type ; dynfst : dynA ; dynsnd : dynB }.
+    Arguments dynpair {_ _} _ _.
+    Ltac with_reduce_lift_lets term k constr_arg :=
+      lazymatch term with
+      | (fun x => @?f x) ?y
+        => with_reduce_lift_lets
+             y
+             ltac:(fun y f_constr_arg
+                   => lazymatch f_constr_arg with
+                      | dynpair (fun x => ?f) ?constr_arg
+                        => k constr:(match y with x => f end) constr_arg
+                      end)
+                    constr:(dynpair f constr_arg)
+      | let x := ?v in @?f x
+        => with_reduce_lift_lets
+             v
+      | ?f ?x
+        => with_reduce_lift_lets
+             f
+             ltac:(fun f x_constr_arg
+                   => lazymatch x_constr_arg with
+                      | dynpair ?x ?constr_arg
+                        => with_reduce_lift_lets
+                             x
+                             ltac:(fun x f_constr_arg
+                                   =>
+                          k constr:(f x)
+                      end)
+                    constr:(dynpair x constr_arg)
+      |
+    Ltac reduce_lift_lets term :=
+      lazymatch term with
+      | ?f ?x
+        =>
+*)
+  End Optimize.
 
   Derive logits_all_tokens_concrete_opt
     SuchThat (logits_all_tokens_concrete_opt = logits_all_tokens_concrete)
@@ -651,8 +696,7 @@ End LayerNorm.
         pose proof cfg.ln_final_b as ln_final_b.
         destruct cfg.normalization_type as [nt|]; [ destruct nt | ].
         all: shelve. }
-    cbv beta iota delta [logits_all_tokens_concrete logits_all_tokens
-                           HookedTransformer.coer_blocks_params] in *;
+    cbv beta iota delta [logits_all_tokens_concrete logits_all_tokens HookedTransformer.coer_blocks_params] in *;
       lift_lets (); set_checkpoint ().
     subst blocks_params ln_final_b ln_final_w.
     set (blocks_params := cfg.blocks_params) in *.
@@ -660,6 +704,7 @@ End LayerNorm.
     set (ln_final_b := cfg.ln_final_b) in *.
     clearbody blocks_params ln_final_w ln_final_b.
     assert_succeeds destruct cfg.normalization_type.
+    cbv beta zeta in *.
     cbv beta iota delta [HookedTransformer.HookedTransformer.logits HookedTransformer.HookedTransformer.ln_final coer_ln_tensor HookedTransformer.HookedTransformer.unembed HookedTransformer.Unembed.forward HookedTransformer.HookedTransformer.resid_postembed HookedTransformer.HookedTransformer.pos_embed HookedTransformer.HookedTransformer.embed HookedTransformer.Embed.forward HookedTransformer.PosEmbed.forward all_tokens] in *;
       lift_lets (); set_checkpoint ().
     cbv beta iota delta [HookedTransformer.HookedTransformer.blocks_cps] in *;

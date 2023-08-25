@@ -19,6 +19,7 @@ theories/MaxOfTwoNumbersSimpler/TheoremStatement.v
 theories/MaxOfTwoNumbersSimpler/Computed/AllAttnPattern.v
 theories/MaxOfTwoNumbersSimpler/Computed/AllLogits.v
 theories/MaxOfTwoNumbersSimpler/Computed/AllMaskedAttnScores.v
+theories/MaxOfTwoNumbersSimpler/Model/ExtraComputations.v
 theories/MaxOfTwoNumbersSimpler/Model/Flocqify.v
 theories/MaxOfTwoNumbersSimpler/Model/Instances.v
 theories/MaxOfTwoNumbersSimpler/Model/Rify.v
@@ -35,6 +36,7 @@ theories/TransformerLens/HookedTransformer/Config.v
 theories/TransformerLens/HookedTransformer/Instances.v
 theories/TransformerLens/HookedTransformer/Module.v
 theories/TransformerLens/HookedTransformer/Config/Common.v
+theories/TransformerLens/HookedTransformer/Module/ExtraComputations.v
 theories/TransformerLens/HookedTransformer/Module/Flocqify.v
 theories/TransformerLens/HookedTransformer/Module/Instances.v
 theories/Util/Arrow.v
