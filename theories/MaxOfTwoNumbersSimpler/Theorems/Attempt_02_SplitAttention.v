@@ -33,6 +33,8 @@ Local Ltac let_bind_subst_shape _ :=
   repeat match goal with H : Shape _ |- _ => subst H end;
   repeat match goal with H : forall b : bool, Shape _ |- _ => subst H end;
   repeat match goal with H := ?x |- _ => is_var x; subst H end;
+  repeat match goal with H := PrimitiveProd.Primitive.pair ?x ?y |- _ => let x' := fresh H in let y' := fresh H in pose x as x'; pose y as y'; change H with (PrimitiveProd.Primitive.pair x' y') in *; clear H; cbn beta iota delta [PrimitiveProd.Primitive.fst PrimitiveProd.Primitive.snd] in * end;
+  repeat match goal with H := ?x |- _ => is_var x; subst H end;
   repeat match goal with H := ?x, H' := ?y |- _ => constr_eq x y; change H' with H in *; clear H' end.
 
 #[export] Existing Instance reflexive_eq_dom_reflexive.
