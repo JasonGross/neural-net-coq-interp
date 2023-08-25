@@ -2,6 +2,7 @@ From Coq Require Vector.
 From Coq Require Import Derive.
 From Coq.Structures Require Import Equalities.
 From Coq Require Import Floats Uint63 ZArith NArith.
+From NeuralNetInterp.Util Require Import PrimitiveProd.
 From NeuralNetInterp.Util Require Export Default Pointed.
 From NeuralNetInterp.Util.Arith Require Import Classes Instances.
 From NeuralNetInterp.Torch Require Import Tensor.
@@ -10,6 +11,7 @@ Import Instances.Truncating.
 #[local] Open Scope core_scope.
 
 #[local] Coercion Vector.of_list : list >-> Vector.t.
+#[local] Open Scope primproj_scope.
 
 Notation tensor_of_list ls := (tensor_of_list ls) (only parsing).
 
@@ -121,21 +123,21 @@ End LayerNorm.
         := Vector.map
              (fun '((W_Q, W_K, W_V, W_O,
                       b_Q, b_K, b_V, b_O,
-                      ln1_w, ln1_b) : cfg.block_params_type float)
+                      ln1_w, ln1_b)%primproj : cfg.block_params_type float)
               => Attention.q (A:=A) W_Q b_Q query_input)
              cfg.blocks_params.
       Definition ks : Vector.t (tensor (s ++' [cfg.n_heads; cfg.d_head]) A) cfg.n_layers
         := Vector.map
              (fun '((W_Q, W_K, W_V, W_O,
                       b_Q, b_K, b_V, b_O,
-                      ln1_w, ln1_b) : cfg.block_params_type float)
+                      ln1_w, ln1_b)%primproj : cfg.block_params_type float)
               => Attention.k (A:=A) W_K b_K key_input)
              cfg.blocks_params.
       Definition vs : Vector.t (tensor (s ++' [cfg.n_heads; cfg.d_head]) A) cfg.n_layers
         := Vector.map
              (fun '((W_Q, W_K, W_V, W_O,
                       b_Q, b_K, b_V, b_O,
-                      ln1_w, ln1_b) : cfg.block_params_type float)
+                      ln1_w, ln1_b)%primproj : cfg.block_params_type float)
               => Attention.v (A:=A) W_V b_V value_input)
              cfg.blocks_params.
 
@@ -143,7 +145,7 @@ End LayerNorm.
         := Vector.map
              (fun '((W_Q, W_K, W_V, W_O,
                       b_Q, b_K, b_V, b_O,
-                      ln1_w, ln1_b) : cfg.block_params_type float)
+                      ln1_w, ln1_b)%primproj : cfg.block_params_type float)
               => Attention.attn_scores (A:=A) W_Q W_K b_Q b_K query_input key_input)
              cfg.blocks_params.
 
@@ -151,7 +153,7 @@ End LayerNorm.
         := Vector.map
              (fun '((W_Q, W_K, W_V, W_O,
                       b_Q, b_K, b_V, b_O,
-                      ln1_w, ln1_b) : cfg.block_params_type float)
+                      ln1_w, ln1_b)%primproj : cfg.block_params_type float)
               => Attention.masked_attn_scores (A:=A) (n_ctx:=cfg.n_ctx) W_Q W_K b_Q b_K query_input key_input)
              cfg.blocks_params.
 
@@ -159,7 +161,7 @@ End LayerNorm.
         := Vector.map
              (fun '((W_Q, W_K, W_V, W_O,
                       b_Q, b_K, b_V, b_O,
-                      ln1_w, ln1_b) : cfg.block_params_type float)
+                      ln1_w, ln1_b)%primproj : cfg.block_params_type float)
               => Attention.pattern (A:=A) (n_ctx:=cfg.n_ctx) W_Q W_K b_Q b_K query_input key_input)
              cfg.blocks_params.
 
@@ -167,7 +169,7 @@ End LayerNorm.
         := Vector.map
              (fun '((W_Q, W_K, W_V, W_O,
                       b_Q, b_K, b_V, b_O,
-                      ln1_w, ln1_b) : cfg.block_params_type float)
+                      ln1_w, ln1_b)%primproj : cfg.block_params_type float)
               => Attention.z (A:=A) (n_ctx:=cfg.n_ctx) W_Q W_K W_V b_Q b_K b_V query_input key_input value_input)
              cfg.blocks_params.
 
@@ -175,7 +177,7 @@ End LayerNorm.
         := Vector.map
              (fun '((W_Q, W_K, W_V, W_O,
                       b_Q, b_K, b_V, b_O,
-                      ln1_w, ln1_b) : cfg.block_params_type float)
+                      ln1_w, ln1_b)%primproj : cfg.block_params_type float)
               => Attention.attn_out (A:=A) (n_ctx:=cfg.n_ctx) W_Q W_K W_V W_O b_Q b_K b_V b_O query_input key_input value_input)
              cfg.blocks_params.
     End __.
@@ -205,7 +207,7 @@ End LayerNorm.
         := Vector.map
              (fun '((W_Q, W_K, W_V, W_O,
                       b_Q, b_K, b_V, b_O,
-                      ln1_w, ln1_b) : cfg.block_params_type float)
+                      ln1_w, ln1_b)%primproj : cfg.block_params_type float)
               => TransformerBlock.attn_only_out (A:=A) (normalization_type:=cfg.normalization_type) (n_ctx:=cfg.n_ctx) W_Q W_K W_V W_O b_Q b_K b_V b_O cfg.eps (coer_ln_tensor ln1_w) (coer_ln_tensor ln1_b) resid_pre)
              cfg.blocks_params.
 
@@ -213,7 +215,7 @@ End LayerNorm.
         := Vector.map
              (fun '((W_Q, W_K, W_V, W_O,
                       b_Q, b_K, b_V, b_O,
-                      ln1_w, ln1_b) : cfg.block_params_type float)
+                      ln1_w, ln1_b)%primproj : cfg.block_params_type float)
               => HookedTransformer.TransformerBlock.attn_masked_attn_scores (A:=A) (normalization_type:=cfg.normalization_type) (n_ctx:=cfg.n_ctx) W_Q W_K b_Q b_K  cfg.eps (coer_ln_tensor ln1_w) (coer_ln_tensor ln1_b) resid_pre)
              cfg.blocks_params.
 
@@ -221,7 +223,7 @@ End LayerNorm.
         := Vector.map
              (fun '((W_Q, W_K, W_V, W_O,
                       b_Q, b_K, b_V, b_O,
-                      ln1_w, ln1_b) : cfg.block_params_type float)
+                      ln1_w, ln1_b)%primproj : cfg.block_params_type float)
               => HookedTransformer.TransformerBlock.attn_pattern (A:=A) (normalization_type:=cfg.normalization_type) (n_ctx:=cfg.n_ctx) W_Q W_K b_Q b_K  cfg.eps (coer_ln_tensor ln1_w) (coer_ln_tensor ln1_b) resid_pre)
              cfg.blocks_params.
     End __.
@@ -479,6 +481,227 @@ End LayerNorm.
 
   Definition logits_all_tokens_concrete : PArray.concrete_tensor _ float
     := PArray.concretize logits_all_tokens.
+
+(*
+  Local Ltac set_step _ :=
+    match goal with
+    | [ H := context G[let s : ?T := ?v in @?f s] |- _ ]
+      => lazymatch goal with
+         | [ s' := v |- _ ]
+           => let G' := context G[f s'] in
+              change G' in (value of H)
+         | _
+           => let s' := fresh s in
+              pose v as s';
+              let G' := context G[f s'] in
+              change G' in (value of H)
+         end;
+         cbv beta iota in H
+    | [ H := context G[let s : ?T := ?v in _] |- _ ]
+      => assert_fails is_var v;
+         lazymatch goal with
+         | [ s' := v |- _ ]
+           => change v with s' in (value of H)
+         | _
+           => let s' := fresh s in
+              pose v as s';
+              change v with s' in (value of H)
+         end;
+         cbv beta iota in H
+    | [ |- context G[let s : ?T := ?v in @?f s] ]
+      => lazymatch goal with
+         | [ s' := v |- _ ]
+           => let G' := context G[f s'] in
+              change G'
+         | _
+           => let s' := fresh s in
+              pose v as s';
+              let G' := context G[f s'] in
+              change G'
+         end;
+         cbv beta iota
+    | [ |- context G[let s : ?T := ?v in _] ]
+      => assert_fails is_var v;
+         lazymatch goal with
+         | [ s' := v |- _ ]
+           => change v with s'
+         | _
+           => let s' := fresh s in
+              pose v as s';
+              change v with s'
+         end;
+         cbv beta iota
+    end.
+  Local Ltac subst_cleanup _ :=
+    repeat match goal with
+      | [ H := ?v |- _ ] => is_var v; subst H
+      | [ H := ?x, H' := ?y |- _ ] => constr_eq x y; change H' with H in *; clear H'
+      end.
+  Local Ltac lift_lets _ := repeat set_step (); subst_cleanup ().
+  #[local] Ltac set_checkpoint _ :=
+    repeat match goal with
+      | [ H := context G[?x] |- _ ]
+        => lazymatch x with PArray.checkpoint _ => idtac end;
+           lazymatch (eval cbv delta [H] in H) with
+           | x => fail
+           | _ => idtac
+           end;
+           let x' := fresh "t" in
+           pose x as x';
+           let G' := context G[x'] in
+           change G' in (value of H)
+      | [ |- context G[?x] ]
+        => lazymatch x with PArray.checkpoint _ => idtac end;
+           let x' := fresh "t" in
+           pose x as x';
+           let G' := context G[x'] in
+           change G'
+      end.
+
+  #[local] Ltac subst_local_cleanup _ :=
+    repeat match goal with
+      | [ H := [ _ ] : ?T |- _ ]
+        => lazymatch T with
+           | Shape _ => idtac
+           | forall b, Shape _ => idtac
+           | Slice.Concrete.Slice IndexType => idtac
+           | IndexType => idtac
+           | Slice.Slice ShapeType => idtac
+           end;
+           subst H
+      | [ H := [ fun x => coer x ] : float -> float |- _ ] => cbv in H; subst H
+      | [ H := [ coer point ] : float |- _ ] => cbv in H; subst H
+      | [ H := [ coer_Z_float _ ] : float |- _ ] => cbv in H; subst H
+      end;
+    cbv beta iota in *.
+
+  #[local] Ltac do_red _ :=
+    cbv beta iota delta [repeat repeat' reduce_axis_m1 map map' reduce_axis_m1' reshape_app_combine broadcast broadcast' reshape_app_combine' RawIndex.uncurry_radd RawIndex.split_radd reshape_snoc_split reshape_app_split reshape_app_split' RawIndex.curry_radd RawIndex.combine_radd RawIndex.hd RawIndex.tl
+                           Nat.radd
+                           Classes.sqrt Classes.add Classes.sub Classes.opp Classes.mul Classes.div Classes.sqr Classes.one Classes.zero Classes.exp
+                           Tensor.get Tensor.raw_get Slicing.SliceIndex.SliceIndexType.slice Slice.invert_index Slice.concretize PolymorphicOption.Option.sequence_return Slice.step Slice.start Slice.stop Slice.Concrete.length Slicing.SliceIndex.slice Slicing.FancyIndex.slice Slicing.FancyIndex.slice_ Slicing.FancyIndex.broadcast Slicing.FancyIndex.FancyIndexType.broadcast Slice.Concrete.normalize Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.start
+                           RawIndex.snoc RawIndex.nil
+                           map_dep map2 map2' map3
+                           Shape.tl Shape.hd Shape.snoc Shape.nil
+      ] in *;
+    cbn beta iota delta [fst snd Primitive.fst Primitive.snd] in *;
+    lift_lets (); set_checkpoint (); subst_local_cleanup ().
+
+  Derive logits_all_tokens_concrete_opt
+    SuchThat (logits_all_tokens_concrete_opt = logits_all_tokens_concrete)
+    As logits_all_tokens_concrete_opt_eq.
+  Proof.
+    Unshelve.
+    2:{ pose proof cfg.blocks_params as blocks_params.
+        destruct cfg.normalization_type as [nt|]; [ destruct nt | ].
+        all: shelve. }
+    cbv beta iota delta [logits_all_tokens_concrete logits_all_tokens
+                           HookedTransformer.coer_blocks_params] in *;
+      lift_lets (); set_checkpoint ().
+    set (blocks_params' := cfg.blocks_params) in *.
+    set (ln_final_w := cfg.ln_final_w) in *.
+    set (ln_final_b := cfg.ln_final_b) in *.
+    clearbody blocks_params' ln_final_w ln_final_b.
+    assert_succeeds destruct cfg.normalization_type.
+    cbv beta iota delta [HookedTransformer.HookedTransformer.logits HookedTransformer.HookedTransformer.ln_final coer_ln_tensor HookedTransformer.HookedTransformer.unembed HookedTransformer.Unembed.forward HookedTransformer.HookedTransformer.resid_postembed HookedTransformer.HookedTransformer.pos_embed HookedTransformer.HookedTransformer.embed HookedTransformer.Embed.forward HookedTransformer.PosEmbed.forward] in *;
+      lift_lets (); set_checkpoint ().
+    cbv beta iota delta [HookedTransformer.HookedTransformer.blocks_cps] in *;
+      lift_lets (); set_checkpoint ().
+    subst_local_cleanup ().
+    lazymatch goal with
+    | [ |- _ = ?concretize (List.fold_right ?k ?f ?ls ?resid) ]
+      => let f' := open_constr:(_) in
+         let ls' := open_constr:(_) in
+         replace f with f'; [ | assert (forall x, f' x = f x) ];
+         [ replace ls with ls'
+         | .. ]
+    end.
+    2: { rewrite List.firstn_all.
+         repeat match goal with H : _ |- _ => clear H end.
+         cbv beta iota delta [HookedTransformer.HookedTransformer.blocks]; lift_lets (); set_checkpoint ().
+         rewrite List.map_map.
+         instantiate (1:=ltac:(destruct cfg.normalization_type as [nt|]; [ destruct nt | ])).
+         destruct cfg.normalization_type as [nt|]; [ destruct nt | ].
+         all: cbv beta iota zeta.
+         all: cbv beta iota delta [TransformerBlock.attn_only_out]; lift_lets (); set_checkpoint ().
+         all: match goal with
+              | [ |- _ = List.map ?f _ ]
+                => let f' := open_constr:(_) in
+                   replace f with f';
+                   [ shelve | assert (forall x y, f' x y = f x y); [ intros ?? | shelve ] ]
+              end.
+         all: lift_lets (); set_checkpoint ().
+         all: cbv beta iota delta [TransformerBlock.ln1 LayerNorm.forward TransformerBlock.query_input TransformerBlock.key_input TransformerBlock.value_input TransformerBlock.add_head_dimension LayerNorm.scale LayerNorm.rescale LayerNorm.linpart LayerNorm.postrescale] in *; lift_lets (); set_checkpoint (); do_red ().
+         all: cbv beta iota delta [Attention.attn_out Attention.z Attention.v Attention.pattern] in *; lift_lets (); set_checkpoint (); do_red ().
+         all: cbv beta iota delta [HookedTransformer.Attention.masked_attn_scores HookedTransformer.Attention.attn_scores Attention.einsum_input Attention.q Attention.k] in *; lift_lets (); set_checkpoint (); do_red ().
+         all: cbv [Attention.apply_causal_mask] in *; do_red (); cbv beta iota zeta in *; do_red ().
+         all: cbv beta iota delta [ones bool_has_one tril bool_has_zero to_bool Classes.eqb Classes.neqb bool_has_eqb] in *; lift_lets (); set_checkpoint (); do_red ().
+         Import Primitive (fst, snd).
+         all: cbv beta iota delta [softmax_dim_m1] in *; lift_lets (); do_red ().
+         all: cbv beta iota delta [Bool.where_ where_ float_has_mul tensor_add float_has_add tensor_mul tensor_div_by float_has_div float_has_exp float_has_sqrt tensor_sqrt float_has_sub] in *; do_red ().
+         all: vm_compute coer_Z_float in *.
+         all: repeat match goal with H : _ |- _ => clear H end.
+         all: cbv beta iota delta [coer coer_Z_float] in *; do_red ().
+          coer
+
+         Set Printing All.
+         cbv [Sint6
+         SEt Printing
+         vm_compute in mask.
+
+         match goal with
+         | [ H := context G[?x] |- _ ]
+           => lazymatch x with PArray.checkpoint _ => idtac end;
+              lazymatch (eval cbv delta [H] in H) with
+              | x => fail
+              | _ => idtac
+              end;
+              idtac H x
+         end.
+              pose x as x';
+           let G' := context G[x'] in
+           change G' in (value of H)
+         end.
+      | [ |- context G[?x] ]
+        => lazymatch x with PArray.checkpoint _ => idtac end;
+           let x' := fresh x in
+           pose x as x';
+           let G' := context G[x'] in
+           change G'
+      end.
+         all: cbv beta iota delta [Attention.attn_out] in *; lift_lets ();
+           do_red ().
+
+i         all: cbv
+           reshape_app_combine broadcast' reshape_app_combine' repeat' RawIndex.uncurry_radd RawIndex.split_radd Nat.radd] in *; lift_lets ().
+         all: cbv
+         2: {
+         2: {
+         destruct cfg.normalization_type as [nt|]; [ destruct nt | ].
+    cbv beta iota delta [LayerNorm.forward LayerNorm.scale LayerNorm.rescale LayerNorm.postrescale LayerNorm.linpart] in *; lift_lets ().
+    s := [cfg.d_vocab ^ cfg.n_ctx; cfg.n_ctx]%shape : Shape 2
+         cbv [
+    match goal with
+    | [ |-
+    repeat match goal with
+           | [ H := coer point |- _ ] => vm_compute in H; subst H
+           end.
+
+    cbn beta iota delta [fst snd] in *.
+    repeat cbv beta iota delta [Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.start Slice.Concrete.base_len Slice.Concrete.raw_length PolymorphicOption.option_map Slice.norm_concretize PolymorphicOption.Option.sequence_return Slice.Concrete.normalize Slice.concretize Slice.Concrete.base_len Slice.start Slice.stop Slice.step Slice.Concrete.start Slice.Concrete.stop Slice.Concrete.step Slice.Concrete.base_len] in *; lift_lets ().
+    cbv beta iota delta [Slice.Concrete.base_len Slice.Concrete.step Slice.Concrete.start] in *; lift_lets ().
+    exfalso.
+    clear -x0.
+    lift_lets ().
+    Set Printing Coercions.
+    cbv beta iota delta [int_has_one] in *.
+
+    Set Printing Coercions.
+                           LayerNorm.forward LayerNorm.scale LayerNorm.rescale LayerNorm.postrescale LayerNorm.linpart] in *; lift_lets ().
+    destruct cfg.normalization_type.
+    set_step ().
+  Definition logi
+*)
 End Model.
 
 Module Type ModelSig (cfg : Config) := Nop <+ Model cfg.

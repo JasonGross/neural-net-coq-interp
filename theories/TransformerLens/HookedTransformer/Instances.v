@@ -5,7 +5,7 @@ From NeuralNetInterp.Util.Tactics Require Import DestructHead BreakMatch.
 From NeuralNetInterp.Util Require Nat Wf_Uint63.
 From NeuralNetInterp.Torch Require Import Tensor Tensor.Instances Einsum Slicing Slicing.Instances.
 From NeuralNetInterp.Util.Relations Require Relation_Definitions.Hetero Relation_Definitions.Dependent.
-From NeuralNetInterp.Util.Classes Require Morphisms.Dependent RelationPairs.Dependent RelationClasses.Dependent.
+From NeuralNetInterp.Util.Classes Require Morphisms.Dependent RelationPairs.Dependent PrimitiveRelationPairs.Dependent RelationClasses.Dependent.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer.
 Import Util.Nat.Notations.
 Import Util.Wf_Uint63.LoopNotation.
@@ -13,7 +13,7 @@ Import Util.Wf_Uint63.
 Import Util.Wf_Uint63.Reduction.
 Import Arith.Instances.Truncating.
 Import Dependent.ProperNotations Dependent.RelationPairsNotations.
-Import (hints) RelationPairs.Dependent RelationClasses.Dependent.
+Import (hints) PrimitiveRelationPairs.Dependent RelationPairs.Dependent RelationClasses.Dependent.
 Local Open Scope float_scope.
 Local Open Scope list_scope.
 Set Implicit Arguments.

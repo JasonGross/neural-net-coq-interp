@@ -77,16 +77,6 @@ Module Model.
     : Proper (Tensor.eqf ==> Tensor.eqf) (@unembed r batch pos A coer_float coerZ addA mulA).
   Proof. cbv [unembed]; apply HookedTransformer.HookedTransformer.unembed_Proper. Qed.
 
-  #[export] Instance blocks_params_Proper
-    : Proper (List.Forall2 (Tensor.eqf * Tensor.eqf
-                            * Tensor.eqf * Tensor.eqf
-                            * Tensor.eqf * Tensor.eqf
-                            * Tensor.eqf * Tensor.eqf
-                            * Tensor.eqf * Tensor.eqf)%signature)
-        (@cfg.blocks_params).
-  Proof. hnf; apply reflexivity. Qed.
-
-
   #[export] Instance logits_Proper {r batch pos A coer_float coerZ addA subA mulA divA sqrtA expA use_checkpoint}
     : Proper (Tensor.eqf ==> Tensor.eqf) (@logits r batch pos A coer_float coerZ addA subA mulA divA sqrtA expA use_checkpoint)
     := HookedTransformer.HookedTransformer.logits_Proper.

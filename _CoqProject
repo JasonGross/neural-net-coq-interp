@@ -76,6 +76,8 @@ theories/Util/Arith/Instances/Laws.v
 theories/Util/Arith/Instances/Zify.v
 theories/Util/Arith/Reals/Definitions.v
 theories/Util/Classes/Morphisms/Dependent.v
+theories/Util/Classes/PrimitiveRelationPairs/Dependent.v
+theories/Util/Classes/PrimitiveRelationPairs/Hetero.v
 theories/Util/Classes/RelationClasses/Dependent.v
 theories/Util/Classes/RelationClasses/Hetero.v
 theories/Util/Classes/RelationPairs/Dependent.v
@@ -89,6 +91,8 @@ theories/Util/List/Instances/Forall2/Map.v
 theories/Util/PArray/Instances.v
 theories/Util/PArray/Proofs.v
 theories/Util/Program/Basics/Dependent.v
+theories/Util/Program/Basics/PrimitiveBasics/Dependent.v
+theories/Util/Program/PrimitiveBasics/Dependent.v
 theories/Util/Relations/Relation_Definitions/Dependent.v
 theories/Util/Relations/Relation_Definitions/Hetero.v
 theories/Util/Strings/Ascii.v

@@ -1,5 +1,5 @@
 From Coq Require Import Floats Sint63 Uint63 QArith Lia List PArray Morphisms RelationClasses.
-From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool.
+From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool PrimitiveProd.
 From NeuralNetInterp.Util Require Nat Wf_Uint63.
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
 From NeuralNetInterp.TransformerLens Require Export HookedTransformer.Config.
@@ -343,10 +343,10 @@ Module HookedTransformer.
 
     Definition blocks : list (tensor resid_shape A -> tensor resid_shape A)
       := List.map
-           (fun '(W_Q, W_K, W_V, W_O,
-                  b_Q, b_K, b_V,
-                  b_O,
-                  ln1_w, ln1_b)
+           (fun '((W_Q, W_K, W_V, W_O,
+                    b_Q, b_K, b_V,
+                    b_O,
+                    ln1_w, ln1_b)%primproj)
             => TransformerBlock.attn_only_out
                  (n_ctx:=n_ctx)
                  W_Q W_K W_V W_O
@@ -401,10 +401,10 @@ Module HookedTransformer.
     Local Definition blocks_attn_masked_attn_scores
       : list (tensor resid_shape A -> tensor (batch ::' n_heads ::' pos ::' pos) A)
       := List.map
-           (fun '(W_Q, W_K, W_V, W_O,
-                  b_Q, b_K, b_V,
-                  b_O,
-                  ln1_w, ln1_b)
+           (fun '((W_Q, W_K, W_V, W_O,
+                    b_Q, b_K, b_V,
+                    b_O,
+                    ln1_w, ln1_b)%primproj)
             => TransformerBlock.attn_masked_attn_scores
                  (n_ctx:=n_ctx)
                  W_Q W_K
@@ -416,10 +416,10 @@ Module HookedTransformer.
     Local Definition blocks_attn_pattern
       : list (tensor resid_shape A -> tensor (batch ::' n_heads ::' pos ::' pos) A)
       := List.map
-           (fun '(W_Q, W_K, W_V, W_O,
-                  b_Q, b_K, b_V,
-                  b_O,
-                  ln1_w, ln1_b)
+           (fun '((W_Q, W_K, W_V, W_O,
+                    b_Q, b_K, b_V,
+                    b_O,
+                    ln1_w, ln1_b)%primproj)
             => TransformerBlock.attn_pattern
                  (n_ctx:=n_ctx)
                  W_Q W_K

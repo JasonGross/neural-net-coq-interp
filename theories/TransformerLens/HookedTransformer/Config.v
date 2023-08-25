@@ -1,6 +1,7 @@
 (** Ported from https://github.com/neelnanda-io/TransformerLens/blob/main/transformer_lens/HookedTransformerConfig.py *)
 From Coq Require Import Floats Uint63 ZArith NArith.
 From NeuralNetInterp.Util Require Import Default Arith.Instances.
+From NeuralNetInterp.Util Require Import PrimitiveProd.
 From NeuralNetInterp.Torch Require Import Tensor.
 From NeuralNetInterp.TransformerLens.HookedTransformer.Config Require Export Common.
 Import Instances.Truncating.
@@ -27,7 +28,7 @@ Definition block_params_type_gen n_heads d_model d_head (nt : with_default "norm
     * tensor [n_heads; d_head] A * tensor [n_heads; d_head] A * tensor [n_heads; d_head] A
     * tensor [d_model] A
     * ln_tensor_gen d_model nt A
-    * ln_tensor_gen d_model nt A)%type.
+    * ln_tensor_gen d_model nt A)%primproj_type.
 Module Type ExtraConfig (Import cfg : CommonConfig).
   Parameter W_E : tensor [d_vocab; d_model] float.
   Parameter W_pos : tensor [n_ctx; d_model] float.
