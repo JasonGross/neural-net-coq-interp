@@ -224,12 +224,13 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
              ==> Dependent.idR
              ==> (Dependent.const eq ==> Dependent.idR)
+             ==> Dependent.const (fun _ _ => True)
              ==> Tensor.eqfR ==> Tensor.eqfR)
           (@linpart r s d_model).
     Proof. cbv [linpart]; t. Qed.
 
-    #[export] Instance linpart_Proper {r A s d_model addA subA divA zeroA coerZ}
-      : Proper (Tensor.eqf ==> Tensor.eqf) (@linpart r A s d_model addA subA divA zeroA coerZ).
+    #[export] Instance linpart_Proper {r A s d_model addA subA divA zeroA coerZ use_checkpoint}
+      : Proper (Tensor.eqf ==> Tensor.eqf) (@linpart r A s d_model addA subA divA zeroA coerZ use_checkpoint).
     Proof. apply linpart_Proper_dep; repeat intro; subst; reflexivity. Qed.
 
     #[export] Instance scale_Proper_dep {r s d_model}
@@ -240,13 +241,14 @@ Module HookedTransformer.
              ==> (Dependent.idR ==> Dependent.idR)
              ==> Dependent.idR
              ==> (Dependent.const eq ==> Dependent.idR)
+             ==> Dependent.const (fun _ _ => True)
              ==> Dependent.idR
              ==> Tensor.eqfR ==> Tensor.eqfR)
           (@scale r s d_model).
     Proof. cbv [scale]; t. Qed.
 
-    #[export] Instance scale_Proper {r A s d_model addA mulA divA sqrtA zeroA coerZ eps}
-      : Proper (Tensor.eqf ==> Tensor.eqf) (@scale r A s d_model addA mulA divA sqrtA zeroA coerZ eps).
+    #[export] Instance scale_Proper {r A s d_model addA mulA divA sqrtA zeroA coerZ use_checkpoint eps}
+      : Proper (Tensor.eqf ==> Tensor.eqf) (@scale r A s d_model addA mulA divA sqrtA zeroA coerZ use_checkpoint eps).
     Proof. apply scale_Proper_dep; repeat intro; subst; reflexivity. Qed.
 
     #[export] Instance rescale_Proper_dep {r s d_model}
@@ -285,7 +287,7 @@ Module HookedTransformer.
              ==> Dependent.idR
              ==> Tensor.eqfR ==> Tensor.eqfR ==> Tensor.eqfR ==> Tensor.eqfR)
           (@forward r s d_model).
-    Proof. cbv [forward]; t. Qed.
+    Proof. cbv [forward]; repeat first [ t_step | apply linpart_Proper_dep | apply scale_Proper_dep ]. Qed.
   End LayerNorm.
   Export (hints) LayerNorm.
 

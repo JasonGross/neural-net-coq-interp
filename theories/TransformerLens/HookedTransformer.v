@@ -77,11 +77,12 @@ Module LayerNorm.
 
     Definition linpart (x : tensor (s ::' d_model) A)
       : tensor (s ::' d_model) A
-      := (x - reduce_axis_m1 (keepdim:=true) mean x)%core.
+      := let xbar := reduce_axis_m1 (keepdim:=true) mean x in
+         checkpoint (x - xbar)%core.
 
     Definition scale (x : tensor (s ::' d_model) A)
       : tensor (s ::' 1) A
-      := (√(reduce_axis_m1 (keepdim:=true) mean (x ²) + broadcast' eps))%core.
+      := checkpoint (√(reduce_axis_m1 (keepdim:=true) mean (x ²) + broadcast' eps))%core.
 
     Definition rescale (x : tensor (s ::' d_model) A)
       (scale : tensor (s ::' 1) A)
@@ -94,7 +95,7 @@ Module LayerNorm.
 
     Definition forward (x : tensor (s ::' d_model) A)
       : tensor (s ::' d_model) A
-      := let x := PArray.checkpoint (linpart x) in
+      := let x := linpart x in
          let scale := scale x in
          let x := rescale x scale in
          checkpoint (postrescale x).
@@ -186,7 +187,7 @@ Module Attention.
       := apply_causal_mask attn_scores.
 
     Definition pattern : tensor (batch ::' n_heads ::' pos ::' pos) A
-      := checkpoint (softmax_dim_m1 masked_attn_scores).
+      := checkpoint (softmax_dim_m1 (checkpoint masked_attn_scores)).
 
     Definition z : tensor (batch ::' pos ::' n_heads ::' d_head) A
       := checkpoint
