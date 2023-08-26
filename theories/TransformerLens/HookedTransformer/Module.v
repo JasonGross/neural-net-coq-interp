@@ -3,6 +3,7 @@ From Coq Require Import Derive.
 From Coq.Structures Require Import Equalities.
 From Coq Require Import Floats Uint63 ZArith NArith.
 From NeuralNetInterp.Util Require Import PrimitiveProd.
+From NeuralNetInterp.Util.Tactics Require Import IsUint63 IsFloat.
 From NeuralNetInterp.Util Require Export Default Pointed.
 From NeuralNetInterp.Util.Arith Require Import Classes Instances.
 From NeuralNetInterp.Torch Require Import Tensor.
@@ -585,6 +586,7 @@ End LayerNorm.
           => lazymatch v with
              | fun f x => f x => idtac
              | fun x => x => idtac
+             | _ => first [ is_uint63 v | is_float v ]
              end;
              subst H
         | [ H := [ fun x => coer x ] : float -> float |- _ ] => cbv in H; subst H
@@ -600,42 +602,50 @@ End LayerNorm.
 
     Module Export Hints.
       #[local] Set Warnings Append "-unsupported-attributes".
-      #[export] Strategy -100 [repeat repeat' reduce_axis_m1 map map' reduce_axis_m1' reshape_app_combine broadcast broadcast' reshape_app_combine' RawIndex.uncurry_radd RawIndex.split_radd reshape_snoc_split reshape_app_split reshape_app_split' RawIndex.curry_radd RawIndex.combine_radd RawIndex.hd RawIndex.tl
-                                 adjust_index_for
-                                 lift_coer_has_zero
-                                 Nat.radd
-                                 Classes.sqrt Classes.add Classes.sub Classes.opp Classes.mul Classes.div Classes.sqr Classes.one Classes.zero Classes.exp
-                                 Tensor.get Tensor.raw_get Slicing.SliceIndex.SliceIndexType.slice Slice.invert_index Slice.concretize PolymorphicOption.Option.sequence_return Slice.step Slice.start Slice.stop Slice.Concrete.length Slicing.SliceIndex.slice Slicing.FancyIndex.slice Slicing.FancyIndex.slice_ Slicing.FancyIndex.broadcast Slicing.FancyIndex.FancyIndexType.broadcast Slice.Concrete.normalize Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.start
-                                 Slice.Concrete.step int_has_one Classes.ltb Uint63.int_has_ltb PrimInt63.ltb Slice.Concrete.stop Slice.Concrete.base_len
-                                 RawIndex.snoc RawIndex.nil
-                                 map_dep map2 map2' map3
-                                 Shape.tl Shape.hd Shape.snoc Shape.nil
+      #[export]
+        Strategy -100 [
+                      repeat repeat' reduce_axis_m1 map map' reduce_axis_m1' reshape_app_combine broadcast broadcast' reshape_app_combine' RawIndex.uncurry_radd RawIndex.split_radd reshape_snoc_split reshape_app_split reshape_app_split' RawIndex.curry_radd RawIndex.combine_radd RawIndex.hd RawIndex.tl
+                        adjust_index_for
+                        Nat.radd
+                        Classes.sqrt Classes.add Classes.sub Classes.opp Classes.mul Classes.div Classes.sqr Classes.one Classes.zero Classes.exp Classes.eqb Classes.neqb Classes.ltb Classes.leb
+                        bool_has_one bool_has_zero bool_has_eqb
+                        int_has_one Uint63.int_has_ltb PrimInt63.ltb
+                        Sint63.max Sint63.int_has_leb
+                        has_default_max_leb
+                        lift_coer_has_zero lift_coer_has_one
+                        Z_has_zero Z_has_one
+                        Tensor.get Tensor.raw_get Slicing.SliceIndex.SliceIndexType.slice Slice.invert_index Slice.concretize PolymorphicOption.Option.sequence_return Slice.step Slice.start Slice.stop Slice.Concrete.length Slicing.SliceIndex.slice Slicing.FancyIndex.slice Slicing.FancyIndex.slice_ Slicing.FancyIndex.broadcast Slicing.FancyIndex.FancyIndexType.broadcast Slice.Concrete.normalize Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.start
+                        Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.base_len
+                        RawIndex.snoc RawIndex.nil
+                        map_dep map2 map2' map3
+                        ones tril to_bool
+                        Shape.tl Shape.hd Shape.snoc Shape.nil
 
-                                 fst snd Primitive.fst Primitive.snd
+                        fst snd Primitive.fst Primitive.snd
 
-                                 logits_all_tokens_concrete
-                                 HookedTransformer.coer_blocks_params
+                        logits_all_tokens_concrete
+                        HookedTransformer.coer_blocks_params
 
 
-                                 HookedTransformer.HookedTransformer.logits HookedTransformer.HookedTransformer.ln_final  HookedTransformer.HookedTransformer.unembed HookedTransformer.Unembed.forward HookedTransformer.HookedTransformer.resid_postembed HookedTransformer.HookedTransformer.pos_embed HookedTransformer.HookedTransformer.embed HookedTransformer.Embed.forward HookedTransformer.PosEmbed.forward
-                                 HookedTransformer.HookedTransformer.blocks_cps
-                                 HookedTransformer.HookedTransformer.blocks
-                                 TransformerBlock.attn_only_out
-                                 TransformerBlock.ln1 LayerNorm.forward TransformerBlock.query_input TransformerBlock.key_input TransformerBlock.value_input TransformerBlock.add_head_dimension LayerNorm.scale LayerNorm.rescale LayerNorm.linpart LayerNorm.postrescale
-                                 Attention.attn_out Attention.z Attention.v Attention.pattern
-                                 HookedTransformer.Attention.masked_attn_scores HookedTransformer.Attention.attn_scores Attention.einsum_input Attention.q Attention.k
-                                 ones bool_has_one tril bool_has_zero to_bool Classes.eqb Classes.neqb bool_has_eqb
-                                 softmax_dim_m1
-                                 Bool.where_ where_ float_has_mul tensor_add float_has_add tensor_mul tensor_div_by float_has_div float_has_exp float_has_sqrt tensor_sqrt float_has_sub
-                                 coer coer_Z_float
+                        HookedTransformer.HookedTransformer.logits HookedTransformer.HookedTransformer.ln_final  HookedTransformer.HookedTransformer.unembed HookedTransformer.Unembed.forward HookedTransformer.HookedTransformer.resid_postembed HookedTransformer.HookedTransformer.pos_embed HookedTransformer.HookedTransformer.embed HookedTransformer.Embed.forward HookedTransformer.PosEmbed.forward
+                        HookedTransformer.HookedTransformer.blocks_cps
+                        HookedTransformer.HookedTransformer.blocks
+                        TransformerBlock.attn_only_out
+                        TransformerBlock.ln1 LayerNorm.forward TransformerBlock.query_input TransformerBlock.key_input TransformerBlock.value_input TransformerBlock.add_head_dimension LayerNorm.scale LayerNorm.rescale LayerNorm.linpart LayerNorm.postrescale
+                        Attention.attn_out Attention.z Attention.v Attention.pattern
+                        HookedTransformer.Attention.masked_attn_scores HookedTransformer.Attention.attn_scores Attention.einsum_input Attention.q Attention.k
+                        ones bool_has_one tril bool_has_zero to_bool Classes.eqb Classes.neqb bool_has_eqb
+                        softmax_dim_m1
+                        Bool.where_ where_ float_has_mul tensor_add float_has_add tensor_mul tensor_div_by float_has_div float_has_exp float_has_sqrt tensor_sqrt float_has_sub
+                        coer coer_Z_float
 
-                                 Attention.attn_out
-                                 LayerNorm.forward LayerNorm.scale LayerNorm.rescale LayerNorm.postrescale LayerNorm.linpart
-                                 fst snd
-                                 Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.start Slice.Concrete.base_len Slice.Concrete.raw_length PolymorphicOption.option_map Slice.norm_concretize PolymorphicOption.Option.sequence_return Slice.Concrete.normalize Slice.concretize Slice.Concrete.base_len Slice.start Slice.stop Slice.step Slice.Concrete.start Slice.Concrete.stop Slice.Concrete.step Slice.Concrete.base_len
-                                 Slice.Concrete.base_len Slice.Concrete.step Slice.Concrete.start
-                                 int_has_one
-                            ].
+                        Attention.attn_out
+                        LayerNorm.forward LayerNorm.scale LayerNorm.rescale LayerNorm.postrescale LayerNorm.linpart
+                        fst snd
+                        Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.start Slice.Concrete.base_len Slice.Concrete.raw_length PolymorphicOption.option_map Slice.norm_concretize PolymorphicOption.Option.sequence_return Slice.Concrete.normalize Slice.concretize Slice.Concrete.base_len Slice.start Slice.stop Slice.step Slice.Concrete.start Slice.Concrete.stop Slice.Concrete.step Slice.Concrete.base_len
+                        Slice.Concrete.base_len Slice.Concrete.step Slice.Concrete.start
+                        int_has_one
+                    ].
       #[local] Set Warnings Append "unsupported-attributes".
     End Hints.
 
@@ -651,6 +661,8 @@ End LayerNorm.
             has_default_max_leb
             lift_coer_has_zero lift_coer_has_one
             Z_has_zero Z_has_one
+            float_has_zero float_has_one
+            coer_refl coer_tensor
             Tensor.get Tensor.raw_get Slicing.SliceIndex.SliceIndexType.slice Slice.invert_index Slice.concretize PolymorphicOption.Option.sequence_return Slice.step Slice.start Slice.stop Slice.Concrete.length Slicing.SliceIndex.slice Slicing.FancyIndex.slice Slicing.FancyIndex.slice_ Slicing.FancyIndex.broadcast Slicing.FancyIndex.FancyIndexType.broadcast Slice.Concrete.normalize Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.start
             Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.base_len
             RawIndex.snoc RawIndex.nil
@@ -705,7 +717,7 @@ End LayerNorm.
       lift_lets (); set_checkpoint ().
 
     Ltac red_early_layers _ :=
-      cbv beta iota delta [HookedTransformer.HookedTransformer.logits HookedTransformer.Unembed.forward HookedTransformer.HookedTransformer.resid_postembed HookedTransformer.HookedTransformer.pos_embed HookedTransformer.HookedTransformer.embed HookedTransformer.Embed.forward HookedTransformer.PosEmbed.forward all_tokens] in *;
+      cbv beta iota delta [HookedTransformer.HookedTransformer.logits HookedTransformer.Unembed.forward HookedTransformer.HookedTransformer.resid_postembed HookedTransformer.HookedTransformer.pos_embed HookedTransformer.HookedTransformer.embed HookedTransformer.Embed.forward HookedTransformer.PosEmbed.forward HookedTransformer.resid_postembed all_tokens] in *;
       lift_lets (); set_checkpoint ().
     Ltac red_blocks_layers_1 _ :=
       cbv beta iota delta [HookedTransformer.HookedTransformer.blocks_cps HookedTransformer.HookedTransformer.blocks] in *;
@@ -738,11 +750,20 @@ End LayerNorm.
       repeat match goal with H : _ |- _ => clear H end.
 
     Ltac red_late_layers_1 _ :=
-      cbv beta iota delta [HookedTransformer.HookedTransformer.ln_final HookedTransformer.HookedTransformer.unembed LayerNorm.forward HookedTransformer.Unembed.forward] in *;
+      cbv beta iota delta [HookedTransformer.HookedTransformer.ln_final HookedTransformer.HookedTransformer.unembed LayerNorm.forward HookedTransformer.Unembed.forward Unembed.forward] in *;
       lift_lets (); set_checkpoint ().
     Ltac red_late_layers_2 _ :=
       cbv beta iota delta [LayerNorm.linpart LayerNorm.scale LayerNorm.rescale LayerNorm.postrescale] in *;
       lift_lets (); set_checkpoint (); do_red ().
+
+    Ltac start_optimizing _ :=
+      lazymatch goal with |- ?lhs = ?rhs => cbv delta [rhs] end.
+    Ltac revert_let_eq_step _ :=
+      match goal with H := _ |- _ => revert H end;
+      match goal with |- let x := ?y in ?lhs = ?rhs => change (lhs = (let x := y in rhs)) end.
+    Ltac revert_lets_eq _ := repeat revert_let_eq_step ().
+    Ltac finish_optimizing _ :=
+      lazymatch goal with |- ?lhs = ?rhs => subst lhs; instantiate (1:=rhs); clear_all (); abstract reflexivity end.
   End Optimize.
 
   Derive logits_all_tokens_concrete_opt

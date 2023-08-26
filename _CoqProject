@@ -19,6 +19,7 @@ theories/MaxOfTwoNumbersSimpler/TheoremStatement.v
 theories/MaxOfTwoNumbersSimpler/Computed/AllAttnPattern.v
 theories/MaxOfTwoNumbersSimpler/Computed/AllLogits.v
 theories/MaxOfTwoNumbersSimpler/Computed/AllMaskedAttnScores.v
+theories/MaxOfTwoNumbersSimpler/Computed/AllPostembed.v
 theories/MaxOfTwoNumbersSimpler/Model/ExtraComputations.v
 theories/MaxOfTwoNumbersSimpler/Model/Flocqify.v
 theories/MaxOfTwoNumbersSimpler/Model/Instances.v
