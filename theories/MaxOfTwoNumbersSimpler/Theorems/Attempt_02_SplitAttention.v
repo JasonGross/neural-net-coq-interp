@@ -124,6 +124,36 @@ From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
 From Flocq Require Import Raux.
 From NeuralNetInterp.Util.Arith Require Import Flocq Flocq.Instances Flocq.Notations.
 
+From NeuralNetInterp.MaxOfTwoNumbersSimpler.Computed Require Import AllPostembed.
+(** The bound on [W_U @ (W_E + W_pos)] aka [EU + PU] *)
+(* FIXME: use only error at [-1] *)
+Lemma all_tokens_residual_error_bounded
+  : let reduce3 f := Tensor.item (reduce_axis_m1 f (reduce_axis_m1 f (reduce_axis_m1 f all_tokens_residual_error.[⋯, -1]))) in
+    (reduce3 Reduction.max <? 2.99)%float = true
+    /\ (-3.25 <? reduce3 Reduction.min)%float = true.
+Proof.
+  cbv beta iota zeta.
+  repeat match goal with
+         | [ |- context[reduce_axis_m1 ?x ?y] ]
+           => lazymatch y with
+              | context[reduce_axis_m1] => fail
+              | _ => set (reduce_axis_m1 x y)
+              end
+         end.
+  cbv [Reduction.max Reduction.min reduce_axis_m1 reshape_all item reduce_axis_m1' map map_reduce_no_init reshape_snoc_split raw_get RawIndex.unreshape RawIndex.unreshape' Shape.tl Shape.hd Shape.snoc RawIndex.item RawIndex.curry_radd Classes.eqb RawIndex.tl RawIndex.combine_radd RawIndex.snoc RawIndex.nil int_has_eqb PrimInt63.eqb Uint63.eqb Classes.zero Classes.one int_has_zero LoopNotation.set Classes.max Classes.min LoopNotation.update LoopNotation.get Monad.bind Classes.int_div Z_has_int_div LoopBody_Monad has_default_max_leb has_default_min_leb Classes.leb float_has_leb for_loop_lt run_body Wf_Uint63.bind] in *; cbn [fst snd] in *.
+  repeat match goal with
+         | [ H := context[of_Z _] |- _ ]
+           => set (x := of_Z _) in (value of H) at 1; vm_compute in x; subst x
+         | [ H := context[to_Z _] |- _ ]
+           => set (x := to_Z _) in (value of H) at 1; vm_compute in x; subst x
+         end.
+  (*
+  remember PrimFloat.ltb in |- *.
+  remember PrimFloat.leb in |- *.
+  Time vm_compute. *)
+  vm_cast_no_check (conj (eq_refl true) (eq_refl true)).
+Qed.
+
 Ltac zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
 
 Theorem good_accuracy : TheoremStatement.Accuracy.best (* (abs (real_accuracy - expected_accuracy) <? error)%float = true *).
