@@ -126,12 +126,12 @@ From NeuralNetInterp.Util.Arith Require Import Flocq Flocq.Instances Flocq.Notat
 
 From NeuralNetInterp.MaxOfTwoNumbersSimpler.Computed Require Import AllPostembed.
 (** The bound on [W_U @ (W_E + W_pos)] aka [EU + PU] *)
-(* FIXME: use only error at [-1] *)
 Lemma all_tokens_residual_error_bounded
-  : let reduce3 f := Tensor.item (reduce_axis_m1 f (reduce_axis_m1 f (reduce_axis_m1 f all_tokens_residual_error.[⋯, -1]))) in
-    (reduce3 Reduction.max <? 2.99)%float = true
-    /\ (-3.25 <? reduce3 Reduction.min)%float = true.
+  : let reduce3 f := Tensor.item (reduce_axis_m1 f (reduce_axis_m1 f all_tokens_residual_error.[…, -1]%fancy_tensor)) in
+    (reduce3 Reduction.max <? 0x1.b3)%float = true
+    /\ (-0x1.31 <? reduce3 Reduction.min)%float = true.
 Proof.
+  (*
   cbv beta iota zeta.
   repeat match goal with
          | [ |- context[reduce_axis_m1 ?x ?y] ]
@@ -140,7 +140,7 @@ Proof.
               | _ => set (reduce_axis_m1 x y)
               end
          end.
-  cbv [Reduction.max Reduction.min reduce_axis_m1 reshape_all item reduce_axis_m1' map map_reduce_no_init reshape_snoc_split raw_get RawIndex.unreshape RawIndex.unreshape' Shape.tl Shape.hd Shape.snoc RawIndex.item RawIndex.curry_radd Classes.eqb RawIndex.tl RawIndex.combine_radd RawIndex.snoc RawIndex.nil int_has_eqb PrimInt63.eqb Uint63.eqb Classes.zero Classes.one int_has_zero LoopNotation.set Classes.max Classes.min LoopNotation.update LoopNotation.get Monad.bind Classes.int_div Z_has_int_div LoopBody_Monad has_default_max_leb has_default_min_leb Classes.leb float_has_leb for_loop_lt run_body Wf_Uint63.bind] in *; cbn [fst snd] in *.
+  cbv [Reduction.max Reduction.min reduce_axis_m1 reshape_all item reduce_axis_m1' map map_reduce_no_init reshape_snoc_split raw_get RawIndex.unreshape RawIndex.unreshape' Shape.tl Shape.hd Shape.snoc RawIndex.item RawIndex.curry_radd Classes.eqb RawIndex.tl RawIndex.combine_radd RawIndex.snoc RawIndex.nil int_has_eqb PrimInt63.eqb Uint63.eqb Classes.zero Classes.one int_has_zero LoopNotation.set Classes.max Classes.min LoopNotation.update LoopNotation.get Monad.bind Classes.int_div Z_has_int_div LoopBody_Monad has_default_max_leb has_default_min_leb Classes.leb float_has_leb for_loop_lt run_body Wf_Uint63.bind FancyIndex.slice FancyIndex.transfer_inner_shape FancyIndex.FancyIndexType.transfer_inner_shape SliceIndex.SliceIndexType.transfer_shape SliceIndex.SliceIndexType.transfer_shape_single_index reshape_app_combine' FancyIndex.slice_ RawIndex.uncurry_radd map_dep SliceIndex.slice FancyIndex.broadcast map2 repeat' RawIndex.split_radd Nat.radd SliceIndex.SliceIndexType.slice FancyIndex.FancyIndexType.broadcast adjust_index_for Classes.modulo] in *; cbn [fst snd] in *.
   repeat match goal with
          | [ H := context[of_Z _] |- _ ]
            => set (x := of_Z _) in (value of H) at 1; vm_compute in x; subst x
@@ -150,7 +150,8 @@ Proof.
   (*
   remember PrimFloat.ltb in |- *.
   remember PrimFloat.leb in |- *.
-  Time vm_compute. *)
+  Time vm_compute.
+ *)*)
   vm_cast_no_check (conj (eq_refl true) (eq_refl true)).
 Qed.
 
@@ -668,11 +669,25 @@ Proof.
     nia. }
   clearbody all_tokens0 all_tokens1.
   rename all_tokens0 into x, all_tokens1 into y.
-  subst all_tokens; cbv beta in *.
+  subst mask all_tokens; cbv beta in *.
   change (0 =? 0)%uint63 with true in *;
     change (1 =? 0)%uint63 with false in *;
     cbv beta iota in *.
   subst pred_tokens.
+
+  cbv [coer_ln_tensor Bool.where_] in *.
+  repeat (match goal with
+          | [ H := I |- _ ] => subst H
+          | [ H := ?x |- _ ] => is_var x; subst H
+          | [ H := fun i => coer (?x (tt, i)) |- _ ]
+            => is_var x; subst H
+          | [ H := fun i j => coer (?x (tt, i, j)) |- _ ]
+            => is_var x; subst H
+          | [ H := fun i j k => coer (?x (tt, i, j, k)) |- _ ]
+            => is_var x; subst H
+          | [ H := ?x |- _ ] => is_const x; subst H
+          end; cbv beta in * ).
+
 
   apply Reduction.argmax_spec.
   split.
@@ -743,8 +758,48 @@ Proof.
 
   left.
 
+  apply Rlt_bool_true.
+
+  match goal with
+  | [ |- (?x < ?y)%R ]
+    => cut ((0 < y - x)%R);
+       [ generalize x y; clear; intros; lra | ]
+  end.
 
   rewrite !Hl; clear Hl pred_logits.
+
+  change Rminus with (Classes.sub (A:=R)).
+  #[local] Opaque Reduction.sum.
+  let Radd_assoc := constr:(assoc  : forall x y z : R, @Classes.add R R R R_has_add _ _ = _) in
+  rewrite !Radd_assoc.
+  let Rsum_distr := constr:(Reduction.sum_distr (R:=@eq R)) in
+  do 2 match goal with
+    | [ |- context[Reduction.sum ?start ?stop ?step ?x + Reduction.sum ?start ?stop ?step ?y] ]
+      => lazymatch x with
+         | context[cfg.W_E]
+           => lazymatch y with
+              | context[cfg.W_pos]
+                => rewrite <- (Rsum_distr start stop step x y)
+              end
+         end
+    end.
+  let Radd_assoc := constr:(assoc  : forall x y z : R, @Classes.add R R R R_has_add _ _ = _) in
+  rewrite <- !Radd_assoc.
+  repeat match goal with
+         | [ |- context[(?x + ?y) - (?x' + ?y')] ]
+           => replace ((x + y) - (x' + y')) with ((x - x') + (y - y'))
+             by (generalize x y x' y'; clear; cbv; intros; lra)
+         | [ |- context[(?x * ?y) - (?x' * ?y)] ]
+           => replace ((x * y) - (x' * y)) with ((x - x') * y)
+             by (generalize x x' y; clear; cbv; intros; nra)
+         end.
+
+  set (embedm := Reduction.sum _ _ _ _) at 1.
+  set (embedj := Reduction.sum _ _ _ _) at 1.
+  set (EOVUm := Reduction.sum _ _ _ _) at 1.
+  set (EOVUj := Reduction.sum _ _ _ _) at 1.
+
+
 
     (* HERE
   move
