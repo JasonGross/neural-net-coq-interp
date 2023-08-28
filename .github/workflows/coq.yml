@@ -11,8 +11,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - env: { COQ_VERSION: "master", DOCKER_COQ_VERSION: "dev" , DOCKER_MATHCOMP_VERSION: "1.17.0", DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "coq-record-update coq-flocq", TGTS: "computed" }
-        - env: { COQ_VERSION: "8.17"  , DOCKER_COQ_VERSION: "8.17", DOCKER_MATHCOMP_VERSION: "1.17.0", DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "coq-record-update coq-flocq coq-interval coq-vcfloat coq-mathcomp-zify coq-mathcomp-analysis coq-mathcomp-algebra-tactics coq-mathcomp-finmap coq-vst coq-vst-lib", TGTS: "" }
+        - env: { COQ_VERSION: "master", DOCKER_COQ_VERSION: "dev" , DOCKER_MATHCOMP_VERSION: "1.17.0", DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "coq-record-update coq-flocq", LAPROOF: "", TGTS: "computed" }
+        - env: { COQ_VERSION: "8.17"  , DOCKER_COQ_VERSION: "8.17", DOCKER_MATHCOMP_VERSION: "1.17.0", DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "coq-record-update coq-flocq coq-interval coq-vcfloat coq-mathcomp-zify coq-mathcomp-analysis coq-mathcomp-algebra-tactics coq-mathcomp-finmap coq-vst coq-vst-lib", LAPROOF: "1", TGTS: "" }
 
     runs-on: ubuntu-latest
     env: ${{ matrix.env }}
@@ -39,6 +39,15 @@ jobs:
           git config --global --add safe.directory "*"
           echo '::group::install dependencies'
           opam install -y -v ${{ matrix.env.OPAM_DEPS }}
+          echo '::endgroup::'
+          echo '::group::install LAProof'
+          if [ ! -z "${{ matrix.env.LAPROOF }}" ]; then
+             git clone https://github.com/VeriNum/LAProof.git
+             pushd LAProof
+             make -j2 TIMED=1
+             make install
+             popd
+          fi
           echo '::endgroup::'
           make pretty-timed -j2 TGTS="${{ matrix.env.TGTS }}"
           make print-pretty-timed
