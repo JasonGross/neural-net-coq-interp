@@ -220,6 +220,33 @@ Module IndexGen.
     Definition uncurry_S {A r} : (Index 1 -> Index r -> A) -> (Index (1 +' r) -> A)
       := uncurry_radd.
 
+    Ltac curry_let f :=
+      let f' := fresh f in
+      let f'' := fresh f in
+      rename f into f';
+      pose (curry f') as f;
+      pose (uncurry f) as f'';
+      cbv [uncurry curry uncurry_dep curry_dep uncurry_map_dep snoc nil] in *;
+      repeat match goal with
+        | [ |- context C[f'] ]
+          => let C' := context C[f''] in
+             cut C'; [ clear; abstract (subst f f' f''; cbv beta iota; exact (fun x => x)) | ]
+        | [ H := context C[f'] |- _ ]
+          => let C' := context C[f''] in
+             let H' := fresh H in
+             rename H into H';
+             pose C' as H;
+             assert (H = H') by (clear; abstract (subst H H' f f' f''; cbv iota beta; reflexivity));
+             clearbody H'; subst H'
+        | [ H : context C [f'] |- _ ] => let C' := context C[f''] in change C' in H
+        end;
+      cbv [f'] in f; clear f'; hnf in f, f''; subst f''; cbn [fst snd] in *.
+    Ltac curry_let_step _ :=
+      match goal with
+      | [ f := _ |- _ ] => curry_let f
+      end.
+    Ltac curry_lets _ := repeat curry_let_step ().
+
     Module UncurryNotation.
       Notation "'uncurry_fun' x1 .. xn => body"
         := (match _ return _ with

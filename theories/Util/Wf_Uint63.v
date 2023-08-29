@@ -220,9 +220,9 @@ Definition map_reduce {A B} (reduce : B -> A -> B) (init : B) (start : int) (sto
      }})%core.
 
 Definition map_reduce_no_init {A} (reduce : A -> A -> A) (start : int) (stop : int) (step : int) (f : int -> A) : A
-  := (let step := if (step =? 0) then 1 else step in
+  := (let step' := if (step =? 0) then 1 else step in
       with_state (f start)
-        for (i := (start + step);; i <? stop;; i += step) {{
+        for (i := (start + step');; i <? stop;; i += step) {{
             val <-- get;;
             set (reduce val (f i))
      }})%core.
