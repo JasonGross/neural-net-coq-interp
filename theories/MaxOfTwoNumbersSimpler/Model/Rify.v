@@ -2,20 +2,27 @@ From Coq Require Import Reals ZArith.
 From Coq.Floats Require Import Floats.
 From Flocq.Core Require Import Raux Generic_fmt Zaux FLX.
 From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
-From NeuralNetInterp.Util Require Import Default Arith.Classes Arith.Instances Arith.Flocq Arith.Flocq.Instances Arith.Flocq.Definitions.
 From NeuralNetInterp.Util.Tactics Require Import Head.
 From NeuralNetInterp.Torch Require Import Tensor Tensor.Instances.
-From NeuralNetInterp.MaxOfTwoNumbersSimpler Require Import Parameters Model Model.Instances Model.Flocqify Heuristics.
+From NeuralNetInterp.MaxOfTwoNumbersSimpler Require Import Parameters Model Model.Instances Model.Flocqify Model.ExtraComputations Heuristics.
+From mathcomp.analysis Require Import Rstruct.
+From mathcomp Require Import matrix all_ssreflect all_algebra ssrnum bigop.
+From LAProof.accuracy_proofs Require Import dotprod_model.
+From vcfloat Require Import IEEE754_extra.
+From vcfloat Require Import FPCompCert.
+From mathcomp.ssreflect Require Import seq.
+From LAProof Require Import dot_acc.
+From NeuralNetInterp.Util Require Import Default Arith.Classes Arith.Instances Arith.Flocq Arith.Flocq.Instances Arith.Flocq.Definitions.
+Import (hints) Instances.Uint63.
 Import Dependent.ProperNotations.
 Import Arith.Instances.Truncating Arith.Flocq.Instances.Truncating.
 #[local] Open Scope core_scope.
 
 Module Model.
   Export Model.Instances.Model.
+  Export Model.ExtraComputations.Model.
 
-  Definition logit_rounding_error : float := 1e-5.
-
-  Lemma acc_fn_equiv_bounded_no_checkpoint
+  Lemma logit_equiv_bounded_no_checkpoint
     (use_checkpoint1:=false)
     (use_checkpoint2:=false)
     (tokens1 := all_tokens (use_checkpoint:=use_checkpoint1))
@@ -43,20 +50,13 @@ Module Model.
     repeat match goal with H : _ * _ |- _ => destruct H end.
     cbv [HookedTransformer.HookedTransformer.unembed HookedTransformer.Unembed.forward map' map reshape_app_combine reshape_app_combine' RawIndex.uncurry_radd get raw_get reshape_app_split tensor_mul Classes.mul Classes.sub tensor_sub Classes.add tensor_add map2 R_has_add RawIndex.split_radd reshape_app_split' RawIndex.curry_radd broadcast broadcast' reshape_app_combine RawIndex.combine_radd RawIndex.snoc RawIndex.nil repeat' binary_float_has_mul binary_float_has_add R_has_mul].
     cbv [get raw_get].
-    cbv [coer_tensor map coer coer_trans coer_binary_float_R coer_float_binary_float].
+    cbv [coer_tensor Tensor.map coer coer_trans coer_binary_float_R coer_float_binary_float].
     destruct u.
     revert i1 i0 i.
-    From mathcomp.analysis Require Import Rstruct.
-    From mathcomp Require Import matrix all_ssreflect all_algebra ssrnum bigop.
     #[local] Open Scope core_scope.
     intros i1 i0 i.
     set (sum1 := Wf_Uint63.Reduction.sum _ _ _ _).
     set (sum2 := Wf_Uint63.Reduction.sum _ _ _ _).
-    From LAProof.accuracy_proofs Require Import dotprod_model.
-    From vcfloat Require Import IEEE754_extra.
-    From vcfloat Require Import FPCompCert.
-    From mathcomp.ssreflect Require Import seq.
-    Import (hints) Instances.Uint63.
     assert (default_nan : { x | Binary.is_nan prec emax x = true }).
     { cbv.
       unshelve econstructor; [ unshelve econstructor | ]; [ .. | reflexivity ].
@@ -112,7 +112,6 @@ BPLUS_B2R_zero_r *)
     admit.
     rewrite Binary.B2R_B2BSN.
     epose Rabs_triang.
-    From LAProof Require Import dot_acc.
     lazymatch goal with
     | [ |- ?R (Rabs (?sub (?b2r (dotprodF ?x ?x')) ?y)) ?small ]
       => epose proof (@dotprod_forward_error _ Tdouble x x');
@@ -192,7 +191,6 @@ BPLUS_B2R_zero_r *)
     Set Printing Implicit.*)
   Admitted. (* XXX FIXME *)
 
-
   Lemma acc_fn_equiv_bounded_no_checkpoint
     (use_checkpoint1:=false)
     (use_checkpoint2:=false)
@@ -210,10 +208,7 @@ BPLUS_B2R_zero_r *)
     repeat match goal with H := _ |- _ => subst H end.
     cbv [Classes.abs Classes.sub Classes.leb R_has_abs R_has_sub R_has_leb].
     cbv [acc_fn].
-
-    set (argmaxv
     cbv beta iota delta [acc_fn].
-    Set Printing Implicit.
   Admitted. (* XXX FIXME *)
 
   Lemma acc_fn_equiv_bounded
@@ -232,7 +227,7 @@ BPLUS_B2R_zero_r *)
     rewrite <- (acc_fn_equiv_bounded_no_checkpoint i).
     do 2 f_equal.
     apply f_equal2.
-    all: subst acc1 acc2 logits1 logits2 tokens1 tokens2.
+    all: repeat match goal with H := _ |- _ => subst H end.
     all: try apply f_equal.
     all: eapply acc_fn_Proper_dep.
     all: try solve [ repeat intro; subst; constructor ].
@@ -241,4 +236,50 @@ BPLUS_B2R_zero_r *)
     all: try solve [ repeat intro; subst; constructor ].
     all: try now apply all_tokens_Proper.
   Qed.
+
+  Lemma all_tokens_residual_error_equiv_bounded_no_checkpoint
+    (use_checkpoint1:=false)
+    (use_checkpoint2:=false)
+    (tokens1 := all_tokens (use_checkpoint:=use_checkpoint1))
+    (tokens2 := all_tokens (use_checkpoint:=use_checkpoint2))
+    (resid_postembed1 := resid_postembed (use_checkpoint:=use_checkpoint1) tokens1)
+    (resid_postembed2 := resid_postembed (use_checkpoint:=use_checkpoint2) tokens2)
+    (resid_err1 := Unembed.forward resid_postembed1)
+    (resid_err2 := Unembed.forward resid_postembed2)
+    : Tensor.eqfR
+        (fun (x:binary_float prec emax) (y:R) => (abs ((x:R) - y) <=? (residual_error_rounding_error:R)) = true)
+        resid_err1
+        resid_err2.
+  Proof.
+    intro i.
+    repeat match goal with H := _ |- _ => subst H end.
+    cbv [Classes.abs Classes.sub Classes.leb R_has_abs R_has_sub R_has_leb].
+  Admitted. (* XXX FIXME *)
+
+  Lemma all_tokens_residual_error_equiv_bounded
+    {use_checkpoint1 use_checkpoint2}
+    (tokens1 := all_tokens (use_checkpoint:=use_checkpoint1))
+    (tokens2 := all_tokens (use_checkpoint:=use_checkpoint2))
+    (resid_postembed1 := resid_postembed (use_checkpoint:=use_checkpoint1) tokens1)
+    (resid_postembed2 := resid_postembed (use_checkpoint:=use_checkpoint2) tokens2)
+    (resid_err1 := Unembed.forward resid_postembed1)
+    (resid_err2 := Unembed.forward resid_postembed2)
+    : Tensor.eqfR
+        (fun (x:binary_float prec emax) (y:R) => (abs ((x:R) - y) <=? (residual_error_rounding_error:R)) = true)
+        resid_err1
+        resid_err2.
+  Proof.
+    intro i.
+    rewrite <- (all_tokens_residual_error_equiv_bounded_no_checkpoint i).
+    do 2 f_equal.
+    apply f_equal2.
+    all: repeat match goal with H := _ |- _ => subst H end.
+    all: try apply f_equal.
+    (*all: eapply Unembed.forward_Proper_dep.
+    all: try solve [ repeat intro; subst; constructor ].
+    all: try now apply all_tokens_Proper.
+    all: eapply logits_Proper_dep.
+    all: try solve [ repeat intro; subst; constructor ].
+    all: try now apply all_tokens_Proper.*)
+  Admitted.
 End Model.

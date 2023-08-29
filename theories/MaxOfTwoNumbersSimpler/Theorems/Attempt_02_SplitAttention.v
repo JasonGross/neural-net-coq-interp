@@ -794,6 +794,9 @@ Proof.
              by (generalize x x' y; clear; cbv; intros; nra)
          end.
 
+  pose proof (@Rify.Model.all_tokens_residual_error_equiv_bounded false false).
+  pose proof (@all_tokens_residual_error_bounded).
+
   set (embedm := Reduction.sum _ _ _ _) at 1.
   set (embedj := Reduction.sum _ _ _ _) at 1.
   set (EOVUm := Reduction.sum _ _ _ _) at 1.

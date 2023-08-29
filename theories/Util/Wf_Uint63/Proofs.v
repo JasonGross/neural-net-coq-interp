@@ -232,21 +232,25 @@ Module Reduction.
           *)
   Abort.
 
-  Lemma map_reduce_spec {A B reduce init start stop step0 f} (P : int -> _ -> Prop)
+  Lemma map_reduce_spec_count {A B reduce init start stop step0 f} (P : nat -> int -> _ -> Prop)
     (step : int := if (step0 =? 0) then 1 else step0)
-    (Hinit : P start init)
-    (Hstep : forall i v, P i v -> (start <=? i) = true -> (i <? stop) = true -> P (i + step) (reduce v (f i)))
-    : P (start + step * (if start <? stop then 1 + (stop - start - 1) // step else 0))
+    (Hinit : P 0 start init)
+    (Hstep : forall n i v, P n i v -> (start <=? i) = true -> (i <? stop) = true -> i = start + step * Uint63.of_Z n -> P (S n) (i + step) (reduce v (f i)))
+    : P (if start <? stop then S (Z.to_nat ((stop - start - 1) // step : int)) else 0)
+        (start + step * if start <? stop then 1 + (stop - start - 1) // step else 0)
         (@map_reduce A B reduce init start stop step0 f).
   Proof.
-    cbv [map_reduce for_loop_lt Fix Classes.eqb int_has_eqb Classes.one Classes.zero int_has_one int_has_zero Classes.leb Classes.ltb int_has_leb int_has_leb] in *.
+    cbv [map_reduce for_loop_lt Fix Classes.eqb int_has_eqb Classes.one Classes.zero int_has_one int_has_zero Classes.leb Classes.ltb int_has_leb int_has_leb int_has_ltb nat_has_zero] in *.
     fold step.
     set (f' := fun (i : int) continue state => _) at 1.
     set (wf := Acc_intro_generator _ _ _); clearbody wf.
     set (start0 := start) in Hstep.
     assert (Hstart : (start0 <=? start) = true) by (cbv; lia).
-    clearbody start0.
-    revert start wf init Hstart Hinit.
+    set (n0 := O) in Hinit.
+    assert (Hn : start = start0 + step * Uint63.of_Z n0) by (cbv; lia).
+    change (P ?x) with (P (n0 + x)%nat).
+    clearbody start0 n0.
+    revert start wf init Hstart n0 Hn Hinit.
     fix IH 2.
     intros ? [wf]; intros; cbn [Fix_F]; cbv [Acc_inv].
     unfold f' at 1.
@@ -269,50 +273,71 @@ Module Reduction.
            => replace (x * (1 + 0))%uint63 with x by lia
          | _ => idtac
          end.
+    all: rewrite ?Nat.add_0_r.
     all: try match goal with
-           | [ H : ?P ?x ?v |- ?P ?y ?v ] => replace y with x by lia
+           | [ H : ?P _ ?x ?v |- ?P _ ?y ?v ] => replace y with x by lia
            end.
     all: try assumption.
+    all: try match goal with |- ?P (?n + ?x)%nat _ _ => change x with 1%nat end.
+    all: rewrite ?Nat.add_1_r.
     all: auto.
     all: try (exfalso; lia).
-    all: try (do 2 (let x := open_constr:(_) in specialize (IH x));
-              lazymatch goal with
-              | [ |- ?P ?y ?v ]
-                => lazymatch type of IH with
-                   | _ -> P ?x ?v'
-                     => unify v v'; replace y with x
-                   end
-              end;
-              try specialize (IH ltac:(auto));
-              auto).
-    match goal with
-    | [ |- context[((?stop - (?start + ?step) - 1) / ?step)%uint63] ]
-      => replace ((stop - (start + step) - 1))%uint63 with (((stop - start - 1) - step))%uint63 by lia
+    all: [ > ].
+    do 3 (let x := open_constr:(_) in specialize (IH x)).
+    lazymatch goal with
+    | [ |- ?P ?n ?y ?v ]
+      => lazymatch type of IH with
+         | _ -> _ -> P ?n' ?x ?v'
+           => unify v v';
+              replace y with x;
+              [ replace n with n'
+              | ]
+         end
     end.
-    match goal with
-    | [ |- context[((?x - ?z) / ?z)%uint63] ]
-      => let H := fresh in
-         let H' := fresh in
-         assert (H : z <> 0%uint63) by (subst z; clear; break_innermost_match; lia);
-         assert (H' : (z <=? x)%uint63 = true) by lia;
-         replace ((x - z) / z)%uint63 with (x / z - 1)%uint63;
-         [
-         | revert H H'; generalize x z; clear;
-           intros;
-           zify;
-           let wBv := (eval cbv in wB) in
-           repeat match goal with
-             | [ H : context[(wBv * ?q)%Z] |- _ ]
-               => lazymatch goal with
-                  | [ H' : (q = 0 \/ q = 1)%Z |- _ ] => fail
-                  | [ H' : (q = 0 \/ q = -1)%Z |- _ ] => fail
-                  | _ => first [ assert (q = 0 \/ q = 1)%Z by nia
-                               | assert (q = 0 \/ q = -1)%Z by nia ]
-                  end
-             end ]
-    end.
-    2: nia.
-    1: lia.
+    { specialize (fun pf => IH pf ltac:(eauto)).
+      specialize (IH ltac:(lia)).
+      auto. }
+    all: match goal with
+         | [ |- context[((?stop - (?start + ?step) - 1) / ?step)%uint63] ]
+           => replace ((stop - (start + step) - 1))%uint63 with (((stop - start - 1) - step))%uint63 by lia
+         end.
+    all: match goal with
+         | [ |- context[((?x - ?z) / ?z)%uint63] ]
+           => let H := fresh in
+              let H' := fresh in
+              assert (H : z <> 0%uint63) by (subst z; clear; break_innermost_match; lia);
+              assert (H' : (z <=? x)%uint63 = true) by lia;
+              replace ((x - z) / z)%uint63 with (x / z - 1)%uint63;
+              [
+              | revert H H'; generalize x z; clear;
+                intros;
+                zify;
+                let wBv := (eval cbv in wB) in
+                repeat match goal with
+                  | [ H : context[(wBv * ?q)%Z] |- _ ]
+                    => lazymatch goal with
+                       | [ H' : (q = 0 \/ q = 1)%Z |- _ ] => fail
+                       | [ H' : (q = 0 \/ q = -1)%Z |- _ ] => fail
+                       | _ => first [ assert (q = 0 \/ q = 1)%Z by nia
+                                    | assert (q = 0 \/ q = -1)%Z by nia ]
+                       end
+                  end ]
+         end;
+      [ | nia ].
+    2: lia.
+    { assert ((0 <? (stop - start - 1) / step)%uint63 = true) by lia.
+      generalize dependent (((stop - start - 1) / step)%uint63); intros.
+      lia. }
+  Qed.
+
+  Lemma map_reduce_spec {A B reduce init start stop step0 f} (P : int -> _ -> Prop)
+    (step : int := if (step0 =? 0) then 1 else step0)
+    (Hinit : P start init)
+    (Hstep : forall i v, P i v -> (start <=? i) = true -> (i <? stop) = true -> P (i + step) (reduce v (f i)))
+    : P (start + step * (if start <? stop then 1 + (stop - start - 1) // step else 0))
+        (@map_reduce A B reduce init start stop step0 f).
+  Proof.
+    eapply map_reduce_spec_count with (P := fun _ => P); eauto.
   Qed.
 
   Lemma argmax_gen_spec {A} {ltbA : has_ltb A} {start stop step f i v}
@@ -395,31 +420,14 @@ Module Reduction.
     : @map_reduce A B reduce init start stop step0 (fun _ => f)
       = N.iter ((if start <? stop then 1 + (((stop - start - 1) // step : int) : N) else 0)%core) (fun v => reduce v f) init.
   Proof.
-    rewrite (map_reduce_spec (fun (i:int) v => v = N.iter (if i =? start then 0 else N.succ ((i - start - step) / step)%uint63) (fun v => reduce v f) init)); fold step.
-    all: cbv [Classes.add Classes.sub Classes.div Classes.int_div Classes.one Classes.eqb Classes.zero Classes.mul int_has_add int_has_sub int_has_int_div int_has_one int_has_zero int_has_eqb int_has_mul N_has_add N_has_one] in *.
-    all: intros; subst.
-    all: break_innermost_match.
-    all: repeat match goal with
-           | _ => progress subst
-           | _ => reflexivity
-           | [ |- context[(?x - ?x)%uint63] ]
-             => replace (x - x)%uint63 with 0%uint63 by lia
-           | [ |- context[(?x + ?y - ?x)%uint63] ]
-             => replace (x + y - x)%uint63 with y by lia
-           | [ |- context[(0 / ?x)%uint63] ]
-             => replace (0 / x)%uint63 with 0%uint63 by nia
-           | [ |- context[(?x * 0)%uint63] ]
-             => replace (x * 0)%uint63 with 0%uint63 by nia
-           | [ H : (?x =? ?y)%uint63 = true |- _ ] => apply eqb_spec in H
-           | [ H : (?x + ?y = ?x)%uint63 |- _ ] => assert (y = 0)%uint63 by lia; clear H
-           | [ H : (?x = ?x + ?y)%uint63 |- _ ] => assert (y = 0)%uint63 by lia; clear H
-           | [ H : ?x = 0%uint63 |- _ ] => subst x
-           | [ H : (if ?b then _ else _) = 0%uint63 |- _ ]
-             => destruct b eqn:?
-           | _ => lia
-           end.
-    all: cbn [N.iter].
-  Admitted.
+    rewrite (map_reduce_spec_count (fun (n : nat) (i:int) v => v = N.iter (N.of_nat n) (fun v => reduce v f) init)); fold step.
+    all: cbv [Classes.add Classes.sub Classes.div Classes.int_div Classes.one Classes.eqb Classes.zero Classes.mul int_has_add int_has_sub int_has_int_div int_has_one int_has_zero int_has_eqb int_has_mul N_has_add N_has_one coer_int_N'] in *.
+    all: try reflexivity.
+    { f_equal; break_innermost_match; try reflexivity; lia. }
+    { intros; subst.
+      rewrite Nnat.Nat2N.inj_succ.
+      rewrite N.iter_succ; reflexivity. }
+  Qed.
 
   Lemma map_reduce_distr12 {A B R reduce init1 init2 start stop step} {f : int -> B -> A} {F}
     : R init2 (F init1)
