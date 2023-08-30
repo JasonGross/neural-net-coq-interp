@@ -137,8 +137,8 @@ Local Open Scope Q_scope.
 #[export] Coercion inject_Z : Z >-> Q.
 #[local] Set Warnings Append "unsupported-attributes".
 #[export] Instance inject_Z_coer : has_coer Z Q := fun x => x.
-#[export] Hint Extern 10 (has_coer_from Z ?B) => check_unify_has_coer_from Q : typeclass_instances.
-#[export] Hint Extern 10 (has_coer_to ?A Q) => check_unify_has_coer_to Z : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_from _ Z ?B) => check_unify_has_coer_from Q : typeclass_instances.
+#[export] Hint Extern 10 (has_coer_to _ ?A Q) => check_unify_has_coer_to Z : typeclass_instances.
 #[export] Instance Q_has_leb : has_leb Q := Qle_bool.
 #[export] Instance Q_has_eqb : has_eqb Q := Qeq_bool.
 #[export] Instance Q_has_opp : has_opp Q := Qopp.
