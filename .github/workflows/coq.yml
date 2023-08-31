@@ -44,6 +44,9 @@ jobs:
           if [ ! -z "${{ matrix.env.LAPROOF }}" ]; then
              git clone https://github.com/VeriNum/LAProof.git
              pushd LAProof
+             git remote add JasonGross https://github.com/JasonGross/LAProof.git
+             git remote update
+             git checkout 7e5c81dcfafde501e87a2c2db4021f5190dff960 # waiting on https://github.com/VeriNum/LAProof/pull/10/
              make -j2 TIMED=1
              make install
              popd
