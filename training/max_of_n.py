@@ -1,8 +1,12 @@
 import numpy as np
 import torch
-
-from training.training import get_data, make_generator_from_data
+from transformer_lens import HookedTransformer
+from training_utils import get_data, make_generator_from_data, large_data_gen
 import tqdm.auto as tqdm
+
+
+
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def loss_fn(
@@ -36,23 +40,31 @@ def acc_fn(
 
 
 def train_model(
-    model,
+    model:HookedTransformer,
     n_epochs=100,
     batch_size=128,
     batches_per_epoch=10,
-    sequence_length=2,
     force_adjacent=False,
+    use_complete_data=True,
+    device=DEVICE
   ):
   lr = 1e-3
   betas = (.9, .999)
   optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=betas)
-
+  n_digits, sequence_length = model.cfg.d_vocab, model.cfg.n_ctx
   train_losses = []
 
-  data_train, data_test = get_data(sequence_length=sequence_length, force_adjacent=force_adjacent)
+  if use_complete_data:
+    data_train, data_test = get_data(n_digits=n_digits, sequence_length=sequence_length, force_adjacent=force_adjacent)
+    train_data_gen_gen = lambda: make_generator_from_data(data_train, batch_size=batch_size)
+  else:
+    train_data_gen = large_data_gen(n_digits=n_digits, sequence_length=sequence_length, batch_size=batch_size, context="train", device=device)
+    test_data_gen = large_data_gen(n_digits=n_digits, sequence_length=sequence_length, batch_size=batch_size * 20, context="test")
+    data_test = next(test_data_gen)
+
 
   for epoch in tqdm.tqdm(range(n_epochs)):
-    train_data_gen = make_generator_from_data(data_train, batch_size=batch_size)
+    train_data_gen = train_data_gen_gen()
     epoch_losses = []
     for _ in range(batches_per_epoch):
       tokens = next(train_data_gen)

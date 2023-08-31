@@ -1,6 +1,9 @@
+# %%
 import dataclasses
 import numpy as np
 import torch
+import transformer_lens
+from transformer_lens import HookedTransformer
 
 
 def strify(v, ty=None, description=None):
@@ -28,7 +31,8 @@ def strify(v, ty=None, description=None):
         else:
             return '[' + ";".join(map(strify, v)) + ']'
     if isinstance(v, transformer_lens.FactoredMatrix): return strify(v.AB)
-    if any(isinstance(v, ty) for ty in (np.float32, np.float64, float)): return v.hex()
+    if any(isinstance(v, ty) for ty in (np.float64, float)): return v.hex()
+    if isinstance(v, np.float32): return float(v).hex()
     if isinstance(v, torch.dtype): return f'"{str(v)}"'
     if any(isinstance(v, ty) for ty in (int, )): return f'{v}%Z' if v < 0 else f'{v}%N'
     raise ValueError(f"unknown type {type(v)}" + (f" ({description})" if description is not None else ""))
@@ -72,9 +76,20 @@ def coq_export_params(model: HookedTransformer):
         print(strify(getattr(model, name)))
         print('.')
 
+    
     for layer, block in enumerate(model.blocks):
-        for mod, names in (('attn', ('W_Q', 'W_K', 'W_O', 'W_V', 'b_Q', 'b_K', 'b_O', 'b_V')), ):
+        for module, names in (('ln1', ('b', 'w')), ('attn', ('W_Q', 'W_K', 'W_O', 'W_V', 'b_Q', 'b_K', 'b_O', 'b_V')), ):
+            if hasattr(block, module):
+                for name in names:
+                    if hasattr(getattr(block, module), name):
+                        print(f'Definition L{layer}_{module}_{name} :=')
+                        print(strify(getattr(getattr(block, module), name)))
+                        print('.')
+
+    for module, names in (('ln_final', ('b', 'w')), ):
+        if hasattr(model, module):
             for name in names:
-                print(f'Definition L{layer}_{mod}_{name} :=')
-                print(strify(getattr(getattr(block, mod), name)))
+                print(f'Definition {module}_{name} :=')
+                print(strify(getattr(getattr(model, module), name)))
                 print('.')
+# %%

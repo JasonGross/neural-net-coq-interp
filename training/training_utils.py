@@ -6,7 +6,6 @@
 
 
 import numpy as np
-from training.Proving_How_A_Transformer_Takes_Max import D_VOCAB, DEVICE
 from transformer_lens import HookedTransformer
 
 
@@ -15,8 +14,10 @@ import torch
 
 import itertools
 
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-def generate_data(n_digits=D_VOCAB, sequence_length=2):
+
+def generate_data(n_digits, sequence_length=2):
   data = list(itertools.product(range(n_digits), repeat=sequence_length))
   data = torch.tensor(data)
   return data
@@ -71,7 +72,7 @@ def make_generator_from_data(data, batch_size=128):
 
 
 def get_data(
-    n_digits=D_VOCAB,
+    n_digits,
     sequence_length=2,
     training_ratio=0.7,
     force_adjacent=False):
@@ -114,14 +115,14 @@ def get_data(
 # In[ ]:
 
 
-def large_data_gen(n_digits=D_VOCAB, sequence_length=6, batch_size=128, context="train"):
+def large_data_gen(n_digits, sequence_length=6, batch_size=128, context="train", device=DEVICE):
   if context == "train":
     seed = 5
   else:
     seed = 6
   torch.manual_seed(seed)
   while True:
-    yield torch.randint(0, n_digits, (batch_size, sequence_length)).to(DEVICE)
+    yield torch.randint(0, n_digits, (batch_size, sequence_length)).to(device)
 
 
 # # Loss Function

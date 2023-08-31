@@ -24,36 +24,38 @@ SAVE_IN_GOOGLE_DRIVE = True # @param
 # In[ ]:
 
 
-import einops
 import torch
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.io as pio
-from analysis_utils import imshow, line
-from coq_export_utils import strify
-from analysis_utils import pm_range, summarize
-from coq_export_utils import coq_export_params
-from max_of_n import acc_fn, loss_fn, train_model
-from training import compute_all_tokens, get_data, large_data_gen, make_generator_from_data
+import transformer_lens
 from transformer_lens import HookedTransformer, HookedTransformerConfig
 import tqdm.auto as tqdm
 import circuitsvis as cv
 from fancy_einsum import einsum
 import dataclasses
 from pathlib import Path
-from typing import Optional
+
+from coq_export_utils import strify
+from analysis_utils import line, summarize, plot_QK_cosine_similarity, \
+    analyze_svd, calculate_OV_of_pos_embed, calculate_attn, calculate_attn_by_pos, \
+    calculate_copying, calculate_copying_with_pos, calculate_embed_and_pos_embed_overlap, \
+    calculate_embed_overlap, calculate_pos_embed_overlap, check_monotonicity, \
+    compute_slack, plot_avg_qk_heatmap, plot_qk_heatmap, plot_qk_heatmaps_normed, plot_unembed_cosine_similarity
+from coq_export_utils import coq_export_params
+from max_of_n import acc_fn, loss_fn, train_model
+from training_utils import compute_all_tokens, get_data, large_data_gen, make_generator_from_data
 
 import os, sys
+from importlib import reload
 
 from scipy.optimize import curve_fit
 
-from training.analysis_utils import calculate_OV_of_pos_embed, calculate_embed_and_pos_embed_overlap, calculate_embed_overlap, calculate_pos_embed_overlap, compute_slack
 
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # In[ ]:
 
@@ -264,7 +266,7 @@ if not ALWAYS_TRAIN_MODEL:
 
 
 if TRAIN_MODEL:
-    simpler_train_losses = train_model(simpler_model, n_epochs=1500, batch_size=128, sequence_length=2, force_adjacent=True)
+    simpler_train_losses = train_model(simpler_model, n_epochs=1500, batch_size=128, force_adjacent=True)
 
 
 # In[ ]:
@@ -364,243 +366,6 @@ calculate_embed_and_pos_embed_overlap(simpler_model)
 calculate_OV_of_pos_embed(simpler_model)
 
 
-# ## Copying: W_E @ W_V @ W_O @ W_U
-
-# In[ ]:
-
-
-def calculate_copying(model: HookedTransformer, renderer=None):
-    W_U, W_E, W_pos, W_V, W_O = model.W_U, model.W_E, model.W_pos, model.W_V, model.W_O
-    d_model, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_vocab, model.cfg.n_ctx
-    assert W_U.shape == (d_model, d_vocab)
-    assert W_pos.shape == (n_ctx, d_model)
-    assert W_E.shape == (d_vocab, d_model)
-    assert W_V.shape == (1, 1, d_model, d_model)
-    assert W_O.shape == (1, 1, d_model, d_model)
-    res = (W_E @ W_V @ W_O @ W_U).detach()[0,0,:,:]
-    res_diag = res.diag()
-    res_off_diagonal = res[torch.eye(d_vocab) == 0]
-    centered = -res + res.diag()[:, None]
-    nonzero_centered = centered[torch.eye(d_vocab) == 0]
-    imshow(res, title='W_E @ W_V @ W_O @ W_U', renderer=renderer,
-           xaxis="logit affected", yaxis="input token")
-    imshow(centered, title='copying.diag()[:,None] - copying', renderer=renderer)
-    line(res.diag(), title='copying.diag()', renderer=renderer)
-    # take svd of res
-    u, s, v = torch.svd(res)
-    # plot singular values
-    line(s, title='singular values of copying', renderer=renderer)
-    # plot u, v
-    imshow(u, title='u', renderer=renderer)
-    imshow(v, title='v.T', renderer=renderer)
-
-    # 1. We already have u, s, and v from torch.svd(res)
-    u1 = u[:, 0]
-    v1 = v[0, :]
-
-    # 2. Fit linear models to u1 and v1
-    # Fit for u's first column
-    x_vals_u = np.arange(d_vocab)
-    y_vals_u = u[:, 0].numpy()
-    popt_u, _ = curve_fit(linear_func, x_vals_u, y_vals_u)
-
-    # Fit for v's first row
-    x_vals_v = np.arange(d_vocab)
-    y_vals_v = v[:, 0].numpy()
-    popt_v, _ = curve_fit(linear_func, x_vals_v, y_vals_v)
-
-    # Plot u's column against its linear fit
-    plt.figure()
-    plt.scatter(x_vals_u, y_vals_u, alpha=0.5, label='Data')
-    plt.plot(x_vals_u, linear_func(x_vals_u, *popt_u), 'r-', label=f'u: y = {popt_u[0]:.4f}x + {popt_u[1]:.4f}')
-    plt.title("First Column of u vs Linear Fit")
-    plt.legend()
-    plt.show()
-
-    # Plot residuals for u
-    plt.figure()
-    residuals_u = y_vals_u - linear_func(x_vals_u, *popt_u)
-    plt.scatter(x_vals_u, residuals_u, alpha=0.5)
-    plt.axhline(0, color='red', linestyle='--')
-    plt.title("Residuals of u's First Column Fit")
-    plt.show()
-
-    # Plot v's row against its linear fit
-    plt.figure()
-    plt.scatter(x_vals_v, y_vals_v, alpha=0.5, label='Data')
-    plt.plot(x_vals_v, linear_func(x_vals_v, *popt_v), 'r-', label=f'v: y = {popt_v[0]:.4f}x + {popt_v[1]:.4f}')
-    plt.title("First Row of v vs Linear Fit")
-    plt.legend()
-    plt.show()
-
-    # Plot residuals for v
-    plt.figure()
-    residuals_v = y_vals_v - linear_func(x_vals_v, *popt_v)
-    plt.scatter(x_vals_v, residuals_v, alpha=0.5)
-    plt.axhline(0, color='red', linestyle='--')
-    plt.title("Residuals of v's First Row Fit")
-    plt.show()
-
-    # Subtract impact of lines
-    u_prime = linear_func(x_vals_u, *popt_u)
-    v_prime = linear_func(x_vals_v, *popt_v)
-    impact = s[0] * u_prime[:, None] @ v_prime[None, :]
-    adjusted_res = res - impact
-    imshow(impact, title="adjustment", renderer=renderer)
-
-    # adjusted_res = res - s[0] * (u[:, 0:1] @ v[:,0:1].T) * (popt_u[0] * x_vals_u[:, None] + popt_v[0] * x_vals_v[None, :])
-
-    imshow(adjusted_res, title='Adjusted res', renderer=renderer)
-
-    # SVD of adjusted_res
-    u_adj, s_adj, v_adj = torch.svd(adjusted_res)
-    line(s_adj, title='Singular Values of Adjusted res', renderer=renderer)
-    imshow(u_adj, title='u of residuals', renderer=renderer)
-    imshow(v_adj, title='v of residuals', renderer=renderer)
-
-    # Extracting diagonal and off-diagonal entries
-    diagonal_entries = torch.diag(adjusted_res)
-    off_diagonal_entries = adjusted_res - torch.diag_embed(diagonal_entries)
-    off_diagonal_entries = off_diagonal_entries[off_diagonal_entries != 0]
-
-    # Finding the smallest diagonal entry and the largest off-diagonal entry
-    min_diagonal_entry = diagonal_entries.min().item()
-    max_off_diagonal_entry = off_diagonal_entries.max().item()
-
-    # Printing the results
-    print(f"Smallest diagonal entry: {min_diagonal_entry} ({pm_range(diagonal_entries)})")
-    print(f"Largest off-diagonal entry: {max_off_diagonal_entry} ({pm_range(off_diagonal_entries)})")
-
-    line(diagonal_entries, title='Diagonal Entries', renderer=renderer)
-
-    off_diagonal_entries = off_diagonal_entries.flatten()
-    # Histogram plot
-    plt.hist(diagonal_entries.numpy(), bins=50, color='blue', alpha=0.7, label='Diagonal entries')
-    plt.hist(off_diagonal_entries.numpy(), bins=50, color='red', alpha=0.5, label='Off-diagonal entries')
-    plt.legend(loc='upper right')
-    plt.title('Histogram of Diagonal and Off-diagonal Entries')
-    plt.xlabel('Value')
-    plt.ylabel('Frequency')
-    plt.show()
-
-    # Histogram plot
-    plt.hist(diagonal_entries.numpy(), bins=50, color='blue', alpha=0.7, label='Diagonal entries', density=True)
-    plt.hist(off_diagonal_entries.numpy(), bins=50, color='red', alpha=0.5, label='Off-diagonal entries', density=True)
-    plt.legend(loc='upper right')
-    plt.title('Density Histogram of Diagonal and Off-diagonal Entries')
-    plt.xlabel('Value')
-    plt.ylabel('Probability Density')
-    plt.show()
-
-
-    centered_adjusted_res = -adjusted_res + adjusted_res.diag()[:, None]
-    nonzero_centered_adjusted_res = centered_adjusted_res[centered_adjusted_res != 0]
-
-    imshow(centered_adjusted_res, title='adjusted copying.diag()[:,None] - adjusted copying', renderer=renderer)
-    print(f"range on nonzero centered adjusted res: {pm_range(nonzero_centered_adjusted_res)}")
-
-    statistics = [
-        ('copying', res),
-        ('diag', res_diag),
-        ('off-diag', res_off_diagonal),
-        ('centered', centered),
-        ('nonzero centered', nonzero_centered),
-    ]
-
-    summaries = {name: summarize(value, name=name, renderer=renderer, histogram=False) for name, value in statistics}
-    for k, v in summaries.items():
-        print(k, v)
-    return res
-
-    # best_fit_u1 = linear_func(x_vals_u, *popt_u)
-
-    # best_fit_v1 = linear_func(x_vals_v, *popt_v)
-
-    # # 3. Calculate approximation of res
-    # approximated_res = s[0] * torch.tensor(best_fit_u1).unsqueeze(1).mm(torch.tensor(best_fit_v1).unsqueeze(0))
-
-    # # 4. Subtract approximation from original
-    # residuals = res - approximated_res
-
-    # # Display approximation and residuals
-    # imshow(approximated_res, title="Approximated res", renderer=renderer)
-    # imshow(residuals, title="Residuals after subtraction", renderer=renderer)
-
-    # # Return svd of residuals
-    # u_res, s_res, v_res = torch.svd(residuals)
-    # line(s_res, title='singular values of residuals', renderer=renderer)
-    # imshow(u_res, title='u of residuals', renderer=renderer)
-    # imshow(v_res, title='v of residuals', renderer=renderer)
-
-    # ... [rest of your function]
-
-
-
-    # # 1. Project res onto the first singular vectors
-    # first_component = s[0] * torch.outer(u[:, 0], v[:, 0])
-
-    # # 2. Fit the projected data linearly
-    # imshow(first_component, title='First Singular Vector', renderer=renderer)
-    # # x_vals = torch.arange(first_component.numel())
-    # # y_vals = first_component.view(-1).cpu().numpy()
-    # # popt, _ = curve_fit(linear_func, x_vals, y_vals)
-    # # best_fit = linear_func(x_vals, *popt)
-
-    # # # Print the best-fit equation
-    # # print(f"y = {popt[0]:.5f} * x + {popt[1]:.5f}")
-
-    # # # 3. Display the best-fit line and residuals
-    # # plt.figure()
-    # # plt.scatter(x_vals, y_vals, label='Data', alpha=0.5)
-    # # plt.plot(x_vals, best_fit, 'r-', label='Best-fit Line')
-    # # plt.legend()
-    # # plt.title("Impact of First Singular Value")
-
-    # # residuals = y_vals - best_fit.numpy()
-    # # plt.figure()
-    # # plt.scatter(x_vals, residuals, alpha=0.5)
-    # # plt.axhline(0, color='red', linestyle='--')
-    # # plt.title("Residuals")
-
-    # # # 4. Subtract the best-fit impact from res
-    # # corrected_res = res - first_component.view_as(res)
-
-    # # # Display corrected_res
-    # # imshow(corrected_res, title='Corrected W_E @ W_V @ W_O @ W_U', renderer=renderer)
-
-    # # # 5. Perform SVD on the corrected_res and display it again
-    # # u_corr, s_corr, v_corr = torch.svd(corrected_res)
-    # # line(s_corr, title='Singular values of corrected copying', renderer=renderer)
-
-    # statistics = [
-    #     ('copying', res),
-    #     ('centered', centered),
-    #     ('nonzero centered', nonzero_centered),
-    # ]
-
-    # # return {name: summarize(value, name=name, renderer=renderer, histogram=True) for name, value in statistics}
-
-
-
-
-    # return summarize(res, name='W_pos @ W_V @ W_O @ W_U', renderer=renderer, linear_fit=True)
-    # res = ((W_E + W_pos[-1,:]) @ W_U).detach()
-    # self_overlap = res.diag()
-    # centered = res - self_overlap
-    # imshow(res, renderer=renderer)
-    # line(self_overlap, renderer=renderer)
-    # imshow(centered, renderer=renderer)
-    # imshow(centered[:,1:], renderer=renderer)
-    # statistics = [
-    #     ('overlap (incl pos)', res),
-    #     ('self-overlap (incl pos)', self_overlap),
-    #     ('self-overlap after 0 (incl pos)', self_overlap[1:]),
-    #     ('centered overlap (incl pos)', centered),
-    #     ('centered overlap after 0 (incl pos)', centered[:,1:]),
-    # ]
-    # return {name: summarize(value, name=name, renderer=renderer) for name, value in statistics}
-
-
 # In[ ]:
 
 
@@ -618,35 +383,6 @@ print(largest_row_range)
 first_diagonal = res.diag(diagonal=1)
 res_without_last_row = res[:-1,:]
 summarize(res_without_last_row - first_diagonal[:, None])
-
-
-# In[ ]:
-
-
-def calculate_copying_with_pos(model: HookedTransformer, renderer=None):
-    W_U, W_E, W_pos, W_V, W_O = model.W_U, model.W_E, model.W_pos, model.W_V, model.W_O
-    d_model, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_vocab, model.cfg.n_ctx
-    assert W_U.shape == (d_model, d_vocab)
-    assert W_pos.shape == (n_ctx, d_model)
-    assert W_E.shape == (d_vocab, d_model)
-    assert W_V.shape == (1, 1, d_model, d_model)
-    assert W_O.shape == (1, 1, d_model, d_model)
-    res = (W_E @ W_V @ W_O @ W_U).detach()[0,0,:,:]
-    res_pos = (W_pos @ W_V @ W_O @ W_U).detach()[0,0,:,:]
-    res_pos_min, res_pos_max = res_pos.min(dim=0).values, res_pos.max(dim=0).values
-    res_diag = res.diag() + res_pos_min
-    res_above_diag = -(res + res_pos_max[None,:]) + res_diag[:, None]
-    imshow(res_above_diag, title='(W_E + worst(W_pos)) @ W_V @ W_O @ W_U', renderer=renderer,
-              xaxis="logit affected", yaxis="input token")
-    res_above_diag_off_diag = res_above_diag[torch.eye(d_vocab) == 0]
-    first_diagonal = res.diag(diagonal=1) + res_pos_min[:-1]
-    res_above_first_diagonal = -(res[:-1,:] + res_pos_max[None,:]) + first_diagonal[:, None]
-    statistics = [
-       ('res_above_diag_off_diag', res_above_diag_off_diag),
-         ('res_above_first_diagonal', res_above_first_diagonal),
-    ]
-    for name, value in statistics:
-        print(name, summarize(value, name=name, renderer=renderer, histogram=True))
 
 
 calculate_copying_with_pos(simpler_model, renderer='png')
@@ -680,52 +416,12 @@ torch.set_printoptions(threshold=1000000)
 torch.set_printoptions(threshold=orig_thresh)
 
 
-# ## Attention Scaling Factor
-
-# In[ ]:
-
-
-def calculate_attn(model: HookedTransformer, pos: Optional[int] = None, renderer=None):
-    W_U, W_E, W_pos, W_Q, W_K = model.W_U, model.W_E, model.W_pos, model.W_Q, model.W_K
-    d_model, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_vocab, model.cfg.n_ctx
-    if pos is None:
-        return [calculate_attn(model, pos=i, renderer=renderer) for i in range(n_ctx)]
-    assert W_U.shape == (d_model, d_vocab)
-    assert W_pos.shape == (n_ctx, d_model)
-    assert W_E.shape == (d_vocab, d_model)
-    assert W_Q.shape == (1, 1, d_model, d_model)
-    assert W_K.shape == (1, 1, d_model, d_model)
-    residm1 = (W_E + W_pos[-1,:][None,:])
-    resid = (W_E + W_pos[pos,:][None,:])
-    q = (residm1 @ W_Q)[0,0,:,:]
-    k = (resid @ W_K)[0,0,:,:]
-    res = (q @ k.T).detach()
-    # imshow(res, title=f'(W_E + W_pos[-1]) @ W_Q @ W_K.T @ (W_E + W_pos[{pos}]).T', renderer=renderer)
-    centered = res - res.mean(dim=-1, keepdim=True)
-    imshow(centered, title=f'centered (W_E + W_pos[-1]) @ W_Q @ W_K.T @ (W_E + W_pos[{pos}]).T', renderer=renderer,
-           xaxis="Key token", yaxis="Query token")
-    return centered
     # stats = [summarize(centered[i], name=f'pos {pos} row {i}', linear_fit=True, renderer=renderer) for i in range(centered.shape[0])]
 
 # In[ ]:
 
 
 calculate_attn(simpler_model, renderer='png')
-
-# %%
-
-# check for monotonicity violations
-def check_monotonicity(model: HookedTransformer, renderer=None):
-    count = 0
-    centered_scores = calculate_attn(model, renderer=renderer)
-    for pos, centered_score in enumerate(centered_scores):
-        for row_n, row in enumerate(centered_score):
-            for i in range(row.shape[0] - 1):
-                for j in range(i + 1, row.shape[0]):
-                    if row[i] > row[j]:
-                        count += 1
-                        print(f"{i, j} at row {row_n} pos {pos}, magnitude {row[i] - row[j]:.3f}")
-    return count
 
 monotonicity_violation_count = check_monotonicity(simpler_model, renderer='png')
 print(f"Monotonicity violations: {monotonicity_violation_count}")
@@ -758,31 +454,6 @@ for centered_score in centered_scores:
 # histogram
 plt.hist(points, bins=100, edgecolor='black')
 
-# %%
-
-def calculate_attn_by_pos(model: HookedTransformer, pos=False, renderer=None):
-    W_U, W_E, W_pos, W_Q, W_K = model.W_U, model.W_E, model.W_pos, model.W_Q, model.W_K
-    d_model, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_vocab, model.cfg.n_ctx
-    assert W_U.shape == (d_model, d_vocab)
-    assert W_pos.shape == (n_ctx, d_model)
-    assert W_E.shape == (d_vocab, d_model)
-    assert W_Q.shape == (1, 1, d_model, d_model)
-    assert W_K.shape == (1, 1, d_model, d_model)
-    residm1 = (W_E + W_pos[-1,:][None,:])
-    
-    resid = (W_E if not pos else W_pos[0,:][None,:] - W_pos[1, :][None,:])
-    resid_name = 'W_E' if not pos else f'(W_pos[0] - W_pos[1])'
-    q = (residm1 @ W_Q)[0,0,:,:]
-    k = (resid @ W_K)[0,0,:,:]
-    res = (q @ k.T).detach()
-    # imshow(res, title=f'(W_E + W_pos[-1]) @ W_Q @ W_K.T @ (W_E + W_pos[{pos}]).T', renderer=renderer)
-    centered = res - res.mean(dim=-1, keepdim=True) if not pos else res
-    imshow(centered, title=f'centered (W_E + W_pos[-1]) @ W_Q @ W_K.T @ {resid_name}.T', renderer=renderer,
-           xaxis="Key token", yaxis="Query token")
-    print(centered.shape)
-    return summarize(centered, name=f'centered (W_E + W_pos[-1]) @ W_Q @ W_K.T @ {resid_name}.T', 
-                     renderer=renderer,
-                     include_value=True)
     # stats = [summarize(centered[i], name=f'pos {pos} row {i}', linear_fit=True, renderer=renderer) for i in range(centered.shape[0])]
 
 # %%
@@ -806,87 +477,6 @@ print(min(points))
 
 simpler_model.W_Q.shape
 
-
-# ## Attention Patterns
-
-# In[ ]:
-
-
-def calculate_qk_attn_heatmap(model, keypos=-1, querypos=-1, do_layernorm=True):
-    attn = model.blocks[0].attn
-    all_token_embeddings = model.embed(range(D_VOCAB))
-    positional_embeddings = model.pos_embed(all_token_embeddings)
-
-    token_embeddings_at_keypos = all_token_embeddings + positional_embeddings[:,keypos,:] if keypos > -1 else all_token_embeddings
-    token_embeddings_at_querypos = all_token_embeddings + positional_embeddings[:,querypos,:] if querypos > -1 else all_token_embeddings
-
-    # layernorm before attention
-    if do_layernorm:
-        token_embeddings_at_keypos = model.blocks[0].ln1(token_embeddings_at_keypos)
-        token_embeddings_at_querypos = model.blocks[0].ln1(token_embeddings_at_querypos)
-
-    embeddings_key = einsum("d_vocab d_model, n_heads d_model d_head -> n_heads d_vocab d_head",
-                            token_embeddings_at_keypos, attn.W_K)
-    embeddings_query = einsum("d_vocab d_model, n_heads d_model d_head -> n_heads d_vocab d_head",
-                            token_embeddings_at_querypos, attn.W_Q)
-
-    qk_circuit_attn_heatmap = einsum(
-        "n_heads d_vocab_q d_head, n_heads d_vocab_k d_head -> ... d_vocab_q d_vocab_k",
-        embeddings_query, embeddings_key
-        ).detach().cpu().numpy()
-
-    plt.rcParams['figure.figsize'] = [20, 10]
-    return qk_circuit_attn_heatmap
-
-def calculate_qk_attn_heatmap_normed(model, querypos=-1, do_layernorm=True, skip_var=True):
-    all_token_embeddings = model.embed(range(D_VOCAB))
-    positional_embeddings = model.pos_embed(all_token_embeddings)
-    all_heatmaps = torch.stack([torch.tensor(calculate_qk_attn_heatmap(model, cur_keypos, querypos, do_layernorm=do_layernorm)) for cur_keypos in range(positional_embeddings.shape[-2])])
-    avg = einops.reduce(all_heatmaps, "keypos d_vocab_q d_vocab_k -> d_vocab_q ()", 'mean')
-    var = einops.reduce(all_heatmaps, "keypos d_vocab_q d_vocab_k -> d_vocab_q ()", torch.var)
-    #print(all_heatmaps.shape, avg.shape)
-    #print(avg)
-    res = (all_heatmaps - avg)
-    if not skip_var: res = res * (var ** -0.5)
-    return res
-
-def plot_qk_heatmap(model, keypos=-1, querypos=-1, do_layernorm=True):
-  qk_attn_heatmap = calculate_qk_attn_heatmap(model, keypos=keypos, querypos=querypos, do_layernorm=do_layernorm)
-
-  fig, ax = plt.subplots(figsize=(8, 8))
-  graph = ax.imshow(qk_attn_heatmap, cmap="hot", interpolation="nearest")
-  plt.colorbar(graph)
-  plt.tight_layout()
-
-def plot_qk_heatmaps_normed(model, keypositions=None, querypos=-1, do_layernorm=True, skip_var=True):
-    if keypositions is None:
-        all_token_embeddings = model.embed(range(D_VOCAB))
-        positional_embeddings = model.pos_embed(all_token_embeddings)
-        keypositions = range(positional_embeddings.shape[-2])
-
-    heatmaps = calculate_qk_attn_heatmap_normed(model, querypos=querypos, do_layernorm=do_layernorm, skip_var=skip_var)
-    for keypos in keypositions:
-        fig, ax = plt.subplots(figsize=(8, 8))
-        qk_attn_heatmap = heatmaps[keypos]
-        graph = ax.imshow(qk_attn_heatmap, cmap="hot", interpolation="nearest")
-        plt.colorbar(graph)
-        plt.tight_layout()
-        plt.show()
-    print(heatmaps.shape) # torch.Size([2, 64, 64]), keypos d_vocab_q d_vocab_k
-    # do linear regression on the heatmaps, with
-
-def plot_avg_qk_heatmap(model, keypositions, querypos=-1, do_layernorm=True):
-  heatmaps = []
-
-  for keypos in keypositions:
-    heatmaps.append(calculate_qk_attn_heatmap(model, keypos=keypos, querypos=querypos, do_layernorm=do_layernorm))
-
-  qk_circuit_attn_heatmap = np.mean(heatmaps, axis=0)
-
-  fig, ax = plt.subplots(figsize=(8, 8))
-  graph = ax.imshow(qk_circuit_attn_heatmap, cmap="hot", interpolation="nearest")
-  plt.colorbar(graph)
-  plt.tight_layout()
 
 plot_qk_heatmaps_normed(simpler_model, querypos=1, skip_var=True)
 #for keypos in (0, 1): plot_qk_heatmap(model, keypos=keypos, querypos=1, do_layernorm=True)
@@ -950,7 +540,7 @@ if not ALWAYS_TRAIN_MODEL:
 
 
 if TRAIN_MODEL:
-    train_losses = train_model(model, n_epochs=500, batch_size=128, sequence_length=2)
+    train_losses = train_model(model, n_epochs=500, batch_size=128)
 
 
 # In[ ]:
@@ -1040,49 +630,7 @@ line(train_losses, xaxis="Epoch", yaxis="Loss")
 
 EXPORT_TO_COQ = True
 if EXPORT_TO_COQ:
-    print('Module cfg.')
-    for f in dataclasses.fields(cfg):
-        val = dataclasses.asdict(cfg)[f.name]
-        ty = f.type
-        if f.name == 'attn_types' and ty == 'Optional[List]': ty = 'Optional[List[str]]'
-        print(f'  Definition {f.name} := {strify(val, ty=ty)}.')
-    print('End cfg.')
-
-    for name in (#'OV',
-    #'QK',
-    #'T_destination',
-    'W_E',
-    #'W_E_pos',
-    'W_K',
-    'W_O',
-    'W_Q',
-    'W_U',
-    'W_V',
-    #'W_in',
-    #'W_out',
-    'W_pos', 'b_K',
-    'b_O',
-    'b_Q',
-    'b_U',
-    'b_V',):
-    #'b_in',
-    #'b_out'):
-        print(f'Definition {name} :=')
-        print(strify(getattr(model, name)))
-        print('.')
-
-    for layer, block in enumerate(model.blocks):
-        for mod, names in (('ln1', ('b', 'w')), ('attn', ('W_Q', 'W_K', 'W_O', 'W_V', 'b_Q', 'b_K', 'b_O', 'b_V'))):
-            for name in names:
-                print(f'Definition L{layer}_{mod}_{name} :=')
-                print(strify(getattr(getattr(block, mod), name)))
-                print('.')
-
-    for mod, names in (('ln_final', ('b', 'w')), ):
-        for name in names:
-            print(f'Definition {mod}_{name} :=')
-            print(strify(getattr(getattr(model, mod), name)))
-            print('.')
+    coq_export_params(model)
 
 
 # In[ ]:
@@ -1150,7 +698,6 @@ if EXPORT_TO_COQ:
 # print(all_stddevs.max() / all_stddevs.mean(), all_stddevs.mean() / all_stddevs.min())
 # print(all_scale.max() / all_scale.mean(), all_scale.mean() / all_scale.min())
 
-
 # In[ ]:
 
 
@@ -1196,30 +743,6 @@ alt_expected = all_integers.min(dim=-1).values
 correct_idxs = (ans == expected)
 very_wrong_idxs = ~((ans == expected) | (ans == alt_expected))
 print(all_integers[~correct_idxs], very_wrong_idxs.sum())
-#list(zip(all_integers[~correct_idxs], all_integers_ans[~correct_idxs]))
-
-
-# # Interpretability
-
-# ## Unembed
-
-# In[ ]:
-
-
-def plot_unembed_cosine_similarity(model):
-    all_token_embeddings = model.embed(range(D_VOCAB))
-    positional_embeddings = model.pos_embed(all_token_embeddings)
-    all_token_pos_embed = all_token_embeddings[:,None,:] + positional_embeddings
-    #print(model.W_U.shape, all_token_embeddings.shape, positional_embeddings.shape)
-    # torch.Size([32, 64]) torch.Size([64, 32]) torch.Size([64, 2, 32])
-    avg = F.normalize(all_token_embeddings.sum(dim=0), dim=-1)
-    # overlap between model.W_U and token embedings
-    input_overlap = all_token_pos_embed @ model.W_U
-    print(f"Definition max_input_output_overlap := {input_overlap.abs().max()}.")
-    line(F.cosine_similarity(avg[None,:], all_token_embeddings, dim=-1))
-
-
-
 plot_unembed_cosine_similarity(model)
 
 
@@ -1243,30 +766,8 @@ print(model.blocks[0].ln1.w.shape)
 # In[ ]:
 
 
-def analyze_svd(M, descr=''):
-    U, S, Vh = torch.svd(M)
-    if descr: descr = f' for {descr}'
-    line(S, title=f"Singular Values{descr}")
-    imshow(U, title=f"Principal Components on U{descr}")
-    imshow(Vh, title=f"Principal Components on Vh{descr}")
-
-
-# In[ ]:
-
-
 analyze_svd(model.W_U)
 
-
-# In[ ]:
-
-
-def analyze_svd(W):
-    U, S, Vh = torch.svd(W)
-    line(S, title="Singular Values")
-    imshow(U, title="Principal Components on the Input")
-    imshow(Vh)
-print(model.W_U.shape)
-print((model.blocks[0].ln1.w[:,None] * model.W_U).shape)
 analyze_svd(model.blocks[0].ln1.w[:,None] * model.W_U)
 
 
@@ -1278,6 +779,7 @@ analyze_svd(model.blocks[0].ln1.w[:,None] * model.W_U)
 
 # In[ ]:
 
+# Notebook runs fine until here, I won't bother fixing the rest --TK
 
 data_train, data_test = get_data(sequence_length=2)
 train_data_gen = make_generator_from_data(data_train, batch_size=128)
@@ -1365,86 +867,7 @@ if False:
     plt.show()
 
 
-from scipy.cluster.hierarchy import linkage, leaves_list
-from scipy.spatial.distance import squareform
 
-# Convert the cosine similarity tensor to a numpy array
-cos_sim_np = cos_sim.detach().numpy()
-
-# Show heatmap
-fig, ax = plt.subplots(figsize=(8, 8))
-heatmap = ax.imshow(cos_sim_np, cmap="hot", interpolation="nearest")
-plt.colorbar(heatmap)
-plt.tight_layout()
-plt.show()
-
-
-
-# Compute the distance matrix
-dist_mat = 1 - cos_sim_np
-
-# Find the maximal diagonal element
-max_diag_element = np.max(np.diag(dist_mat))
-print(f'Maximal diagonal element before setting to zero: {max_diag_element}')
-
-# Explicitly set the diagonal elements to zero
-np.fill_diagonal(dist_mat, 0)
-
-# Perform hierarchical clustering
-links = linkage(squareform(dist_mat), method='average')
-
-# Get the order of rows according to the hierarchical clustering
-order = leaves_list(links)
-
-# Rearrange the rows and columns of the cosine similarity matrix
-reordered_cos_sim = cos_sim_np[order, :][:, order]
-
-
-def avg_cos_sim(order, cos_sim_np):
-    """Compute average cosine similarity between adjacent elements"""
-    return np.mean(np.abs(np.diff(cos_sim_np[np.ix_(order, order)], axis=0)))
-
-for _ in range(len(cos_sim_np) ** 2):
-    # Initial order of indices
-    order = np.arange(len(cos_sim_np))
-
-    current_avg_cos_sim = avg_cos_sim(order, reordered_cos_sim)
-
-    # Flag to keep track of whether any pair was swapped
-    any_swapped = False
-
-    # Iteratively select a pair of indices to swap if it decreases the average cosine similarity
-    for i in range(len(order)):
-        for j in range(i + 1, len(order)):
-            # Swap a pair of indices
-            new_order = order.copy()
-            new_order[i], new_order[j] = new_order[j], new_order[i]
-
-            # Compute the average cosine similarity with the new order
-            new_avg_cos_sim = avg_cos_sim(new_order, reordered_cos_sim)
-
-            # If the new average cosine similarity is lower, update the order and the current average cosine similarity
-            if new_avg_cos_sim < current_avg_cos_sim:
-                order = new_order
-                current_avg_cos_sim = new_avg_cos_sim
-                any_swapped = (i, j)
-                break
-
-        # If a pair was swapped, break the outer loop as well
-        if any_swapped:
-            break
-    print(f"A pair of indices was swapped: {any_swapped}" if any_swapped else "No pair of indices was swapped")
-    if any_swapped:
-        reordered_cos_sim = reordered_cos_sim[new_order, :][:, new_order]
-    else:
-        break
-
-# Show heatmap
-fig, ax = plt.subplots(figsize=(8, 8))
-heatmap = ax.imshow(reordered_cos_sim, cmap="hot", interpolation="nearest")
-plt.colorbar(heatmap)
-plt.tight_layout()
-plt.show()
 
 
 # In[ ]:
@@ -1482,82 +905,6 @@ W_QK_dir
 # In[ ]:
 
 
-def calculate_qk_attn_heatmap(model, keypos=-1, querypos=-1, do_layernorm=True):
-    attn = model.blocks[0].attn
-    all_token_embeddings = model.embed(range(D_VOCAB))
-    positional_embeddings = model.pos_embed(all_token_embeddings)
-
-    token_embeddings_at_keypos = all_token_embeddings + positional_embeddings[:,keypos,:] if keypos > -1 else all_token_embeddings
-    token_embeddings_at_querypos = all_token_embeddings + positional_embeddings[:,querypos,:] if querypos > -1 else all_token_embeddings
-
-    # layernorm before attention
-    if do_layernorm:
-        token_embeddings_at_keypos = model.blocks[0].ln1(token_embeddings_at_keypos)
-        token_embeddings_at_querypos = model.blocks[0].ln1(token_embeddings_at_querypos)
-
-    embeddings_key = einsum("d_vocab d_model, n_heads d_model d_head -> n_heads d_vocab d_head",
-                            token_embeddings_at_keypos, attn.W_K)
-    embeddings_query = einsum("d_vocab d_model, n_heads d_model d_head -> n_heads d_vocab d_head",
-                            token_embeddings_at_querypos, attn.W_Q)
-
-    qk_circuit_attn_heatmap = einsum(
-        "n_heads d_vocab_q d_head, n_heads d_vocab_k d_head -> ... d_vocab_q d_vocab_k",
-        embeddings_query, embeddings_key
-        ).detach().cpu().numpy()
-
-    plt.rcParams['figure.figsize'] = [20, 10]
-    return qk_circuit_attn_heatmap
-
-def calculate_qk_attn_heatmap_normed(model, querypos=-1, do_layernorm=True, skip_var=True):
-    all_token_embeddings = model.embed(range(D_VOCAB))
-    positional_embeddings = model.pos_embed(all_token_embeddings)
-    all_heatmaps = torch.stack([torch.tensor(calculate_qk_attn_heatmap(model, cur_keypos, querypos, do_layernorm=do_layernorm)) for cur_keypos in range(positional_embeddings.shape[-2])])
-    avg = einops.reduce(all_heatmaps, "keypos d_vocab_q d_vocab_k -> d_vocab_q ()", 'mean')
-    var = einops.reduce(all_heatmaps, "keypos d_vocab_q d_vocab_k -> d_vocab_q ()", torch.var)
-    #print(all_heatmaps.shape, avg.shape)
-    #print(avg)
-    res = (all_heatmaps - avg)
-    if not skip_var: res = res * (var ** -0.5)
-    return res
-
-def plot_qk_heatmap(model, keypos=-1, querypos=-1, do_layernorm=True):
-  qk_attn_heatmap = calculate_qk_attn_heatmap(model, keypos=keypos, querypos=querypos, do_layernorm=do_layernorm)
-
-  fig, ax = plt.subplots(figsize=(8, 8))
-  graph = ax.imshow(qk_attn_heatmap, cmap="hot", interpolation="nearest")
-  plt.colorbar(graph)
-  plt.tight_layout()
-
-def plot_qk_heatmaps_normed(model, keypositions=None, querypos=-1, do_layernorm=True, skip_var=True):
-    if keypositions is None:
-        all_token_embeddings = model.embed(range(D_VOCAB))
-        positional_embeddings = model.pos_embed(all_token_embeddings)
-        keypositions = range(positional_embeddings.shape[-2])
-
-    heatmaps = calculate_qk_attn_heatmap_normed(model, querypos=querypos, do_layernorm=do_layernorm, skip_var=skip_var)
-    for keypos in keypositions:
-        fig, ax = plt.subplots(figsize=(8, 8))
-        qk_attn_heatmap = heatmaps[keypos]
-        graph = ax.imshow(qk_attn_heatmap, cmap="hot", interpolation="nearest")
-        plt.colorbar(graph)
-        plt.tight_layout()
-        plt.show()
-    print(heatmaps.shape) # torch.Size([2, 64, 64]), keypos d_vocab_q d_vocab_k
-    # do linear regression on the heatmaps, with
-
-def plot_avg_qk_heatmap(model, keypositions, querypos=-1, do_layernorm=True):
-  heatmaps = []
-
-  for keypos in keypositions:
-    heatmaps.append(calculate_qk_attn_heatmap(model, keypos=keypos, querypos=querypos, do_layernorm=do_layernorm))
-
-  qk_circuit_attn_heatmap = np.mean(heatmaps, axis=0)
-
-  fig, ax = plt.subplots(figsize=(8, 8))
-  graph = ax.imshow(qk_circuit_attn_heatmap, cmap="hot", interpolation="nearest")
-  plt.colorbar(graph)
-  plt.tight_layout()
-
 plot_qk_heatmaps_normed(model, querypos=1, skip_var=True)
 #for keypos in (0, 1): plot_qk_heatmap(model, keypos=keypos, querypos=1, do_layernorm=True)
 
@@ -1582,52 +929,6 @@ def constant_function(x, a):
 
 def linear_function(x, a, b):
     return a * x + b
-
-def compute_best_fit_and_error(direction_dot_embed):
-    n_head, d_vocab = direction_dot_embed.shape
-
-    coefficients = torch.empty((n_head, 2))  # To store the coefficients a, b for each row
-    max_abs_errors = torch.empty(n_head)  # To store the max abs error for each row
-    errors = torch.empty((n_head, d_vocab))
-    predicted = torch.empty((n_head, d_vocab))
-    negative_pairs = []
-    diff_values = []
-
-    x_values = np.arange(d_vocab)
-
-    # Create a meshgrid of indices
-    idxi, idxj = np.meshgrid(x_values, x_values)
-    # Exclude the diagonal (i == j)
-    mask = idxi != idxj
-    pairs = list(zip(idxi[mask], idxj[mask]))  # create a list of pairs (i, j)
-
-    for i in range(n_head):
-        row = direction_dot_embed[i].detach().numpy()
-
-        # Use curve_fit to find a, b that best fit the data in this row
-        coeff, _ = curve_fit(linear_function, x_values, row)
-        coefficients[i] = torch.from_numpy(coeff)
-
-        # Compute the predicted y values using these coefficients
-        y_pred = coeff[0] * x_values + coeff[1]
-
-        # Compute the absolute error for each value, and take the maximum
-        cur_errors = row - y_pred
-        max_abs_errors[i] = np.abs(cur_errors).max()
-        errors[i] = torch.from_numpy(cur_errors)
-        predicted[i] = torch.from_numpy(y_pred)
-
-        # Compute (pos[i] - pos[j]) / (i - j) for all pairs (i, j)
-        values = (row[idxi] - row[idxj]) / (idxi - idxj)
-
-        # Select only the values where i != j
-        values = values[mask]
-        negative_pairs.append([pair for pair, value in zip(pairs, values) if value < 0])
-
-        diff_values.append(values)
-
-    return coefficients, max_abs_errors, errors, predicted, diff_values, negative_pairs
-
 
 # In order to find the ordering of `direction_dot_embed_error` that maximizes the number of negative values in the difference `not_a_line[1:] - not_a_line[:-1]`, one approach is to use a brute-force method and iterate over all possible permutations of `direction_dot_embed_error`.
 # 
@@ -1662,195 +963,17 @@ def compute_best_fit_and_error(direction_dot_embed):
 # In[ ]:
 
 
-def count_monotonicity_violations_line(result_tensor, m):
-    # Count the number of pairs of indices (i, j), i != j, for which
-    # (result_tensor[i] + m*i - result_tensor[j] + m*j) / (i - j) is negative
-    count = 0
-    for i in range(len(result_tensor)):
-        for j in range(i + 1, len(result_tensor)):
-            if ((result_tensor[i] + m*i - result_tensor[j] + m*j) / (i - j)) < 0:
-                count += 1
-    return count
-
-
 # In[ ]:
 
 
-def reorder_tensor_greedy(tensor, m):
-    # Convert to numpy for easier handling
-    tensor_np = tensor.detach().clone().numpy()
-
-    # Initialize the result with the maximum positive value
-    result = [np.max(tensor_np)]
-    tensor_np = np.delete(tensor_np, np.argmax(tensor_np))
-
-    while len(tensor_np) > 0:
-        # Find values that maintain the condition
-        candidates = tensor_np[tensor_np - result[-1] < -m]
-
-        if len(candidates) > 0:
-            # If such values exist, select the maximum
-            next_value = np.max(candidates)
-        else:
-            # Otherwise, select the maximum of the remaining values
-            next_value = np.max(tensor_np)
-
-        # Add the selected value to the result
-        result.append(next_value)
-
-        # Remove the selected value from the list of remaining values
-        tensor_np = np.delete(tensor_np, np.where(tensor_np == next_value)[0][0])
-
-    # Convert the result back to a tensor
-    result_tensor = torch.tensor(result)
-
-    # Count the number of indices for which the difference between
-    # successive elements in the result is less than -m
-    # diff = result_tensor[1:] - result_tensor[:-1]
-    # count = torch.sum(diff < -m).item()
-
-    count = count_monotonicity_violations_line(result_tensor, m)
-
-    return result_tensor, count
-
-
-
 # In[ ]:
-
-
-def plot_QK_cosine_similarity(model, keypos=-1, querypos=-1, do_layernorm=True):
-    attn = model.blocks[0].attn
-    all_token_embeddings = model.embed(range(D_VOCAB))
-    positional_embeddings = model.pos_embed(all_token_embeddings)
-    normed_all_token_embeddings = F.normalize(all_token_embeddings, dim=-1)
-
-    token_embeddings_at_keypos = all_token_embeddings + positional_embeddings[:,keypos,:] if keypos > -1 else all_token_embeddings
-    token_embeddings_at_querypos = all_token_embeddings + positional_embeddings[:,querypos,:] if querypos > -1 else all_token_embeddings
-
-    # layernorm before attention
-    if do_layernorm:
-        token_embeddings_at_keypos = model.blocks[0].ln1(token_embeddings_at_keypos)
-        token_embeddings_at_querypos = model.blocks[0].ln1(token_embeddings_at_querypos)
-
-    #embeddings_key = einsum("d_vocab d_model, n_heads d_model d_head -> n_heads d_vocab d_head",
-    #                        token_embeddings_at_keypos, attn.W_K)
-    #embeddings_query = einsum("d_vocab d_model, n_heads d_model d_head -> n_heads d_vocab d_head",
-    #                        token_embeddings_at_querypos, attn.W_Q)
-    embeddings_query_waiting_for_key = einsum("d_vocab_query d_model_query, n_heads d_model_query d_head, n_heads d_model_key d_head -> n_heads d_vocab_query d_model_key",
-                            token_embeddings_at_querypos, attn.W_Q, attn.W_K)
-
-    QK = einsum("n_heads d_model_query d_head, n_heads d_model_key d_head -> n_heads d_model_query d_model_key",
-                            attn.W_Q, attn.W_K)
-
-    analyze_svd(embeddings_query_waiting_for_key[0], descr="embeddings_query_waiting_for_key")
-    analyze_svd(QK[0], descr="QK")
-    U, S, Vh = torch.svd(embeddings_query_waiting_for_key[0])
-    print(Vh[0])
-    print(Vh.T[0])
-    print((U @ torch.diag(S) @ Vh.T)[0])
-    print((U @ torch.diag(S) @ Vh.T).T[0])
-    imshow(U @ torch.diag(S) @ Vh.T, title="tmp")
-    #qk_circuit_attn_heatmap = einsum(
-    #    "n_heads d_vocab_q d_head, n_heads d_vocab_k d_head -> ... d_vocab_q d_vocab_k",
-    #    embeddings_query, embeddings_key
-    #    ).detach().cpu().numpy()
-
-    imshow(embeddings_query_waiting_for_key[0])
-
-
-    direction = embeddings_query_waiting_for_key
-    #direction = direction / direction.norm(dim=-1, keepdim=True)
-    direction = direction.sum(dim=1) / direction.shape[1]
-    print(f"Definition size_direction := {direction}.")
-    direction = direction / direction.norm(dim=-1)
-    print(f"Definition normed_size_direction := {direction}.")
-    print(all_token_embeddings.shape, direction.shape)
-    proj_direction_scale = einsum("n_head d_model_key, n_head d_vocab_query d_model_key -> n_head d_vocab_query",
-                                  direction,
-                                  embeddings_query_waiting_for_key)[:,:,None]
-    print(proj_direction_scale.shape)
-    proj_direction = proj_direction_scale * einops.rearrange(direction, "n_head d_model -> n_head () d_model")
-    print(proj_direction.shape)
-    remaining_directions = embeddings_query_waiting_for_key - proj_direction
-    print(remaining_directions.shape)
-    remaining_directions = remaining_directions.norm(dim=-1)
-    print(remaining_directions.shape)
-    direction_key_overlap = einsum("n_head d_model_key, n_head d_vocab_query d_model_key -> d_vocab_query n_head",
-                direction,
-                embeddings_query_waiting_for_key)
-    print(direction_key_overlap.shape)
-    print(f"Definition min_attention_query_size_direction_overlap := {direction_key_overlap.min()}.")
-    direction_dot_embed = einsum("n_head d_model, d_vocab d_model -> n_head d_vocab", direction, normed_all_token_embeddings)
-    direction_dot_pos_embed = einsum("n_head d_model, pos d_model -> n_head pos", direction, positional_embeddings[0])
-    print(f"Definition max_direction_dot_pos_embed := {direction_dot_pos_embed.abs().max()}.")
-    # linear fit of direction_dot_embed
-    direction_dot_embed_coefficients, direction_dot_embed_max_abs_errors, direction_dot_embed_error, direction_dot_embed_predicted, direction_dot_embed_diff_values, direction_dot_embed_neg_values = \
-          compute_best_fit_and_error(direction_dot_embed)
-
-    direction_dot_embed_diffs = direction_dot_embed[...,1:] - direction_dot_embed[...,:-1]
-    #direction_dot_embed_coef = direction_dot_embed_diffs.mean(dim=-1, keepdim=True)
-    #direction_dot_embed_offset = direction_dot_embed.mean(dim=-1, keepdim=True)
-    #direction_dot_embed_diff_error = direction_dot_embed_diffs - torch.arange(direction_dot_embed_diffs.shape[-1]) * direction_dot_embed_coef + direction_dot_embed_offset)
-    print(direction_dot_embed_diffs)
-    print(direction_dot_embed_diffs.abs())
-    line(direction_dot_embed_diffs.T, title="direction_dot_embed_diffs")
-    line(direction_dot_embed_diffs.T.abs(), title="direction_dot_embed_diffs abs")
-    #line(direction_dot_embed_diff_error.T, title="direction_dot_embed_diff_error")
-    #print(direction_dot_embed_coef, direction_dot_embed_offset)
-
-
-    #direction_dot_embed_coef_better, _ = curve_fit(constant_function, np.arange(direction_dot_embed_diffs.shape[-1]), direction_dot_embed_diffs[0].detach().numpy())
-    #direction_dot_embed_diff_error_better = direction_dot_embed_diffs - (torch.arange(direction_dot_embed_diffs.shape[-1]) * direction_dot_embed_coef + direction_dot_embed_offset)
-    #line(direction_dot_embed_diffs.T, title="direction_dot_embed_diffs")
-    #line(direction_dot_embed_diff_error.T, title="direction_dot_embed_diff_error")
-    #print(direction_dot_embed_coef, direction_dot_embed_offset)
-
-
-    # indices = np.argsort(direction_dot_embed_error[0].numpy() / np.arange(1, len(direction_dot_embed_error[0]) + 1))
-
-    # Use these indices to sort 'direction_dot_embed_error'
-    # sorted_direction_dot_embed_error = direction_dot_embed_error[:,indices]
-    print(direction_dot_embed_error.mean(), direction_dot_embed_error.var())
-    # randomly reorder direction_dot_embed_error, put in tmp
-    tmp = direction_dot_embed_error[0].detach().clone().numpy()
-    np.random.shuffle(tmp)
-    print(tmp)
-    line(tmp)
-    print(count_monotonicity_violations_line(torch.tensor(tmp), direction_dot_embed_coefficients[0, 0].item()))
-    print(f"Definition ")
-    sorted_direction_dot_embed_error, bad_count = reorder_tensor_greedy(direction_dot_embed_error[0], direction_dot_embed_coefficients[0, 0].item())
-    sorted_direction_dot_embed_error = sorted_direction_dot_embed_error[None,:]
-
-    # sorted_direction_dot_embed_error, _ = direction_dot_embed_error.sort(dim=-1, descending=True)
-    print(direction_dot_embed_coefficients, direction_dot_embed_max_abs_errors, direction_dot_embed)
-    line(direction_key_overlap, title="direction @ query_waiting_for_key")
-    line(remaining_directions.T, title="norm of remaining direction")
-    line(F.cosine_similarity(direction, all_token_embeddings, dim=-1), title="cos_sim(direction, embed)")
-    print(positional_embeddings.shape)
-    line(direction_dot_embed.T, title="direction @ normed embed")
-    line(torch.cat([direction_dot_embed, direction_dot_embed_predicted], dim=0).T, title="direction @ normed embed, + fit")
-    print(bad_count)
-    line(torch.cat([direction_dot_embed_predicted, direction_dot_embed_predicted + sorted_direction_dot_embed_error], dim=0).T, title="direction @ normed embed bad fit")
-
-    # Plot the histogram
-    print(len(direction_dot_embed_neg_values[0]) // 2)
-    print(list(sorted([p for p in direction_dot_embed_neg_values[0] if p[0] < p[1]])))
-    plt.hist(direction_dot_embed_diff_values[0], bins=30, edgecolor='black')
-    plt.title("Distribution of (pos[i] - pos[j]) / (i - j)")
-    plt.xlabel("(pos[i] - pos[j]) / (i - j)")
-    plt.ylabel("Frequency")
-    plt.show()
-
-    line(direction_dot_embed_error.T, title="direction_dot_normed_embed_error")
-    line(direction_dot_pos_embed.T, title="direction @ pos_embed")
-
-
 
 
 plot_QK_cosine_similarity(model, querypos=1)
 
 
 # In[ ]:
+# Jason says the code below this is not useful
 
 
 # Define the new y-values
