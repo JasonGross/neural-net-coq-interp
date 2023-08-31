@@ -87,6 +87,7 @@ theories/Util/Classes/RelationPairs/Dependent.v
 theories/Util/Classes/RelationPairs/Hetero.v
 theories/Util/Compat/Reals/RIneq.v
 theories/Util/List/Forall2Map.v
+theories/Util/List/NthError.v
 theories/Util/List/Proofs.v
 theories/Util/List/Instances/Forall2.v
 theories/Util/List/Instances/NthError.v
