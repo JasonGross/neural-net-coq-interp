@@ -15,7 +15,11 @@ Module ModelComputations (cfg : Config) (Import Model : ModelSig cfg).
   Import Optimize.
 
   Notation residual_error_all_tokens
-    := (@Unembed.forward 1 [of_Z (Z.of_N (@pow N N N N_has_pow cfg.d_vocab cfg.n_ctx))] (of_Z (Z.of_N cfg.n_ctx)) float (@coer_refl float) float_has_add float_has_mul (@HookedTransformer.resid_postembed 1 [of_Z (Z.of_N (@pow N N N N_has_pow cfg.d_vocab cfg.n_ctx))] (of_Z (Z.of_N cfg.n_ctx)) float (@coer_refl float) coer_Z_float float_has_add true (@all_tokens true))).
+    := (@Unembed.forward
+          1 [Uint63.of_Z (Z.of_N (@pow N N N N_has_pow cfg.d_vocab cfg.n_ctx))] (Uint63.of_Z (Z.of_N cfg.n_ctx)) float (@coer_refl float) float_has_add float_has_mul
+          (@HookedTransformer.resid_postembed
+             1 [Uint63.of_Z (Z.of_N (@pow N N N N_has_pow cfg.d_vocab cfg.n_ctx))] (Uint63.of_Z (Z.of_N cfg.n_ctx)) float (@coer_refl float) coer_Z_float float_has_add true
+             (@all_tokens true))).
 
   Definition residual_error_all_tokens_concrete : PArray.concrete_tensor _ float
     := PArray.concretize residual_error_all_tokens.
