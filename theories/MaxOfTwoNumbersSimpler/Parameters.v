@@ -6,6 +6,8 @@ Local Open Scope list_scope.
 Import ListNotations.
 (* Based on https://colab.research.google.com/drive/1N4iPEyBVuctveCA0Zre92SpfgH6nmHXY#scrollTo=Q1h45HnKi-43, Taking the minimum or maximum of two ints *)
 
+(* TODO: use (value).hex() in python for exact floats *)
+
 #[local] Set Warnings Append "-inexact-float".
 
 Module cfg <: CommonConfig.

@@ -130,6 +130,19 @@ Module IndexGen.
          | S r => fun xs ys => fold_map2 f accum (accum init (f (tl xs) (tl ys))) (hd xs) (hd ys)
          end.
 
+    Polymorphic Fixpoint map_fold_map
+      {r}
+      {A} {f : IndexType -> A} {accum : Type -> A -> Type} {init : Type}
+      {A'} {f' : IndexType -> A'} {accum' : Type -> A' -> Type} {init' : Type}
+      (Finit : init -> init')
+      (F : forall b i b', (b -> b') -> accum b (f i) -> accum' b' (f' i))
+      {struct r}
+      : forall idx : Index r, @fold_map A Type r f accum init idx -> @fold_map A' Type r f' accum' init' idx
+      := match r return forall idx : Index r, @fold_map A Type r f accum init idx -> @fold_map A' Type r f' accum' init' idx with
+         | 0%nat => fun _ => Finit
+         | S r => fun idx => @map_fold_map r A f accum _ A' f' accum' _ (F _ _ _ Finit) F (hd idx)
+         end.
+
     Definition tuple {r} (A : IndexType -> Type) (s : Index r) : Type
       := fold_map A (fun x y => Datatypes.prod y x) unit s.
 
@@ -145,6 +158,9 @@ Module IndexGen.
 
       Definition init {r A} {s : Index r} (f : forall i, A i) : @tuple r A s
         := init' f tt.
+
+      Definition map {r A A' s} (f : forall idx, A idx -> A' idx) : @tuple r A s -> @tuple r A' s
+        := map_fold_map (fun tt => tt) (fun _ _ _ f_snd xy => (f _ (fst xy), f_snd (snd xy))) _.
 
       Fixpoint to_list' {r} : forall {A B C} {s : Index r},
           (forall i, A i -> C)
