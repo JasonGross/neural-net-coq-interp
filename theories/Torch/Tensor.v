@@ -1,6 +1,7 @@
 From Coq.Structures Require Import Equalities.
 From Coq Require Import ZArith Sint63 Uint63 List PArray Lia.
 From NeuralNetInterp.Util Require Nat.
+From NeuralNetInterp.Util.Tactics Require Import ClearAll ClearbodyAll.
 From NeuralNetInterp.Util Require Import Wf_Uint63 PArray.Proofs List.Proofs Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool (*PrimitiveProd*).
 Import Util.Nat.Notations.
 Import Util.Wf_Uint63.LoopNotation.
@@ -143,6 +144,20 @@ Module IndexGen.
          | S r => fun idx => @map_fold_map r A f accum _ A' f' accum' _ (F _ _ _ Finit) F (hd idx)
          end.
 
+    Polymorphic Fixpoint map2_fold_map
+      {r}
+      {A} {f : IndexType -> A} {accum : Type -> A -> Type} {init : Type}
+      {A'} {f' : IndexType -> A'} {accum' : Type -> A' -> Type} {init' : Type}
+      {A''} {f'' : IndexType -> A''} {accum'' : Type -> A'' -> Type} {init'' : Type}
+      (Finit : init -> init' -> init'')
+      (F : forall b b' b'' i, (b -> b' -> b'') -> accum b (f i) -> accum' b' (f' i) -> accum'' b'' (f'' i))
+      {struct r}
+      : forall idx : Index r, @fold_map A Type r f accum init idx -> @fold_map A' Type r f' accum' init' idx -> @fold_map A'' Type r f'' accum'' init'' idx
+      := match r return forall idx : Index r, @fold_map A Type r f accum init idx -> @fold_map A' Type r f' accum' init' idx -> @fold_map A'' Type r f'' accum'' init'' idx with
+         | 0%nat => fun _ => Finit
+         | S r => fun idx => map2_fold_map (r:=r) (F _ _ _ _ Finit) F (hd idx)
+         end.
+
     Definition tuple {r} (A : IndexType -> Type) (s : Index r) : Type
       := fold_map A (fun x y => Datatypes.prod y x) unit s.
 
@@ -161,6 +176,9 @@ Module IndexGen.
 
       Definition map {r A A' s} (f : forall idx, A idx -> A' idx) : @tuple r A s -> @tuple r A' s
         := map_fold_map (fun tt => tt) (fun _ _ _ f_snd xy => (f _ (fst xy), f_snd (snd xy))) _.
+
+      Definition map2 {r A A' A'' s} (f : forall idx, A idx -> A' idx -> A'' idx) : @tuple r A s -> @tuple r A' s -> @tuple r A'' s
+        := map2_fold_map (fun _ _ => tt) (fun _ _ _ _ f_snd xy x'y' => (f _ (fst xy) (fst x'y'), f_snd (snd xy) (snd x'y'))) _.
 
       Fixpoint to_list' {r} : forall {A B C} {s : Index r},
           (forall i, A i -> C)
@@ -246,13 +264,13 @@ Module IndexGen.
       repeat match goal with
         | [ |- context C[f'] ]
           => let C' := context C[f''] in
-             cut C'; [ clear; abstract (subst f f' f''; cbv beta iota; exact (fun x => x)) | ]
+             cut C'; [ clear_all; clearbody_all_has_evar; abstract (subst f f' f''; cbv beta iota; exact (fun x => x)) | ]
         | [ H := context C[f'] |- _ ]
           => let C' := context C[f''] in
              let H' := fresh H in
              rename H into H';
              pose C' as H;
-             assert (H = H') by (clear; abstract (subst H H' f f' f''; cbv iota beta; reflexivity));
+             assert (H = H') by (clear_all; clearbody_all_has_evar; abstract (subst H H' f f' f''; cbv iota beta; reflexivity));
              clearbody H'; subst H'
         | [ H : context C [f'] |- _ ] => let C' := context C[f''] in change C' in H
         end;
