@@ -1135,6 +1135,36 @@ Definition triu {rnk} {s : Shape rnk} {r c} {A} {zero : has_zero A}
         else input idxs.
 #[global] Arguments triu {rnk%nat s%shape} {r c}%uint63 {A%type_scope zero} {diagonal}%sint63 input%tensor.
 
+(** Quoting
+https://pytorch.org/docs/stable/generated/torch.diagonal.html
+
+torch.diagonal(input, offset=0, dim1=0, dim2=1) → Tensor
+
+Returns a partial view of input with the its diagonal elements with
+respect to dim1 and dim2 appended as a dimension at the end of the
+shape.
+
+The argument offset controls which diagonal to consider:
+
+- If [offset = 0], it is the main diagonal.
+
+- If [offset > 0], it is above the main diagonal.
+
+- If [offset < 0], it is below the main diagonal.
+
+ *)
+(** N.B. we compute a batch diagonal (dim1=-2, dim2=-1) *)
+Definition diagonal {b} {s : Shape b} {r c} {A}
+  {offset : with_default "offset" int 0%int63}
+  (input : tensor (s ++' [r; c]) A)
+  : tensor (s ::' Uint63.min (r - Uint63.min r (Sint63.abs offset)) (c - Uint63.min c (Sint63.abs offset))) A
+  := if (offset <=? 0)%sint63
+     then fun '(idxs, i)
+          => input ((idxs, i - offset), i)%uint63
+     else fun '(idxs, i)
+          => input ((idxs, i), i + offset)%uint63.
+#[global] Arguments diagonal {b%nat s%shape} {r c}%uint63 {A%type_scope} {offset}%sint63 input%tensor.
+
 Definition coer_tensor {r s A B} {coerAB : has_coer A B} : @tensor r s A -> @tensor r s B
   := Tensor.map coer.
 #[export] Set Warnings Append "-uniform-inheritance,-ambiguous-paths".
