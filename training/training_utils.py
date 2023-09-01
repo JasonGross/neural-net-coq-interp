@@ -115,16 +115,6 @@ def get_data(
 # In[ ]:
 
 
-def large_data_gen(n_digits, sequence_length=6, batch_size=128, context="train", device=DEVICE):
-  if context == "train":
-    seed = 5
-  else:
-    seed = 6
-  torch.manual_seed(seed)
-  while True:
-    yield torch.randint(0, n_digits, (batch_size, sequence_length)).to(device)
-
-
 # # Loss Function
 
 # The loss is the cross entropy between the prediction for the final token and the true maximum of the sequence.

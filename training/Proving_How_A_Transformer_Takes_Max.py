@@ -25,7 +25,6 @@ SAVE_IN_GOOGLE_DRIVE = True # @param
 
 
 import torch
-import torch
 import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
@@ -47,7 +46,8 @@ from analysis_utils import line, summarize, plot_QK_cosine_similarity, \
     compute_slack, plot_avg_qk_heatmap, plot_qk_heatmap, plot_qk_heatmaps_normed, plot_unembed_cosine_similarity
 from coq_export_utils import coq_export_params
 from max_of_n import acc_fn, loss_fn, train_model
-from training_utils import compute_all_tokens, get_data, large_data_gen, make_generator_from_data
+from training.max_of_n import large_data_gen
+from training_utils import compute_all_tokens, get_data, make_generator_from_data
 
 import os, sys
 from importlib import reload
@@ -266,7 +266,7 @@ if not ALWAYS_TRAIN_MODEL:
 
 
 if TRAIN_MODEL:
-    simpler_train_losses = train_model(simpler_model, n_epochs=1500, batch_size=128, force_adjacent=True)
+    simpler_train_losses = train_model(simpler_model, n_epochs=1500, batch_size=128, adjacent_fraction=True)
 
 
 # In[ ]:
