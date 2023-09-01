@@ -72,7 +72,7 @@ Lemma raw_get_cartesian_exp_app {s A defaultA t n idx}
       then point
       else t (tt,
                Uint63.of_Z
-                 ((Uint63.to_Z i // (Uint63.to_Z s ^ (Uint63.to_Z n - Z.succ (Uint63.to_Z (j mod n))))%Z)
+                 ((Uint63.to_Z i // (Uint63.to_Z s ^ (Uint63.to_Z (n - (j mod n) - 1)))%Z)
                     mod Uint63.to_Z s)).
 Proof.
   subst i j; destruct idx as [[[] i] j].
@@ -86,7 +86,9 @@ Proof.
   cbv [Classes.ltb nat_has_ltb Classes.eqb Classes.zero int_has_eqb int_has_zero] in *.
   break_innermost_match.
   all: try (exfalso; lia).
-  all: reflexivity.
+  all: try reflexivity.
+  repeat (f_equal; []).
+  nia.
 Qed.
 
 Lemma raw_get_cartesian_exp {s A defaultA t n idx}
@@ -96,7 +98,7 @@ Lemma raw_get_cartesian_exp {s A defaultA t n idx}
     = if n =? 0
       then point
       else t.[[Uint63.of_Z
-                ((Uint63.to_Z i // (Uint63.to_Z s ^ (Uint63.to_Z n - Z.succ (Uint63.to_Z (j mod n))))%Z)
+                ((Uint63.to_Z i // (Uint63.to_Z s ^ (Uint63.to_Z (n - (j mod n) - 1)))%Z)
                    mod Uint63.to_Z s)]]%raw_tensor.
 Proof. cbv [raw_get]; rewrite raw_get_cartesian_exp_app; reflexivity. Qed.
 
@@ -108,7 +110,7 @@ Lemma get_cartesian_exp {s A defaultA t n idx}
       then point
       else t.[[Uint63.of_Z
                  ((Uint63.to_Z (i mod s ^ Z.to_N (Uint63.to_Z n))
-                     // (Uint63.to_Z s ^ (Uint63.to_Z n - Z.succ (Uint63.to_Z (j mod n))))%Z)
+                     // (Uint63.to_Z s ^ (Uint63.to_Z (n - (j mod n) - 1)))%Z)
                     mod Uint63.to_Z s)]]%raw_tensor.
 Proof.
   cbv [get adjust_indices_for Index.map2 adjust_index_for Index.tl Index.snoc]; cbn [snd]; rewrite raw_get_cartesian_exp.

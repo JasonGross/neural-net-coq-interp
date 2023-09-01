@@ -3,7 +3,7 @@ From Coq Require Import Derive.
 From Coq.Structures Require Import Equalities.
 From Coq Require Import Floats Uint63 ZArith NArith.
 From NeuralNetInterp.Util Require Import PrimitiveProd.
-From NeuralNetInterp.Util.Tactics Require Import IsUint63 IsFloat.
+From NeuralNetInterp.Util.Tactics Require Import IsUint63 IsFloat ClearAll.
 From NeuralNetInterp.Util Require Export Default Pointed.
 From NeuralNetInterp.Util.Arith Require Import Classes Instances.
 From NeuralNetInterp.Torch Require Import Tensor.
@@ -665,6 +665,7 @@ End LayerNorm.
             coer_refl coer_tensor
             Tensor.get Tensor.raw_get Slicing.SliceIndex.SliceIndexType.slice Slice.invert_index Slice.concretize PolymorphicOption.Option.sequence_return Slice.step Slice.start Slice.stop Slice.Concrete.length Slicing.SliceIndex.slice Slicing.FancyIndex.slice Slicing.FancyIndex.slice_ Slicing.FancyIndex.broadcast Slicing.FancyIndex.FancyIndexType.broadcast Slice.Concrete.normalize Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.start
             Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.base_len
+            Slicing.inject_int
             RawIndex.snoc RawIndex.nil
             map_dep map2 map2' map3
             ones tril to_bool
@@ -746,8 +747,6 @@ End LayerNorm.
       do_red ().
     Ltac red_sum _ :=
       cbv [Wf_Uint63.Reduction.sum Wf_Uint63.map_reduce Wf_Uint63.for_loop_lt Classes.eqb PrimInt63.eqb Monad.bind Wf_Uint63.get Wf_Uint63.LoopBody_Monad Wf_Uint63.run_body Wf_Uint63.bind Wf_Uint63.set Wf_Uint63.update Wf_Uint63.Reduction.mean Classes.int_div Uint63.int_has_int_div Classes.div coer coer_Z_float Classes.sub int_has_sub] in *.
-    Ltac clear_all _ :=
-      repeat match goal with H : _ |- _ => clear H end.
 
     Ltac red_late_layers_1 _ :=
       cbv beta iota delta [HookedTransformer.HookedTransformer.ln_final HookedTransformer.HookedTransformer.unembed LayerNorm.forward HookedTransformer.Unembed.forward Unembed.forward] in *;
@@ -763,7 +762,7 @@ End LayerNorm.
       match goal with |- let x := ?y in ?lhs = ?rhs => change (lhs = (let x := y in rhs)) end.
     Ltac revert_lets_eq _ := repeat revert_let_eq_step ().
     Ltac finish_optimizing _ :=
-      lazymatch goal with |- ?lhs = ?rhs => subst lhs; instantiate (1:=rhs); clear_all (); abstract reflexivity end.
+      lazymatch goal with |- ?lhs = ?rhs => subst lhs; instantiate (1:=rhs); clear_all; abstract reflexivity end.
   End Optimize.
 
   Derive logits_all_tokens_concrete_opt
@@ -824,7 +823,7 @@ End LayerNorm.
         all: red_blocks_layers_6 ().
         all: red_ops ().
         all: red_sum ().
-        all: clear_all ().
+        all: clear_all.
         all: repeat lazymatch goal with
                | [ H := ?x |- _ ]
                  => revert H;
@@ -880,7 +879,7 @@ End LayerNorm.
                   end
            | _ => idtac
            end.
-      all: clear_all ().
+      all: clear_all.
       all: repeat lazymatch goal with
              | [ H := ?x |- _ ]
                => revert H;
@@ -901,7 +900,7 @@ End LayerNorm.
       all: shelve. }
     all: cbv beta.
     all: do_red ().
-    all: clear_all ().
+    all: clear_all.
     cbv beta iota zeta in embed, pos_embed.
     destruct cfg.normalization_type as [nt|]; [ destruct nt | ].
     all: repeat match goal with H := Some _ |- _ => subst H end.

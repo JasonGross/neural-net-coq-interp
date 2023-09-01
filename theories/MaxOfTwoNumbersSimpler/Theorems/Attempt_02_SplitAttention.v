@@ -125,13 +125,15 @@ From Flocq Require Import Raux.
 From NeuralNetInterp.Util.Arith Require Import Flocq Flocq.Instances Flocq.Notations.
 
 From NeuralNetInterp.MaxOfTwoNumbersSimpler.Computed Require Import AllPostembed.
+(*Local Open Scope float_scope.
+Redirect "all_tokens_residual_error_m1_concrete" Print all_tokens_residual_error_m1_concrete.
 (** The bound on [W_U @ (W_E + W_pos)] aka [EU + PU] *)
 Lemma all_tokens_residual_error_bounded
-  : let reduce3 f := Tensor.item (reduce_axis_m1 f (reduce_axis_m1 f all_tokens_residual_error.[…, -1]%fancy_tensor)) in
+  : let reduce3 f := Tensor.item (reduce_axis_m1 f (reduce_axis_m1 f all_tokens_residual_error_m1)) in
     (reduce3 Reduction.max <? 0x1.b3)%float = true
     /\ (-0x1.31 <? reduce3 Reduction.min)%float = true.
 Proof.
-  (*
+(* (*
   cbv beta iota zeta.
   repeat match goal with
          | [ |- context[reduce_axis_m1 ?x ?y] ]
@@ -147,14 +149,14 @@ Proof.
          | [ H := context[to_Z _] |- _ ]
            => set (x := to_Z _) in (value of H) at 1; vm_compute in x; subst x
          end.
-  (*
+
   remember PrimFloat.ltb in |- *.
   remember PrimFloat.leb in |- *.
   Time vm_compute.
  *)*)
   vm_cast_no_check (conj (eq_refl true) (eq_refl true)).
 Qed.
-
+*)
 (*Lemma all_tokens_residual_error_bounded_diff
   : forall true_max j,
 
