@@ -1082,6 +1082,38 @@ Definition cartesian_nprod {r} {s : Shape r} {A} {defaultA : pointed A} (ts : Sh
 Definition cartesian_exp {s A} {defaultA : pointed A} (t : tensor [s] A) (n : ShapeType) : tensor [(s^(n:N))%core; n] A
   := @cartesian_nprod n (Shape.repeat s n) A _ (Shape.Tuple.init (fun _ => t)).
 
+Definition dot {s A B C} {mulA : has_mul_with A B C} {addC : has_add C} {zeroC : has_zero C}
+  (x : tensor [s] A) (y : tensor [s] B)
+  : tensor [] C
+  := fun _ => ∑_(0 ≤ i < s) (x.[[i]] * y.[[i]])%raw_tensor.
+
+Definition mm {n m p A B C} {mulA : has_mul_with A B C} {addC : has_add C} {zeroC : has_zero C}
+  (x : tensor [n; m] A) (y : tensor [m; p] B)
+  : tensor [n; p] C
+  := fun '((tt, r), c) => ∑_(0 ≤ i < m) (x.[[r; i]] * y.[[i; c]])%raw_tensor.
+
+(** transpose last two dimensions *)
+Definition T {r} {s : Shape r} {n m A} (t : tensor (s ::' n ::' m) A) : tensor (s ::' m ::' n) A
+  := fun '((idxs, i), j) => raw_get t ((idxs, j), i).
+(*
+Definition dotmatvec {r} {s : Shape r} {n m A B C} {mulA : has_mul_with A B C} {addC : has_add C} {zeroC : has_zero C}
+  (x : tensor (s ::' n ::' m) A) (y : tensor (s ::' m) B)
+  : tensor (s ::' m) C
+  := fun '(idx, i) => ∑_(0 ≤ j < n) (x.[idx ::' j ::' i] * y.[idx ::' i])%raw_tensor.
+Definition dotvecmat {r} {s : Shape r} {n m A B C} {mulA : has_mul_with A B C} {addC : has_add C} {zeroC : has_zero C}
+  (x : tensor (s ::' n) A) (y : tensor (s ::' n ::' m) B)
+  : tensor (s ::' m) C
+  := fun '(idx, i) => ∑_(0 ≤ j < n) (x.[idx ::' j] * y.[idx ::' j ::' i])%raw_tensor.
+Definition dotmatmat {r} {s : Shape r} {n m p A B C} {mulA : has_mul_with A B C} {addC : has_add C} {zeroC : has_zero C}
+  (x : tensor (s ::' n ::' m) A) (y : tensor (s ::' m ::' p) B)
+  : tensor (s ::' n ::' p) C
+  := map2 mm x y.
+  := fun '(idx, i) => ∑_(0 ≤ j < n) (x.[idx ::' j] * y.[idx ::' j ::' i])%raw_tensor.
+Definition item {A} (t : tensor [] A) : A := raw_get t tt.
+Definition dotprod {s A} (
+
+Definition matmul_core
+*)
 (** Quoting https://pytorch.org/docs/stable/generated/torch.tril.html
 
 torch.tril(input, diagonal=0, *, out=None) → Tensor

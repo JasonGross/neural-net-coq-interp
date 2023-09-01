@@ -36,7 +36,8 @@ Definition bool_index_tensor {r} {s : Shape r} {s'} (t : tensor bool (s ::' s'))
 #[global] Set Warnings Append "-uniform-inheritance,-ambiguous-paths".
 #[global] Coercion slice_index : Slice >-> SliceIndexType.
 #[global] Coercion tensor_index : tensor >-> FancyIndexType.
-#[global] Coercion broadcast_one_index' (_ : option unit) : SliceIndexType _ _ := broadcast_one_index.
+#[global] Polymorphic Coercion broadcast_one_index' (_ : PolymorphicOption.option unit) : SliceIndexType _ _ := broadcast_one_index.
+#[global] Coercion broadcast_one_index'' (_ : Datatypes.option unit) : SliceIndexType _ _ := broadcast_one_index.
 (*#[global] Coercion bool_tensor_index : tensor >-> FancyIndexType.*)
 #[global] Coercion normal_index : SliceIndexType >-> FancyIndexType.
 #[export] Set Warnings Append "uniform-inheritance,ambiguous-paths".
