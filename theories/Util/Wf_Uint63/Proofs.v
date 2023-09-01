@@ -4,6 +4,7 @@ From NeuralNetInterp.Util.Tactics Require Import BreakMatch DestructHead UniqueP
 From NeuralNetInterp.Util Require Import Wf_Uint63.
 Import Arith.Classes Arith.Instances.Uint63.
 #[local] Open Scope core_scope.
+#[local] Coercion is_true : bool >-> Sortclass.
 
 Module Reduction.
   Export Wf_Uint63.Reduction.
@@ -249,21 +250,23 @@ Module Reduction.
   Definition in_bounds (start stop step i : int) : bool
     := ((start <=? i) && ((i =? start) || (i <? stop)) && (((i - start) mod step) =? 0)).
 
-  Lemma argmax_gen_spec {A} {ltbA : has_ltb A} {start stop step0 f i v}
+  Definition in_bounds_alt (start stop step i : int)
+    := (exists n : nat,
+           (n <= Nat.pred (S (if start + step <? stop then (1 + Z.to_nat ((stop - (start + step) - 1) // step : int)) else 0)))
+           /\ i = start + step * Uint63.of_Z n).
+
+  Lemma argmax_gen_spec {A} {ltbA : has_ltb A} {ltbA_trans : @Transitive A Classes.ltb} {ltbA_irref : @Irreflexive A Classes.ltb} {ltbA_total : Antisymmetric A (@eq A) (fun x y => negb (Classes.ltb x y))}
+    {start stop step0 f i v}
     (step : int := if (step0 =? 0) then 1 else step0)
     : map_reduce_no_init (@argmax_ int A ltbA) start stop step0 (fun i : int => (i, f i)) = (i, v)
       <-> (v = f i
-           /\ (exists n : nat,
-                  (n <= Nat.pred (S (if start + step <? stop then (1 + Z.to_nat ((stop - (start + step) - 1) // step : int)) else 0)))
-                  /\ i = start + step * Uint63.of_Z n)
+           /\ in_bounds_alt start stop step i
            /\ forall j,
-              (exists n : nat,
-                  (n <= Nat.pred (S (if start + step <? stop then (1 + Z.to_nat ((stop - (start + step) - 1) // step : int)) else 0)))
-                  /\ j = start + step * Uint63.of_Z n)
+              in_bounds_alt start stop step j
               -> (((f j <? f i) = true)
                   \/ (f j = f i /\ (i <=? j) = true))).
   Proof.
-    revert v i.
+    revert v i; cbv [in_bounds_alt].
     apply map_reduce_no_init_spec_count with (P:=fun n _ v => forall v' i', v = _ <-> _).
     all: fold step.
     all: intros; cbv [argmax_]; cbn [fst snd]; break_innermost_match; split; intros.
@@ -297,6 +300,10 @@ Module Reduction.
                           => replace (start + step + step * of_Z (Z.of_N (N.of_nat n')))%uint63
                             with (start + step * of_Z (Z.of_N (N.of_nat (S n'))))%uint63 in *
                             by lia
+                        | [ H : context[(?start + ?step + ?step * of_Z (Z.of_N (N.of_nat ?n')))%uint63] |- _ ]
+                          => replace (start + step + step * of_Z (Z.of_N (N.of_nat n')))%uint63
+                            with (start + step * of_Z (Z.of_N (N.of_nat (S n'))))%uint63 in *
+                            by lia
                         | [ |- exists n, _ /\ (?start + ?step * of_Z (Z.of_N (N.of_nat ?n')) = ?start + ?step * of_Z (Z.of_N (N.of_nat n)))%uint63 ]
                           => exists n'
                         | [ H : forall j, ex _ -> (?f j <? ?f ?x) = true \/ _, H' : (?f ?x <? ?f ?y) = true |- (?f ?z <? ?f ?y) = true \/ _ ]
@@ -307,10 +314,68 @@ Module Reduction.
                              | assert (x <= y) by lia;
                                clear H';
                                specialize (H ltac:(assumption)) ]
+                        | [ H : ?x <= S ?n |- _ ]
+                          => is_var x;
+                             destruct (Nat.eq_dec x (S n)); subst;
+                             [ | assert (x <= n)%nat by lia ];
+                             clear H
                         end
-                      | lia ].
+                      | lia
+                      | match goal with
+                        | [ H : context[?x = true] |- _ ] => change (x = true) with (is_true x) in H
+                        | [ |- context[?x = true] ] => change (x = true) with (is_true x)
+                        | [ H : is_true (?x <? ?y), H' : is_true (?z <? ?x) \/ (?z = ?x /\ _) |- is_true (?z <? ?y) \/ _ ]
+                          => left; destruct H' as [?|[H' ?]]; [ etransitivity; eassumption | rewrite H'; assumption ]
+                        | [ H : forall j, (exists n0, n0 <= S ?n /\ @?A j n0 = @?B j n0) -> _ |- _ ]
+                          => pose proof (H _ (ex_intro _ (S n) (conj (@Nat.le_refl _) eq_refl)));
+                             let pf := fresh in
+                             pose proof (fun j (pf : exists n0, n0 <= n /\ A j n0 = B j n0)
+                                         => H j ltac:(let n0 := fresh in
+                                                      let H1 := fresh in
+                                                      let H2 := fresh in
+                                                      destruct pf as [n0 [H1 H2]];
+                                                      exists n0; split; [ apply le_S, H1 | apply H2 ]));
+                             clear H
+                        | [ H : forall i, ex _ /\ _ -> _, H' : forall j, ex _ -> _ |- _ ]
+                          => let H'' := fresh in
+                             pose proof ((fun pf => H _ (conj (ex_intro _ _ (conj pf eq_refl)) H')) ltac:(assumption)) as H'';
+                             lazymatch type of H'' with
+                             | (?x, _) = (?x, _) => fail
+                             | (?x, ?y) = (_, _)
+                               => inversion H''; clear H'';
+                                  generalize dependent x; intros; subst
+                             end
+                        | [ HIrr : Irreflexive _, HTrans : Transitive _, H : is_true (?x <? ?y) \/ _, H' : is_true (?y <? ?x) |- _ ]
+                          => destruct H as [H|H]; [ exfalso; clear -H H' HTrans HIrr; eapply HIrr, HTrans; eassumption | ]
+                        | [ H : (?x <? ?y) = false |- is_true (?y <? ?x) \/ _ ]
+                          => destruct (y <? x) eqn:?; [ left | right ]
+                        | [ HIrr : Irreflexive _, HTrans : Transitive _, H : is_true (?x <? ?y), H' : is_true (?y <? ?x) |- _ ]
+                          => exfalso; clear -H H' HTrans HIrr; eapply HIrr, HTrans; eassumption
+                        | [ HAnti : Antisymmetric _ eq _, H : (?x <? ?y) = false, H' : (?y <? ?x) = false |- _ ]
+                          => assert (x = y) by (eapply HAnti; rewrite ?H, ?H'; reflexivity);
+                             clear H H'
+                        end
+                      | congruence ].
   Admitted.
 
+  (*
+  Lemma in_bounds_alt start stop step i
+    : in_bounds start stop step i = true
+      <-> (exists n : nat,
+              (n <= Nat.pred (S (if start + step <? stop then (1 + Z.to_nat ((stop - (start + step) - 1) // step : int)) else 0)))
+              /\ i = start + step * Uint63.of_Z n).
+  Proof.
+    destruct (start + step <? stop) eqn:Hlt.
+    all: cbv [in_bounds].
+    2: { split; [ intro H; exists 0%nat; split | intros [n H] ].
+         lia.
+         cbv.
+         assert (start
+         lia.
+    { cbv [in_bounds]; split; [ intro H | intros [n H] ].
+    { exists
+
+*)
   Lemma argmax_spec {A} {ltbA : has_ltb A} {start stop step f v}
     : @argmax A ltbA start stop step f = v
       <-> (in_bounds start stop step v = true
@@ -319,8 +384,43 @@ Module Reduction.
               -> (((f j <? f v) = true)
                   \/ (f j = f v /\ (v <=? j) = true))).
   Proof.
+    cbv [argmax].
+    destruct map_reduce_no_init eqn:H.
+    (*rewrite argmax_gen_spec in H.
+    destruct_head'_and; subst; destruct_head'_ex; destruct_head'_and; subst; cbn [fst snd].*)
     (* XXX FIXME *)
   Admitted.
+
+  Lemma argmax_max_equiv
+    {A} {ltbA : has_ltb A}
+    {maxA : has_max A}
+    {start stop step f}
+    (Hltb_max_compat : forall x y : A, Classes.max x y = if x <? y then y else x)
+    : @max A maxA start stop step f = f (@argmax A ltbA start stop step f).
+  Proof.
+    cbv [max argmax].
+    cbv [map_reduce_no_init for_loop_lt Fix Classes.eqb int_has_eqb Classes.one Classes.zero int_has_one int_has_zero Classes.leb Classes.ltb int_has_leb int_has_leb int_has_ltb nat_has_zero nat_has_one Classes.add int_has_add] in *.
+    set (step' := if _ : bool then _ else step).
+    set (f' := fun (i : int) continue state => _) at 1.
+    set (wf := Acc_intro_generator _ _ _); clearbody wf.
+    set (start' := (start + step')%uint63) in *.
+    set (v := (start, f start)).
+    change (f start) with (snd v).
+    assert (Hv : snd v = f (fst v)) by reflexivity.
+    destruct v as [v fv]; cbn [snd fst] in *; subst.
+    replace start with (start' - step')%uint63 by (subst start'; lia).
+    clearbody start'; clear start; rename start' into start.
+    revert start wf v.
+    fix IH 2.
+    intros ? [wf]; intros; cbn [Fix_F]; cbv [Acc_inv].
+    unfold f' at 1.
+    set (wf' := wf _); specialize (fun y => IH _ (wf' y)); clearbody wf'; clear wf.
+    cbv [Monad.bind run_body LoopNotation.get LoopBody_Monad bind LoopNotation.set LoopNotation.update].
+    cbv [Classes.sub Classes.mul Classes.zero Classes.add Classes.ltb Classes.leb Classes.one Classes.int_div int_has_int_div int_has_sub int_has_ltb int_has_add int_has_mul int_has_leb] in *.
+    break_match; break_innermost_match_hyps; auto.
+    all: cbv [argmax_]; cbn [fst snd]; rewrite Hltb_max_compat; cbv [Classes.ltb]; break_innermost_match; try reflexivity.
+    all: rewrite IH; reflexivity.
+  Qed.
 
   Lemma map_reduce_const {A B reduce init start stop step0 f}
     (step := if step0 =? 0 then 1 else step0)

@@ -103,6 +103,9 @@ theories/Util/Strings/Ascii.v
 theories/Util/Strings/Byte.v
 theories/Util/Strings/String.v
 theories/Util/Tactics/BreakMatch.v
+theories/Util/Tactics/ChangeInAll.v
+theories/Util/Tactics/ClearAll.v
+theories/Util/Tactics/ClearbodyAll.v
 theories/Util/Tactics/DestructHead.v
 theories/Util/Tactics/DestructHyps.v
 theories/Util/Tactics/FindHyp.v

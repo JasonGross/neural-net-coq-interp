@@ -3,7 +3,7 @@ From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
 From NeuralNetInterp.Util.Tactics Require Import IsFloat IsUint63 BreakMatch DestructHead.
 From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Wf_Uint63.Instances Wf_Uint63.Proofs SolveProperEqRel Default.
 From NeuralNetInterp.Util.Arith Require Import Classes Instances Classes.Laws Instances.Laws FloatArith.Definitions Reals.Definitions.
-From NeuralNetInterp.Torch Require Import Tensor.Instances Slicing.Instances.
+From NeuralNetInterp.Torch Require Import Tensor.Instances Slicing.Instances Tensor.Proofs.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Instances.
 From NeuralNetInterp.MaxOfTwoNumbersSimpler Require Import Parameters Model Heuristics TheoremStatement Model.Instances Model.Flocqify Model.Rify.
 From NeuralNetInterp.Util.Compat Require Import RIneq.
@@ -155,7 +155,40 @@ Proof.
   vm_cast_no_check (conj (eq_refl true) (eq_refl true)).
 Qed.
 
+(*Lemma all_tokens_residual_error_bounded_diff
+  : forall true_max j,
+
+  : let reduce3 f := Tensor.item (reduce_axis_m1 f (reduce_axis_m1 f all_tokens_residual_error.[…, -1]%fancy_tensor)) in
+    (reduce3 Reduction.max <? 0x1.b3)%float = true
+    /\ (-0x1.31 <? reduce3 Reduction.min)%float = true.
+Proof.
+  (*
+  cbv beta iota zeta.
+  repeat match goal with
+         | [ |- context[reduce_axis_m1 ?x ?y] ]
+           => lazymatch y with
+              | context[reduce_axis_m1] => fail
+              | _ => set (reduce_axis_m1 x y)
+              end
+         end.
+  cbv [Reduction.max Reduction.min reduce_axis_m1 reshape_all item reduce_axis_m1' map map_reduce_no_init reshape_snoc_split raw_get RawIndex.unreshape RawIndex.unreshape' Shape.tl Shape.hd Shape.snoc RawIndex.item RawIndex.curry_radd Classes.eqb RawIndex.tl RawIndex.combine_radd RawIndex.snoc RawIndex.nil int_has_eqb PrimInt63.eqb Uint63.eqb Classes.zero Classes.one int_has_zero LoopNotation.set Classes.max Classes.min LoopNotation.update LoopNotation.get Monad.bind Classes.int_div Z_has_int_div LoopBody_Monad has_default_max_leb has_default_min_leb Classes.leb float_has_leb for_loop_lt run_body Wf_Uint63.bind FancyIndex.slice FancyIndex.transfer_inner_shape FancyIndex.FancyIndexType.transfer_inner_shape SliceIndex.SliceIndexType.transfer_shape SliceIndex.SliceIndexType.transfer_shape_single_index reshape_app_combine' FancyIndex.slice_ RawIndex.uncurry_radd map_dep SliceIndex.slice FancyIndex.broadcast map2 repeat' RawIndex.split_radd Nat.radd SliceIndex.SliceIndexType.slice FancyIndex.FancyIndexType.broadcast adjust_index_for Classes.modulo] in *; cbn [fst snd] in *.
+  repeat match goal with
+         | [ H := context[of_Z _] |- _ ]
+           => set (x := of_Z _) in (value of H) at 1; vm_compute in x; subst x
+         | [ H := context[to_Z _] |- _ ]
+           => set (x := to_Z _) in (value of H) at 1; vm_compute in x; subst x
+         end.
+  (*
+  remember PrimFloat.ltb in |- *.
+  remember PrimFloat.leb in |- *.
+  Time vm_compute.
+ *)*)
+  vm_cast_no_check (conj (eq_refl true) (eq_refl true)).
+Qed.
+*)
 Ltac zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
+
+#[local] Hint Opaque Reduction.sum : rewrite.
 
 Theorem good_accuracy : TheoremStatement.Accuracy.best (* (abs (real_accuracy - expected_accuracy) <? error)%float = true *).
 Proof.
@@ -233,10 +266,8 @@ Proof.
 
   cbv beta iota delta [of_bool map map2] in res.
   move true_maximum at bottom.
-  cbv beta iota delta [reduce_axis_m1 reduce_axis_m1' reshape_snoc_split RawIndex.curry_radd RawIndex.combine_radd map RawIndex] in true_maximum.
-  cbv beta iota delta [Reduction.max max has_default_max_leb leb] in true_maximum.
-  rename all_tokens1 into all_tokens.
-  cbv -[PrimInt63.leb all_tokens] in true_maximum.
+  cbv beta iota delta [reduce_axis_m1 reduce_axis_m1' reshape_snoc_split RawIndex.curry_radd RawIndex.combine_radd map RawIndex get raw_get RawIndex.snoc RawIndex.nil] in true_maximum.
+
   move out at bottom.
   cbv beta iota delta [HookedTransformer.Unembed.forward] in *.
   cbv [map' map2' reshape_app_combine reshape_app_combine' RawIndex.uncurry_radd map reshape_app_split reshape_app_split' RawIndex.curry_radd map2 raw_get get reduce_axis_m1 reduce_axis_m1' map RawIndex.split_radd RawIndex.combine_radd RawIndex.snoc RawIndex.nil reshape_snoc_split reshape_snoc_combine map' broadcast broadcast' repeat' repeat Nat.radd Shape.nil] in *.
@@ -254,6 +285,338 @@ Proof.
   cbv [coer coer_trans Truncating.coer_Z_float coer_float_binary_float coer_binary_float_R].
   set (k := PrimFloat.of_Z _); vm_compute in k; subst k.
   cbv beta in *.
+  cbv [Tensor.get Tensor.raw_get SliceIndex.slice SliceIndex.SliceIndexType.slice RawIndex.hd Slice.invert_index RawIndex.tl RawIndex.snoc RawIndex.nil adjust_index_for Shape.tl Shape.hd Shape.nil Shape.snoc FancyIndex.slice reshape_app_combine' RawIndex.uncurry_radd FancyIndex.slice_ map_dep RawIndex.split_radd Nat.radd FancyIndex.broadcast map2 FancyIndex.FancyIndexType.broadcast map2' repeat' Tensor.map Tensor.map' map3
+         coer_tensor coer_ln_tensor
+         where_
+         Classes.add tensor_add Classes.div tensor_div_by map2 R_has_add R_has_div] in *.
+  cbn [fst snd] in *.
+  repeat match goal with H := fun x => coer (?f x) |- _ => first [ is_var f | is_const f ]; subst H end.
+  repeat match goal with H := ?f |- _ => first [ is_var f | is_const f | is_constructor f ]; subst H end.
+  RawIndex.curry_lets ().
+  cbv -[logits0] in pred_logits.
+  subst logits0; cbv beta iota in *.
+
+  (** working on goal *)
+  rewrite <- Rdiv_mult_distr.
+  cbv [error expected_accuracy].
+  cbv [Prim2B SF2B].
+  repeat (set (k := Prim2SF _) at 1; vm_compute in k; subst k).
+  cbv beta iota.
+  cbv [B2R Defs.F2R Defs.Fnum Defs.Fexp cond_Zopp bpow Zaux.radix_val Zaux.radix2].
+  repeat (set (k := Z.pow_pos _ _); vm_compute in k; subst k).
+  vm_compute PrimFloat.to_Q.
+  cbv [Classes.abs R_has_abs Classes.leb R_has_leb Classes.sub R_has_sub].
+  apply Rle_bool_true.
+  repeat match goal with
+         | [ |- context[(IZR ?n * / IZR (Zpos ?d))%R] ]
+           => change ((IZR n * / IZR (Zpos d))%R) with (Q2R (n # d))
+         | [ |- context[(Q2R ?x / Q2R ?y)%R] ]
+           => rewrite <- (Qreals.Q2R_div x y) by Lqa.lra
+         | [ |- context[(Q2R ?x + Q2R ?y)%R] ]
+           => rewrite <- (Qreals.Q2R_plus x y)
+         | [ |- context[(Q2R ?x * Q2R ?y)%R] ]
+           => rewrite <- (Qreals.Q2R_mult x y)
+         | [ |- context[(Q2R ?x - Q2R ?y)%R] ]
+           => rewrite <- (Qreals.Q2R_minus x y)
+         | [ |- context[(- Q2R ?x)%R] ]
+           => rewrite <- (Qreals.Q2R_opp x)
+         | [ |- context[Q2R ?x] ]
+           => let x' := (eval vm_compute in x) in
+              progress change x with x'
+         | [ |- context[Q2R ?x] ]
+           => progress (erewrite (Qreals.Qeq_eqR x)
+                  by (symmetry; etransitivity; [ | apply Qred_correct ]; vm_compute Qred; reflexivity))
+         | [ |- (Rabs ?x <= ?y)%R ]
+           => cut (-y <= x <= y)%R;
+              [ generalize y x; clear; cbv [Rabs]; intros; destruct Rcase_abs; lra | ]
+         | [ |- (?x <= ?y - ?z <= ?w)%R ]
+           => cut (x + z <= y <= w + z)%R;
+              [ generalize x y z w; clear; intros; lra | ]
+         | [ |- (?x <= ?y / ?z <= ?w)%R ]
+           => cut (x * z <= y <= w * z)%R;
+              [ generalize x y w; clear; intros; nra | ]
+         end.
+  cbv [coer_tensor map] in *.
+
+  (** In the more general case, this theorem will classify which inputs are correct and which are incorrect *)
+  match goal with
+  | [ |- context[Reduction.sum _ _ _ ?f] ]
+    => set (res := f)
+  end.
+  subst res'; cbv beta in *.
+  vm_compute lift_coer_has_zero in *.
+  assert (Hres : pointwise_relation _ eq res (fun _ => 1%R)).
+  2: { clearbody res; clear -Hres.
+       rewrite (Reduction.sum_Proper _ _ Hres).
+       rewrite Reduction.sum_const_mul_step1
+         by (cbv [Classes.mul Classes.add Classes.zero N_has_zero coer coer_trans R_has_mul R_has_add Z_of_N_coer Q2R_coer inject_Z_coer]; intros;
+             rewrite ?N2Z.inj_succ, ?N2Z.inj_0, ?Q2RAux.Q2R_inject_Z, ?succ_IZR;
+             try lra).
+       cbv [coer coer_trans Q2R_coer inject_Z_coer].
+       rewrite Q2RAux.Q2R_inject_Z.
+       cbv -[Rle IZR].
+       lra. }
+
+  intro i.
+  subst res; cbv beta.
+  all: cbv [Classes.one Classes.zero lift_coer_has_one lift_coer_has_zero Z_has_zero Z_has_one] in *.
+  match goal with
+  | [ |- (if ?x then ?t else ?f) = ?t' ]
+    => cut (x = true); [ intros ->; vm_compute; lra | ]
+  end.
+  apply eqb_complete.
+  set (i' := of_Z _).
+  Ltac specialize_step_with f i' :=
+    let f' := fresh f in
+    rename f into f';
+    pose (f' i') as f;
+    change (f' i') with f;
+    repeat match goal with
+      | [ H := context[f' i'] |- _ ] => change (f' i') with f in (value of H)
+      | [ H : context[f' i'] |- _ ] => change (f' i') with f in H
+      end;
+    cbv [f'] in f; clear f'.
+  Ltac specialize_step i' :=
+    match goal with
+    | [ |- context[?f i'] ] => is_var f; specialize_step_with f i'
+    | [ H := context[?f i'] |- _ ] => is_var f; specialize_step_with f i'
+    end.
+  repeat specialize_step i'.
+
+  repeat (set (sum1 := Reduction.sum 0 1 1) in *; cbv in sum1; subst sum1; cbv beta in * ).
+  repeat match goal with
+         | [ H := context[?f ?x] |- _ ]
+           => is_uint63 x;
+              is_var f;
+              specialize_step x
+         end.
+
+  subst true_maximum.
+  erewrite Reduction.argmax_max_equiv by reflexivity.
+  rename all_tokens1 into all_tokens.
+  set (true_maximum := all_tokens (Reduction.argmax _ _ _ _)).
+
+  assert (Hbounds : forall j, ((0 <=? all_tokens j) && (all_tokens j <? Uint63.of_Z cfg.d_vocab))%uint63 = true).
+  { clear; subst all_tokens all_toks0.
+    cbv [get raw_get].
+    intro j.
+    rewrite raw_get_cartesian_exp_app, raw_get_arange_app.
+    cbv [RawIndex.tl RawIndex.hd]; cbn [snd fst].
+    vm_compute point.
+    break_innermost_match; [ reflexivity | ].
+    revert i i' j.
+    repeat match goal with
+           | [ |- context[?x] ]
+             => lazymatch type of x with
+                | PrimInt63.int => idtac
+                | Z => idtac
+                | bool => idtac
+                | positive => idtac
+                end;
+                let v := (eval cbv in x) in
+                progress change x with v
+           end.
+    cbv [Classes.pow Classes.mul Classes.add Classes.zero Classes.one Classes.leb Classes.ltb int_has_add Classes.int_div Z_has_int_div int_has_mul].
+    intros; rewrite Bool.andb_true_iff; split.
+    { lia. }
+    { lia. } }
+
+  clearbody all_tokens.
+  set (true_max_i := Reduction.argmax _ _ _ _) in (value of true_maximum).
+  clearbody true_max_i.
+
+  subst pred_tokens.
+  apply Reduction.argmax_spec.
+  split.
+  { clear -Hbounds.
+    subst true_maximum.
+    specialize (Hbounds true_max_i).
+    cbv in *; break_innermost_match; break_innermost_match_hyps.
+    all: repeat match goal with H : _ |- _ => apply eqb_correct in H end.
+    all: subst.
+    all: cbv in *.
+    all: try reflexivity.
+    all: lia. }
+
+  cbv [Reduction.in_bounds].
+  intros j Hj.
+  assert (j = true_maximum \/ j <> true_maximum) by lia.
+  destruct_head'_or; subst; [ right; split; try reflexivity; clearbody true_maximum; cbv; lia | ].
+  left.
+
+  apply Rlt_bool_true.
+
+  match goal with
+  | [ |- (?x < ?y)%R ]
+    => cut ((0 < y - x)%R);
+       [ generalize x y; clear; intros; lra | ]
+  end.
+
+  let pl2 := open_constr:(_) in
+  assert (Hl : forall i, pred_logits i = pl2 i).
+  { subst pred_logits; intro i''; instantiate (1:=ltac:(intro)); cbv beta.
+    subst residual0; cbv beta.
+    subst attn_out; cbv beta.
+    subst out; cbv beta.
+    subst v; cbv beta.
+    subst embed0 pos_embed0; cbv beta.
+
+    change R0 with 0%R.
+    match goal with |- _ = ?rhs => set (RHS := rhs) end.
+    change (@Reduction.sum R 0%R) with (@Reduction.sum R R_has_zero).
+    change Rplus with (Classes.add (A:=R)).
+    change Rmult with (Classes.mul (A:=R)).
+    let Rid_l := constr:(id_l : forall x : R, 0 + x = x) in
+    let Rdistr_r := constr:(distr_r : forall x y z : R, _ = _) in
+    let Rsum_distr := constr:(Reduction.sum_distr (R:=@eq R)) in
+    repeat rewrite_strat (bottomup (choice Rid_l Rdistr_r Rsum_distr)).
+    let Rmul_comm := constr:(comm : forall x y : R, _) in
+    let Rmul_assoc := constr:(assoc : forall x y z : R, _) in
+    let pat_comm := constr:(fun i => Rmul_comm (pattern i)) in
+    let resid_comm := constr:(fun x y => Rmul_comm (residual x y)) in
+    let Rmul_sum_distr_r := constr:(Reduction.mul_sum_distr_r (R:=@eq R)) in
+    let Rmul_sum_distr_r := constr:(fun x start stop step f => Rmul_sum_distr_r start stop step f x) in
+    let Rmul_sum_distr_r_pattern := constr:(fun i => Rmul_sum_distr_r (pattern i)) in
+    let Rmul_sum_distr_r_resid := constr:(fun i j => Rmul_sum_distr_r (residual i j)) in
+    let Rsum_swap := constr:(Reduction.sum_swap (R:=@eq R)) in
+    let Rsum_swap := constr:(fun f start1 stop1 step1 start2 stop2 step2 => Rsum_swap start1 stop1 step1 start2 stop2 step2 f) in
+    let Rsum_swap_resid := constr:(fun f i => Rsum_swap (fun a b => f a b * residual i b)) in
+    let Rsum_swap_pattern := constr:(fun f => Rsum_swap (fun a b => f a b * pattern b)) in
+    repeat (repeat (repeat setoid_rewrite <- Rmul_assoc;
+                    repeat setoid_rewrite resid_comm;
+                    repeat setoid_rewrite <- Rmul_assoc;
+                    repeat setoid_rewrite pat_comm);
+            repeat setoid_rewrite Rmul_assoc;
+            repeat setoid_rewrite Rmul_sum_distr_r;
+            repeat setoid_rewrite <- Rmul_sum_distr_r_pattern;
+            repeat setoid_rewrite <- Rmul_sum_distr_r_resid;
+            repeat setoid_rewrite Rsum_swap_pattern;
+            repeat setoid_rewrite Rsum_swap_resid;
+            repeat setoid_rewrite Rsum_swap_pattern).
+
+    subst residual; cbv beta in *.
+    cbv [RawIndex.snoc RawIndex.nil].
+    change (0 =? 0)%uint63 with true in *;
+      change (1 =? 0)%uint63 with false in *;
+      cbv beta iota in *.
+
+    let Rid_l := constr:(id_l : forall x : R, 0 + x = x) in
+    let Rdistr_r := constr:(distr_r : forall x y z : R, _ = _) in
+    let Rdistr_l := constr:(distr_l : forall x y z : R, _ = _) in
+    let Rsum_distr := constr:(Reduction.sum_distr (R:=@eq R)) in
+    repeat rewrite_strat (bottomup (choice Rid_l Rdistr_r Rdistr_l Rsum_distr)).
+
+    subst RHS.
+    reflexivity. }
+  cbv beta in *.
+
+  rewrite !Hl; clear Hl pred_logits.
+
+  change Rminus with (Classes.sub (A:=R)).
+  #[local] Opaque Reduction.sum.
+  let Radd_assoc := constr:(assoc  : forall x y z : R, @Classes.add R R R R_has_add _ _ = _) in
+  rewrite !Radd_assoc.
+  let Rsum_distr := constr:(Reduction.sum_distr (R:=@eq R)) in
+  do 2 match goal with
+    | [ |- context[Reduction.sum ?start ?stop ?step ?x + Reduction.sum ?start ?stop ?step ?y] ]
+      => lazymatch x with
+         | context[cfg.W_E]
+           => lazymatch y with
+              | context[cfg.W_pos]
+                => rewrite <- (Rsum_distr start stop step x y)
+              end
+         end
+    end.
+  let Radd_assoc := constr:(assoc  : forall x y z : R, @Classes.add R R R R_has_add _ _ = _) in
+  rewrite <- !Radd_assoc.
+  repeat match goal with
+         | [ |- context[(?x + ?y) - (?x' + ?y')] ]
+           => replace ((x + y) - (x' + y')) with ((x - x') + (y - y'))
+             by (generalize x y x' y'; clear; cbv; intros; lra)
+         | [ |- context[(?x * ?y) - (?x' * ?y)] ]
+           => replace ((x * y) - (x' * y)) with ((x - x') * y)
+             by (generalize x x' y; clear; cbv; intros; nra)
+         end.
+
+(*
+  specialize_step i'.
+  specialize_step i'.
+  specialize_step i'.
+  specialize_step i'.
+  specialize_step i'.
+  move_const_early_2 ltac:(fun x => constr_eq i' x) true_maximum.
+  specialize_step i'.
+  repeat match goal with H : _ |- _ => move_const_early_2 ltac:(fun x => constr_eq i' x) H end.
+  specialize_step i'.
+  specialize_step i'.
+  change01 pattern;
+    change (0 =? 0)%uint63 with true in *;
+    change (1 =? 0)%uint63 with false in *;
+    cbv beta iota in *.
+  repeat match goal with H : _ |- _ => move_const_early_2 ltac:(fun x => constr_eq i' x) H end.
+  specialize_step i'.
+  Ltac change01_step :=
+    match goal with
+    | [ H := fun b => (if (b =? 0)%uint63 then _ else _) _ |- _ ]
+      => change01 H;
+         change (0 =? 0)%uint63 with true in *;
+         change (1 =? 0)%uint63 with false in *;
+         cbv beta iota in *
+    end.
+  repeat first [ change01_step | specialize_step i' ].
+  cbv [i'] in all_tokens; clear i'.
+  match eval cbv [all_tokens] in all_tokens with
+  | fun i => if _ then ?x else ?y
+    => set (all_tokens0 := x) in *;
+       set (all_tokens1 := y) in *
+  end.
+  assert (Hbounds : ((0 <=? all_tokens0) && (all_tokens0 <? 64) && (0 <=? all_tokens1) && (all_tokens1 <? 64))%uint63 = true).
+  { clear; subst all_tokens0 all_tokens1.
+    zify.
+    Print Ltac zify.
+    Print Ltac zify_to_euclidean_division_equations.
+    Print Ltac zify_internal_to_euclidean_division_equations.
+    Z.to_euclidean_division_equations.
+    nia. }
+  clearbody all_tokens0 all_tokens1.
+  rename all_tokens0 into x, all_tokens1 into y.
+  subst mask all_tokens; cbv beta in *.
+  change (0 =? 0)%uint63 with true in *;
+    change (1 =? 0)%uint63 with false in *;
+    cbv beta iota in *.
+  subst pred_tokens.
+
+  cbv [coer_ln_tensor Bool.where_] in *.
+  repeat (match goal with
+          | [ H := I |- _ ] => subst H
+          | [ H := ?x |- _ ] => is_var x; subst H
+          | [ H := fun i => coer (?x (tt, i)) |- _ ]
+            => is_var x; subst H
+          | [ H := fun i j => coer (?x (tt, i, j)) |- _ ]
+            => is_var x; subst H
+          | [ H := fun i j k => coer (?x (tt, i, j, k)) |- _ ]
+            => is_var x; subst H
+          | [ H := ?x |- _ ] => is_const x; subst H
+          end; cbv beta in * ).
+
+
+  apply Reduction.argmax_spec.
+  split.
+  { clear -Hbounds; cbv in *; break_innermost_match; break_innermost_match_hyps.
+    all: repeat match goal with H : _ |- _ => apply eqb_correct in H end.
+    all: subst.
+    all: cbv in *.
+    all: try reflexivity.
+    all: lia. }
+  intros j Hj.
+
+
+  Set Printing Coercions.
+  cbv [Tensor.get Tensor.raw_get] in *.
+  Set Printing All.
+
+    repeat
+
   Ltac strip_one_tt H :=
     let Hv := (eval cbv delta [H] in H) in
     lazymatch Hv with
@@ -555,7 +918,6 @@ Proof.
   cbv [Uint63.eqb] in *.
 
   rewrite <- Rdiv_mult_distr.
-  Set Printing Coercions.
   cbv [error expected_accuracy].
   cbv [Prim2B SF2B].
   repeat (set (k := Prim2SF _) at 1; vm_compute in k; subst k).
@@ -1062,5 +1424,5 @@ Proof.
     lazymatch (eval cbv [H] in H) with
     | fun i : RawIndexType
 *)
-*)*)*)
+*)*)*)*)
 Abort.
