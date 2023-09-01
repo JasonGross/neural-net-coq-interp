@@ -37,6 +37,7 @@ import circuitsvis as cv
 from fancy_einsum import einsum
 import dataclasses
 from pathlib import Path
+from IPython import get_ipython
 
 from coq_export_utils import strify
 from analysis_utils import line, summarize, plot_QK_cosine_similarity, \
@@ -45,8 +46,7 @@ from analysis_utils import line, summarize, plot_QK_cosine_similarity, \
     calculate_embed_overlap, calculate_pos_embed_overlap, check_monotonicity, \
     compute_slack, plot_avg_qk_heatmap, plot_qk_heatmap, plot_qk_heatmaps_normed, plot_unembed_cosine_similarity
 from coq_export_utils import coq_export_params
-from max_of_n import acc_fn, loss_fn, train_model
-from training.max_of_n import large_data_gen
+from max_of_n import acc_fn, loss_fn, train_model, large_data_gen
 from training_utils import compute_all_tokens, get_data, make_generator_from_data
 
 import os, sys

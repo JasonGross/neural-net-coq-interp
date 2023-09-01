@@ -2,12 +2,13 @@
 import dataclasses
 import numpy as np
 import torch
-import transformer_lens
-from transformer_lens import HookedTransformer
+from transformer_lens import HookedTransformer, FactoredMatrix
 
 
-def strify(v, ty=None, description=None):
-    tymap = {'int': 'Z', 'float':'Q', 'str':'string', 'bool':'bool'}
+def strify(v, ty=None, description=None, parens_if_space=False):
+    tymap = {'int': 'Z', 'float':'Q', 'str':'string', 'bool':'bool', 'NormalizationType':'NormalizationType'}
+    def wrap_parens(s):
+        return f'({s})' if parens_if_space else s
     if v is None:
         assert ty is not None
         assert ty.startswith('Optional[')
@@ -16,25 +17,29 @@ def strify(v, ty=None, description=None):
         while ty.startswith('List['):
             resty = '(list %s)' % resty
             ty = ty[len('List['):-1]
-        return f'@None {resty % tymap[ty]}'
+        return wrap_parens(f'@None {resty % tymap[ty]}')
+    if ty is not None and ty.startswith('Optional['):
+        ty = ty[len('Optional['):-1]
+        return wrap_parens(f'Some {strify(v, ty=ty, description=description, parens_if_space=True)}')
     if isinstance(v, bool): return 'true' if v else 'false'
-    if isinstance(v, torch.Tensor): return strify(v.detach().numpy())
+    if isinstance(v, str) and ty == 'NormalizationType': return v
+    if isinstance(v, str): return '"' + repr(v)[1:-1] + '"'
+    if isinstance(v, torch.Tensor): return strify(v.detach().cpu().numpy(), ty=ty, description=description, parens_if_space=parens_if_space)
     if isinstance(v, np.ndarray):
         if len(v.shape) > 1:
             return '[' + "\n;".join(map(strify, v)) + ']'
         else:
             return '[' + ";".join(map(strify, v)) + ']'
-    if isinstance(v, str): return '"' + repr(v)[1:-1] + '"'
     if isinstance(v, list):
         if isinstance(v[0], list):
             return '[' + "\n;".join(map(strify, v)) + ']'
         else:
             return '[' + ";".join(map(strify, v)) + ']'
-    if isinstance(v, transformer_lens.FactoredMatrix): return strify(v.AB)
+    if isinstance(v, FactoredMatrix): return strify(v.AB, ty=ty, description=description, parens_if_space=parens_if_space)
     if any(isinstance(v, ty) for ty in (np.float64, float)): return v.hex()
-    if isinstance(v, np.float32): return float(v).hex()
+    if isinstance(v, np.float32): return strify(float(v), ty=ty, description=description, parens_if_space=parens_if_space)
     if isinstance(v, torch.dtype): return f'"{str(v)}"'
-    if any(isinstance(v, ty) for ty in (int, )): return f'{v}%Z' if v < 0 else f'{v}%N'
+    if any(isinstance(v, ty) for ty in (int, )): return wrap_parens(f'{v}%Z') if v < 0 else f'{v}%N'
     raise ValueError(f"unknown type {type(v)}" + (f" ({description})" if description is not None else ""))
 
 
@@ -45,11 +50,12 @@ def strify(v, ty=None, description=None):
 
 
 def coq_export_params(model: HookedTransformer):
-    print('Module cfg.')
+    print('Module cfg <: CommonConfig.')
     for f in dataclasses.fields(model.cfg):
         val = dataclasses.asdict(model.cfg)[f.name]
         ty = f.type
         if f.name == 'attn_types' and ty == 'Optional[List]': ty = 'Optional[List[str]]'
+        if f.name == 'normalization_type' and ty == 'Optional[str]': ty = 'Optional[NormalizationType]'
         print(f'  Definition {f.name} := {strify(val, ty=ty, description=f.name)}.')
     print('End cfg.')
 
