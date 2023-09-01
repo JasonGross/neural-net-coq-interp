@@ -357,7 +357,7 @@ calculate_pos_embed_overlap(simpler_model)
 # In[ ]:
 
 
-calculate_embed_and_pos_embed_overlap(simpler_model)
+calculate_embed_and_pos_embed_overlap(simpler_model, renderer='png')
 
 
 # In[ ]:

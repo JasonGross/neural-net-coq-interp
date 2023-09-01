@@ -50,7 +50,7 @@ def pm_mean_std(values):
     return f"{values.mean().item()} ± {values.std().item()}"
 
 
-def summarize(values, name=None, histogram=False, renderer=None, hist_args={}, include_value=False, linear_fit=False, min=True, max=True, mean=True, median=True, range=True, range_size=True, firstn=None, abs_max=True):
+def summarize(values, name=None, histogram=False, renderer=None, hist_args={}, imshow_args=None, include_value=False, linear_fit=False, min=True, max=True, mean=True, median=True, range=True, range_size=True, firstn=None, abs_max=True):
     if histogram:
         hist_args = dict(hist_args)
         if 'title' not in hist_args and name is not None: hist_args['title'] = f'Histogram of {name}'
@@ -58,6 +58,17 @@ def summarize(values, name=None, histogram=False, renderer=None, hist_args={}, i
         if 'xaxis' not in hist_args: hist_args['xaxis'] = name if name is not None else 'Value'
         if 'yaxis' not in hist_args: hist_args['yaxis'] = 'Count'
         hist(values, **hist_args)
+
+    if imshow_args is not None:
+        imshow_args = dict(imshow_args)
+        if 'title' not in imshow_args and name is not None: imshow_args['title'] = name
+        if 'renderer' not in imshow_args and renderer is not None: imshow_args['renderer'] = renderer
+        if 'xaxis' not in imshow_args and name is not None: imshow_args['xaxis'] = f'({name}).shape[1]'
+        if 'yaxis' not in imshow_args and name is not None: imshow_args['yaxis'] = f'({name}).shape[0]'
+        if len(values.shape) == 1:
+            line(values, **imshow_args)
+        else:
+            imshow(values, **imshow_args)
 
     if linear_fit:
         assert len(values.shape) in (1, 2)
@@ -112,6 +123,9 @@ def summarize(values, name=None, histogram=False, renderer=None, hist_args={}, i
 
 #list(zip(all_integers[~correct_idxs], all_integers_ans[~correct_idxs]))
 
+def center_by_mid_range(tensor: torch.Tensor, dim: Optional[int] = None) -> torch.Tensor:
+    maxv, minv = tensor.max(dim=dim, keepdim=True).values, tensor.min(dim=dim, keepdim=True).values
+    return tensor - (maxv + minv) / 2.0
 
 # # Simpler Model Interpretabiltiy
 
@@ -235,7 +249,6 @@ def calculate_pos_embed_overlap(model: HookedTransformer, renderer=None):
 
 # In[ ]:
 
-
 def calculate_embed_and_pos_embed_overlap(model: HookedTransformer, renderer=None):
     W_U, W_E, W_pos = model.W_U, model.W_E, model.W_pos
     d_model, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_vocab, model.cfg.n_ctx
@@ -244,19 +257,31 @@ def calculate_embed_and_pos_embed_overlap(model: HookedTransformer, renderer=Non
     assert W_E.shape == (d_vocab, d_model)
     res = ((W_E + W_pos[-1,:]) @ W_U).detach()
     self_overlap = res.diag()
+    centered_by_mid_range = center_by_mid_range(res, dim=-1)
     centered = res - self_overlap
-    imshow(res, renderer=renderer)
-    line(self_overlap, renderer=renderer)
-    imshow(centered, renderer=renderer)
-    imshow(centered[:,1:], renderer=renderer)
+    centered_no_diag = centered.clone()
+    centered_no_diag.diagonal().fill_(-1000000)
+    centered_no_diag_after_0 = centered_no_diag[:,1:]
+    centered_no_diag = centered_no_diag[centered_no_diag != -1000000]
+    centered_no_diag_after_0 = centered_no_diag_after_0[centered_no_diag_after_0 != -1000000]
     statistics = [
+        ('centered overlap after 0 (incl pos)', centered[:,1:]),
+        ('centered overlap after 0 (incl pos) no diag', centered_no_diag_after_0),
+        ('centered overlap only 0 (incl pos)', centered[:,0]),
+        ('centered overlap only 0 (incl pos) no diag', centered[1:,0]),
         ('overlap (incl pos)', res),
         ('self-overlap (incl pos)', self_overlap),
         ('self-overlap after 0 (incl pos)', self_overlap[1:]),
         ('centered overlap (incl pos)', centered),
-        ('centered overlap after 0 (incl pos)', centered[:,1:]),
+        ('centered overlap (incl pos) no diag', centered_no_diag),
+        ('centered by mid_range overlap (incl pos)', centered_by_mid_range),
+        ('centered by mid_range overlap after 0 (incl pos)', centered_by_mid_range[:,1:]),
+        ('centered by mid_range overlap only 0 (incl pos)', centered_by_mid_range[:,0]),
+        ('centered by mid_range overlap only 0 (incl pos) no diag', centered_by_mid_range[1:,0]),
     ]
-    return {name: summarize(value, name=name, renderer=renderer) for name, value in statistics}
+    return {name: summarize(value, name=name, renderer=renderer, linear_fit=True,
+                            imshow_args={'yaxis':'input token', 'xaxis':'output token'},
+                            ) for name, value in statistics}
 
 
 # ## Negligibility of W_pos @ W_V @ W_O @ W_U
