@@ -36,6 +36,7 @@ Definition bool_index_tensor {r} {s : Shape r} {s'} (t : tensor bool (s ::' s'))
 #[global] Set Warnings Append "-uniform-inheritance,-ambiguous-paths".
 #[global] Coercion slice_index : Slice >-> SliceIndexType.
 #[global] Coercion tensor_index : tensor >-> FancyIndexType.
+#[global] Coercion broadcast_one_index' (_ : option unit) : SliceIndexType _ _ := broadcast_one_index.
 (*#[global] Coercion bool_tensor_index : tensor >-> FancyIndexType.*)
 #[global] Coercion normal_index : SliceIndexType >-> FancyIndexType.
 #[export] Set Warnings Append "uniform-inheritance,ambiguous-paths".
@@ -46,16 +47,16 @@ Definition bool_index_tensor {r} {s : Shape r} {s'} (t : tensor bool (s ::' s'))
 Module FancySlicingNotations.
   Declare Custom Entry fancy_slice.
   Notation ":" := (slice_index (@Build_Slice _ None None None)) (in custom fancy_slice at level 59).
-  Notation "start : stop : step" := (slice_index (@Build_Slice _ (Some start) (Some stop) (Some step))) (in custom fancy_slice at level 59, start constr at level 59, stop constr at level 59, step constr at level 59, format "start : stop : step").
-  Notation "start :: step" := (slice_index (@Build_Slice _ (Some start) None (Some step))) (in custom fancy_slice at level 59, start constr at level 59, step constr at level 59, format "start :: step").
-  Notation "start : : step" := (slice_index (@Build_Slice _ (Some start) None (Some step))) (in custom fancy_slice at level 59, start constr at level 59, step constr at level 59, format "start : : step").
-  Notation "start :: step" := (slice_index (@Build_Slice _ (Some start) None (Some step))) (in custom fancy_slice at level 59, start constr at level 59, step constr at level 59, format "start :: step").
-  Notation ": stop : step" := (slice_index (@Build_Slice _ None (Some stop) (Some step))) (in custom fancy_slice at level 59, stop constr at level 59, step constr at level 59, format ": stop : step").
-  Notation ": : step" := (slice_index (@Build_Slice _ None None (Some step))) (in custom fancy_slice at level 59, step constr at level 59, format ": : step").
-  Notation ":: step" := (slice_index (@Build_Slice _ None None (Some step))) (in custom fancy_slice at level 59, step constr at level 59, format ":: step").
-  Notation "start : stop" := (slice_index (@Build_Slice _ (Some start) (Some stop) None)) (in custom fancy_slice at level 59, start constr at level 59, stop constr at level 59, format "start : stop").
-  Notation "start :" := (slice_index (@Build_Slice _ (Some start) None None)) (in custom fancy_slice at level 59, start constr at level 59, format "start :").
-  Notation ": stop" := (slice_index (@Build_Slice _ None (Some stop) None)) (in custom fancy_slice at level 59, stop constr at level 59, format ": stop").
+  Notation "start : stop : step" := (slice_index (@Build_Slice _ (Some start%sint63) (Some stop%sint63) (Some step%sint63))) (in custom fancy_slice at level 59, start constr at level 59, stop constr at level 59, step constr at level 59, format "start : stop : step").
+  Notation "start :: step" := (slice_index (@Build_Slice _ (Some start%sint63) None (Some step%sint63))) (in custom fancy_slice at level 59, start constr at level 59, step constr at level 59, format "start :: step").
+  Notation "start : : step" := (slice_index (@Build_Slice _ (Some start%sint63) None (Some step%sint63))) (in custom fancy_slice at level 59, start constr at level 59, step constr at level 59, format "start : : step").
+  Notation "start :: step" := (slice_index (@Build_Slice _ (Some start%sint63) None (Some step%sint63))) (in custom fancy_slice at level 59, start constr at level 59, step constr at level 59, format "start :: step").
+  Notation ": stop : step" := (slice_index (@Build_Slice _ None (Some stop%sint63) (Some step%sint63))) (in custom fancy_slice at level 59, stop constr at level 59, step constr at level 59, format ": stop : step").
+  Notation ": : step" := (slice_index (@Build_Slice _ None None (Some step%sint63))) (in custom fancy_slice at level 59, step constr at level 59, format ": : step").
+  Notation ":: step" := (slice_index (@Build_Slice _ None None (Some step%sint63))) (in custom fancy_slice at level 59, step constr at level 59, format ":: step").
+  Notation "start : stop" := (slice_index (@Build_Slice _ (Some start%sint63) (Some stop%sint63) None)) (in custom fancy_slice at level 59, start constr at level 59, stop constr at level 59, format "start : stop").
+  Notation "start :" := (slice_index (@Build_Slice _ (Some start%sint63) None None)) (in custom fancy_slice at level 59, start constr at level 59, format "start :").
+  Notation ": stop" := (slice_index (@Build_Slice _ None (Some stop%sint63) None)) (in custom fancy_slice at level 59, stop constr at level 59, format ": stop").
   Notation "'None'" := broadcast_one_index (in custom fancy_slice at level 0). (* need to avoid breaking Datatypes.None *)
   Notation "x" := x%sint63 (in custom fancy_slice at level 59, x constr at level 55).
 End FancySlicingNotations.
@@ -298,17 +299,17 @@ Export FancyIndex.FancyIndexNotations.
 
 (*
 Local Open Scope tensor_scope.
+Eval cbn in  _.[:-1].
+Eval cbn in  _.[:, None, 0].
+Eval cbn in  _.[:1, None, 0].
+Eval cbn in  _.[:-1:1, None, 0].
 Eval cbn in  _.[1:-1:1].
 Eval cbn in  _.[1:-1:1,1:-1:1].
 Eval cbn in  _.[1:-1].
-Eval cbn in  _.[:-1].
 Eval cbn in  _.[1:].
 Eval cbn in  _.[1::1].
 Eval cbn in  _.[1::1,:1].
 Eval cbn in  _.[1::1,1:].
 Eval cbn in  _.[1::1,1].
 Eval cbn in  _.[1:-1:1, None, 0].
-Eval cbn in  _.[:, None, 0].
-Eval cbn in  _.[:1, None, 0].
-Eval cbn in  _.[:-1:1, None, 0].
 *)
