@@ -60,6 +60,19 @@ Module FancySlicingNotations.
   Notation ": stop" := (slice_index (@Build_Slice _ None (Some stop%sint63) None)) (in custom fancy_slice at level 59, stop constr at level 59, format ": stop").
   Notation "'None'" := broadcast_one_index (in custom fancy_slice at level 0). (* need to avoid breaking Datatypes.None *)
   Notation "x" := x%sint63 (in custom fancy_slice at level 59, x constr at level 55).
+
+  Notation "slice:( : )" := (slice_index (@Build_Slice _ None None None)) (in custom fancy_slice at level 59, only parsing).
+  Notation "slice:( start : stop : step )" := (slice_index (@Build_Slice _ (Some start%sint63) (Some stop%sint63) (Some step%sint63))) (in custom fancy_slice at level 59, start constr at level 59, stop constr at level 59, step constr at level 59, only parsing).
+  Notation "slice:( start :: step )" := (slice_index (@Build_Slice _ (Some start%sint63) None (Some step%sint63))) (in custom fancy_slice at level 59, start constr at level 59, step constr at level 59, only parsing).
+  Notation "slice:( start : : step )" := (slice_index (@Build_Slice _ (Some start%sint63) None (Some step%sint63))) (in custom fancy_slice at level 59, start constr at level 59, step constr at level 59, only parsing).
+  Notation "slice:( start :: step )" := (slice_index (@Build_Slice _ (Some start%sint63) None (Some step%sint63))) (in custom fancy_slice at level 59, start constr at level 59, step constr at level 59, only parsing).
+  Notation "slice:( : stop : step )" := (slice_index (@Build_Slice _ None (Some stop%sint63) (Some step%sint63))) (in custom fancy_slice at level 59, stop constr at level 59, step constr at level 59, only parsing).
+  Notation "slice:( : : step )" := (slice_index (@Build_Slice _ None None (Some step%sint63))) (in custom fancy_slice at level 59, step constr at level 59, only parsing).
+  Notation "slice:( :: step )" := (slice_index (@Build_Slice _ None None (Some step%sint63))) (in custom fancy_slice at level 59, step constr at level 59, only parsing).
+  Notation "slice:( start : stop )" := (slice_index (@Build_Slice _ (Some start%sint63) (Some stop%sint63) None)) (in custom fancy_slice at level 59, start constr at level 59, stop constr at level 59, only parsing).
+  Notation "slice:( start : )" := (slice_index (@Build_Slice _ (Some start%sint63) None None)) (in custom fancy_slice at level 59, start constr at level 59, only parsing).
+  Notation "slice:( : stop )" := (slice_index (@Build_Slice _ None (Some stop%sint63) None)) (in custom fancy_slice at level 59, stop constr at level 59, only parsing).
+  Notation "slice:( 'None' )" := broadcast_one_index (in custom fancy_slice at level 59).
 End FancySlicingNotations.
 
 Module SliceIndex.
@@ -304,6 +317,15 @@ Eval cbn in  _.[:-1].
 Eval cbn in  _.[:, None, 0].
 Eval cbn in  _.[:1, None, 0].
 Eval cbn in  _.[:-1:1, None, 0].
+Eval cbn in  _.[slice:(1:-1:1)].
+Eval cbn in  _.[slice:(1:-1:1),slice:(1:-1:1)].
+Eval cbn in  _.[slice:(1:-1)].
+Eval cbn in  _.[slice:(1:)].
+Eval cbn in  _.[slice:(1::1)].
+Eval cbn in  _.[slice:(1::1),:1].
+Eval cbn in  _.[slice:(1::1),slice:(1:)].
+Eval cbn in  _.[slice:(1::1),1].
+Eval cbn in  _.[slice:(1:-1:1), None, 0].
 Eval cbn in  _.[1:-1:1].
 Eval cbn in  _.[1:-1:1,1:-1:1].
 Eval cbn in  _.[1:-1].
