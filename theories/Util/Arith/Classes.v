@@ -13,6 +13,7 @@ Class has_sub_with A B C := sub : A -> B -> C.
 Notation has_sub A := (has_sub_with A A A).
 Class has_mul_with A B C := mul : A -> B -> C.
 Notation has_mul A := (has_mul_with A A A).
+Class has_matmul A B C := matmul : A -> B -> C.
 Class has_opp A := opp : A -> A.
 Class has_zero A := zero : A.
 Class has_one A := one : A.
@@ -65,6 +66,7 @@ Infix "≠?" := neqb : core_scope.
 Infix "+" := add : core_scope.
 Infix "-" := sub : core_scope.
 Infix "*" := mul : core_scope.
+Infix "*m" := matmul : core_scope.
 Infix "/" := div : core_scope.
 Infix "//" := int_div : core_scope.
 Infix "^" := pow : core_scope.
@@ -88,6 +90,8 @@ Notation "1" := one : core_scope.
 #[export] Hint Mode has_sub_with - ! - : typeclass_instances.
 #[export] Hint Mode has_mul_with ! - - : typeclass_instances.
 #[export] Hint Mode has_mul_with - ! - : typeclass_instances.
+#[export] Hint Mode has_matmul ! - - : typeclass_instances.
+#[export] Hint Mode has_matmul - ! - : typeclass_instances.
 #[export] Hint Mode has_int_div_by ! - - : typeclass_instances.
 #[export] Hint Mode has_div_by ! - - : typeclass_instances.
 #[export] Hint Mode has_pow_by ! - - : typeclass_instances.

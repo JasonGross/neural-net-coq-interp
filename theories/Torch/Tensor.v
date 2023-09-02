@@ -1095,25 +1095,17 @@ Definition mm {n m p A B C} {mulA : has_mul_with A B C} {addC : has_add C} {zero
 (** transpose last two dimensions *)
 Definition T {r} {s : Shape r} {n m A} (t : tensor (s ::' n ::' m) A) : tensor (s ::' m ::' n) A
   := fun '((idxs, i), j) => raw_get t ((idxs, j), i).
-(*
-Definition dotmatvec {r} {s : Shape r} {n m A B C} {mulA : has_mul_with A B C} {addC : has_add C} {zeroC : has_zero C}
-  (x : tensor (s ::' n ::' m) A) (y : tensor (s ::' m) B)
-  : tensor (s ::' m) C
-  := fun '(idx, i) => ∑_(0 ≤ j < n) (x.[idx ::' j ::' i] * y.[idx ::' i])%raw_tensor.
-Definition dotvecmat {r} {s : Shape r} {n m A B C} {mulA : has_mul_with A B C} {addC : has_add C} {zeroC : has_zero C}
-  (x : tensor (s ::' n) A) (y : tensor (s ::' n ::' m) B)
-  : tensor (s ::' m) C
-  := fun '(idx, i) => ∑_(0 ≤ j < n) (x.[idx ::' j] * y.[idx ::' j ::' i])%raw_tensor.
-Definition dotmatmat {r} {s : Shape r} {n m p A B C} {mulA : has_mul_with A B C} {addC : has_add C} {zeroC : has_zero C}
-  (x : tensor (s ::' n ::' m) A) (y : tensor (s ::' m ::' p) B)
-  : tensor (s ::' n ::' p) C
-  := map2 mm x y.
-  := fun '(idx, i) => ∑_(0 ≤ j < n) (x.[idx ::' j] * y.[idx ::' j ::' i])%raw_tensor.
-Definition item {A} (t : tensor [] A) : A := raw_get t tt.
-Definition dotprod {s A} (
 
-Definition matmul_core
-*)
+#[export] Instance dotmatvec {r} {s : Shape r} {n m A B C} {mulA : has_mul_with A B C} {addC : has_add C} {zeroC : has_zero C}
+  : has_matmul (tensor (s ::' n ::' m) A) (tensor [m] B) (tensor (s ::' m) C)
+  := fun x y '(idx, i) => ∑_(0 ≤ j < n) (x.[idx ::' j ::' i] * y.[[i]])%raw_tensor.
+#[export] Instance dotvecmat {r} {s : Shape r} {n m A B C} {mulA : has_mul_with A B C} {addC : has_add C} {zeroC : has_zero C}
+  : has_matmul (tensor [n] A) (tensor (s ::' n ::' m) B) (tensor (s ::' m) C)
+  := fun x y '(idx, i) => ∑_(0 ≤ j < n) (x.[[j]] * y.[idx ::' j ::' i])%raw_tensor.
+#[export] Instance tensor_matmul {r} {sA sB : Shape r} {n m p A B C} {mulA : has_mul_with A B C} {addC : has_add C} {zeroC : has_zero C}
+  : has_matmul (tensor (sA ::' n ::' m) A) (tensor (sB ::' m ::' p) B) (tensor (Shape.broadcast2 sA sB ::' n ::' p) C)
+  := map2' mm.
+
 (** Quoting https://pytorch.org/docs/stable/generated/torch.tril.html
 
 torch.tril(input, diagonal=0, *, out=None) → Tensor
