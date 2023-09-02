@@ -575,11 +575,11 @@ End LayerNorm.
           => lazymatch T with
              | Shape _ => idtac
              | forall b, Shape _ => idtac
-             | Slice.Concrete.Slice IndexType => idtac
+             | Slice.Concrete.Slice _ => idtac
              | IndexType => idtac
-             | Slice.Slice ShapeType => idtac
+             | Slice.Slice _ => idtac
              | PolymorphicOption.option IndexType => idtac
-             | Slice.Slice IndexType => idtac
+             | PolymorphicOption.option int => idtac
              end;
              subst H
         | [ H := ?v |- _ ]
@@ -654,16 +654,17 @@ End LayerNorm.
           repeat repeat' reduce_axis_m1 map map' reduce_axis_m1' reshape_app_combine broadcast broadcast' reshape_app_combine' RawIndex.uncurry_radd RawIndex.split_radd reshape_snoc_split reshape_app_split reshape_app_split' RawIndex.curry_radd RawIndex.combine_radd RawIndex.hd RawIndex.tl
             adjust_index_for
             Nat.radd
-            Classes.sqrt Classes.add Classes.sub Classes.opp Classes.mul Classes.div Classes.sqr Classes.one Classes.zero Classes.exp Classes.eqb Classes.neqb Classes.ltb Classes.leb
+            Classes.sqrt Classes.add Classes.sub Classes.opp Classes.mul Classes.div Classes.sqr Classes.one Classes.zero Classes.exp Classes.eqb Classes.neqb Classes.ltb Classes.leb Classes.matmul
             bool_has_one bool_has_zero bool_has_eqb
             int_has_one Uint63.int_has_ltb PrimInt63.ltb
-            Sint63.max Sint63.int_has_leb
+            Sint63.max Sint63.int_has_leb lesb
             has_default_max_leb
             lift_coer_has_zero lift_coer_has_one
             Z_has_zero Z_has_one
             float_has_zero float_has_one
             coer_refl coer_tensor
-            Tensor.get Tensor.raw_get Slicing.SliceIndex.SliceIndexType.slice Slice.invert_index Slice.concretize PolymorphicOption.Option.sequence_return Slice.step Slice.start Slice.stop Slice.Concrete.length Slicing.SliceIndex.slice Slicing.FancyIndex.slice Slicing.FancyIndex.slice_ Slicing.FancyIndex.broadcast Slicing.FancyIndex.FancyIndexType.broadcast Slice.Concrete.normalize Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.start
+            int_has_add
+            Tensor.get Tensor.raw_get Slicing.SliceIndex.SliceIndexType.slice Slice.invert_index Slice.concretize PolymorphicOption.Option.sequence_return Slice.step Slice.start Slice.stop Slice.Concrete.length Slicing.SliceIndex.slice Slicing.FancyIndex.slice Slicing.FancyIndex.slice_ Slicing.FancyIndex.broadcast Slicing.FancyIndex.FancyIndexType.broadcast Slice.Concrete.normalize Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.start Slicing.broadcast_one_index'' Slicing.broadcast_one_index'
             Slice.Concrete.step Slice.Concrete.stop Slice.Concrete.base_len
             Slicing.inject_int
             RawIndex.snoc RawIndex.nil
@@ -741,7 +742,7 @@ End LayerNorm.
       lift_lets (); do_red ().
     Ltac red_ops _ :=
       cbv beta iota delta [Bool.where_ where_
-                             tensor_add tensor_sub tensor_mul tensor_div_by tensor_sqrt
+                             tensor_add tensor_sub tensor_mul tensor_div_by tensor_sqrt tensor_matmul diagonal mm
                              float_has_add float_has_sub float_has_mul float_has_div float_has_exp float_has_sqrt
                              coer coer_Z_float] in *;
       do_red ().

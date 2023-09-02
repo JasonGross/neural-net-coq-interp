@@ -125,6 +125,13 @@ From Flocq Require Import Raux.
 From NeuralNetInterp.Util.Arith Require Import Flocq Flocq.Instances Flocq.Notations.
 
 From NeuralNetInterp.MaxOfTwoNumbersSimpler.Computed Require Import AllPostembed.
+Import Arith.Instances.Truncating.
+Compute ExtraComputations.Model.centered_residual_error_m1_pos_min_max : float * float.
+(*      = ((-5.6943830789116392)%float, 3.3232253656859214%float)
+     : float * float
+ *)
+Compute ExtraComputations.Model.centered_residual_error_m1_0_min_max : float * float.
+(*      = ((-4.9184834534603823)%float, 0%float) *)
 (*Local Open Scope float_scope.
 Redirect "all_tokens_residual_error_m1_concrete" Print all_tokens_residual_error_m1_concrete.
 (** The bound on [W_U @ (W_E + W_pos)] aka [EU + PU] *)

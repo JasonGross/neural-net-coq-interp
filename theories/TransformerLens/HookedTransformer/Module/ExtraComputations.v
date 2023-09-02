@@ -5,15 +5,77 @@ From Coq Require Import PreOmega Zify Lia ZifyUint63 Sint63 Floats Uint63 ZArith
 From NeuralNetInterp.Util Require Import PrimitiveProd.
 From NeuralNetInterp.Util.Tactics Require Import IsUint63 ChangeInAll ClearAll BreakMatch.
 From NeuralNetInterp.Util Require Export Default Pointed.
+From NeuralNetInterp.Util Require Import Wf_Uint63.
 From NeuralNetInterp.Util.Arith Require Import Classes Instances.
 From NeuralNetInterp.Torch Require Import Tensor Slicing Tensor.Proofs Tensor.Instances.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Config HookedTransformer.Module.
 Import Instances.Truncating.
+#[local] Open Scope tensor_scope.
 #[local] Open Scope core_scope.
 
 Module ModelComputations (cfg : Config) (Import Model : ModelSig cfg).
   Import (hints) cfg.
   Import Optimize.
+
+  Section generic.
+    Context {A} {coer_float : has_coer float A} {coerZ : has_coer Z A}
+      {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
+      {sqrtA : has_sqrt A} {expA : has_exp A}
+      {maxA : has_max A} {minA : has_min A}
+      {use_checkpoint : with_default "use_checkpoint" bool true}
+      (defaultA : pointed A := @coer _ _ coerZ point).
+    Let coerA' (x : float) : A := coer x.
+    #[local] Coercion coerA' : float >-> A.
+    #[local] Existing Instance defaultA.
+    #[local] Notation checkpoint x := (if use_checkpoint then PArray.checkpoint x else x%tensor).
+
+    Definition residual_error_m1 : tensor [cfg.d_vocab; cfg.d_vocab_out] A
+      := let W_E : tensor _ A := cfg.W_E in
+         let W_pos : tensor _ A := cfg.W_pos in
+         let W_U : tensor _ A := cfg.W_U in
+         let resid_postembed : tensor [cfg.d_vocab; cfg.d_model] A
+           := W_E + W_pos.[slice:(-1:),:] in
+         resid_postembed *m W_U.
+
+    Definition centered_residual_error_m1 : tensor [cfg.d_vocab; cfg.d_vocab_out] A
+      := let err := checkpoint residual_error_m1 in
+         err - (Tensor.diagonal err).[:,None].
+
+    Definition centered_residual_error_m1_0_min_max : A * A
+      := let err := centered_residual_error_m1.[:,0] in
+         let with_f f := Tensor.item (reduce_axis_m1 (keepdim:=false) f err) in
+         (with_f Reduction.min, with_f Reduction.max).
+
+    Definition centered_residual_error_m1_pos_min_max : A * A
+      := let err := centered_residual_error_m1.[:,slice:(1:)] in
+         let with_f f := Tensor.item (reduce_axis_m1 (keepdim:=false) f (reduce_axis_m1 (keepdim:=false) f err)) in
+         (with_f Reduction.min, with_f Reduction.max).
+  End generic.
+
+  Definition centered_residual_error_m1_float : tensor _ float := centered_residual_error_m1.
+
+  Definition centered_residual_error_m1_concrete : PArray.concrete_tensor _ float
+    := PArray.concretize centered_residual_error_m1_float.
+
+  Derive centered_residual_error_m1_concrete_opt
+    SuchThat (centered_residual_error_m1_concrete_opt = centered_residual_error_m1_concrete)
+    As centered_residual_error_m1_concrete_opt_eq.
+  Proof.
+    start_optimizing ().
+    cbv [centered_residual_error_m1_float].
+    cbv beta iota delta [centered_residual_error_m1 residual_error_m1].
+    do_red ().
+    red_early_layers (); red_late_layers_1 (); red_late_layers_2 ().
+    cbv beta zeta in *; do_red (); subst_local_cleanup ().
+    subst W_U W_E W_pos.
+    red_ops ().
+    do_red ().
+    red_sum ().
+    red_ops ().
+    revert_lets_eq ().
+    finish_optimizing ().
+  Qed.
+(*
 
   (*
   Set Printing Implicit.
@@ -95,4 +157,5 @@ Module ModelComputations (cfg : Config) (Import Model : ModelSig cfg).
     revert_lets_eq ().
     finish_optimizing ().
   Qed.
+*)
 End ModelComputations.
