@@ -357,12 +357,12 @@ Proof.
   assert (Hres : pointwise_relation _ eq res (fun _ => 1%R)).
   2: { clearbody res; clear -Hres.
        rewrite (Reduction.sum_Proper _ _ Hres).
-       rewrite Reduction.sum_const_mul_step1
-         by (cbv [Classes.mul Classes.add Classes.zero N_has_zero coer coer_trans R_has_mul R_has_add Z_of_N_coer Q2R_coer inject_Z_coer]; intros;
+       rewrite (Reduction.sum_const_mul_step1 (coerN:=IZR))
+         by (cbv [Classes.zero coer Classes.add Classes.mul R_has_mul R_has_add R_has_zero]; intros;
              rewrite ?N2Z.inj_succ, ?N2Z.inj_0, ?Q2RAux.Q2R_inject_Z, ?succ_IZR;
-             try lra).
-       cbv [coer coer_trans Q2R_coer inject_Z_coer].
-       rewrite Q2RAux.Q2R_inject_Z.
+             lra).
+       cbv [coer coer_trans Q2R_coer inject_Z_coer Uint63.coer_int_N'].
+       vm_compute Z.of_N.
        cbv -[Rle IZR].
        lra. }
 
