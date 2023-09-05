@@ -353,7 +353,7 @@ def calculate_copying(model: HookedTransformer, renderer=None):
     assert W_E.shape == (d_vocab, d_model)
     assert W_V.shape == (1, 1, d_model, d_model)
     assert W_O.shape == (1, 1, d_model, d_model)
-    res = (W_E @ W_V @ W_O @ W_U).detach()[0,0,:,:]
+    res = (W_E @ W_V @ W_O @ W_U).detach().cpu()[0,0,:,:]
     res_diag = res.diag()
     res_off_diagonal = res[torch.eye(d_vocab) == 0]
     centered = -res + res.diag()[:, None]

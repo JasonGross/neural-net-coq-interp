@@ -165,7 +165,7 @@ SEED = 123
 
 MODEL_PTH_PATH = PTH_BASE_PATH / 'max-of-two.pth'
 SIMPLER_MODEL_PTH_PATH = PTH_BASE_PATH / 'max-of-two-simpler.pth'
-
+UNDERTRAINED_MODEL_PTH_PATH = PTH_BASE_PATH / 'max-of-two-undertrained.pth'
 
 # Verify that loss is low and accuracy is high for appropriate logits.
 
