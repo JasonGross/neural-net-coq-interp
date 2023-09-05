@@ -360,6 +360,12 @@ calculate_pos_embed_overlap(simpler_model)
 calculate_embed_and_pos_embed_overlap(simpler_model, renderer='png')
 
 
+
+# In[ ]:
+
+
+calculate_rowwise_embed_and_pos_embed_overlap(simpler_model, renderer='png')
+
 # In[ ]:
 
 
@@ -467,6 +473,18 @@ centered_score = calculate_attn_by_pos(simpler_model, renderer='png', pos=False)
 for row_n, row in enumerate(centered_score):
     for i in range(row.shape[0]):
         if i != row_n:
+            points.append((row[i].item() - row[row_n].item())  / (i - row_n))
+# histogram
+plt.hist(points, bins=100, edgecolor='black')
+print(min(points))
+
+# %%
+
+points = []
+centered_score = calculate_attn_by_pos(simpler_model, renderer='png', pos=False)['value']
+for row_n, row in enumerate(centered_score):
+    for i in range(row.shape[0]):
+        if i != row_n and abs(i - row_n) == 1:
             points.append((row[i].item() - row[row_n].item())  / (i - row_n))
 # histogram
 plt.hist(points, bins=100, edgecolor='black')

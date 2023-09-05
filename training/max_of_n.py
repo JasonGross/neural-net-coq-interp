@@ -13,10 +13,11 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 def loss_fn(
     logits, # [batch, pos, d_vocab]
     tokens, # [batch, pos]
-    return_per_token=False
+    return_per_token=False,
+    device=DEVICE,
   ):
-  logits = logits[:, -1, :]
-  true_maximum = torch.max(tokens, dim=1)[0]
+  logits = logits[:, -1, :].to(device)
+  true_maximum = torch.max(tokens.to(device), dim=1)[0]
   log_probs = logits.log_softmax(-1)
   correct_log_probs = log_probs.gather(-1, true_maximum.unsqueeze(-1))
   if return_per_token:
@@ -30,11 +31,12 @@ def loss_fn(
 def acc_fn(
     logits, # [batch, pos, d_vocab]
     tokens, # [batch, pos]
-    return_per_token=False
+    return_per_token=False,
+    device=DEVICE,
   ):
-  pred_logits = logits[:, -1, :]
+  pred_logits = logits[:, -1, :].to(device)
   pred_tokens = torch.argmax(pred_logits, dim=1)
-  true_maximum = torch.max(tokens, dim=1)[0]
+  true_maximum = torch.max(tokens.to(device), dim=1)[0]
   if return_per_token:
     return (pred_tokens == true_maximum).float()
   return (pred_tokens == true_maximum).float().mean().item()

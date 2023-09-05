@@ -258,13 +258,18 @@ def calculate_embed_and_pos_embed_overlap(model: HookedTransformer, renderer=Non
     res = ((W_E + W_pos[-1,:]) @ W_U).detach()
     self_overlap = res.diag()
     centered_by_mid_range = center_by_mid_range(res, dim=-1)
-    centered = res - self_overlap
+    centered = res - self_overlap[:,None]
+    centered_triu = centered.triu()
+    centered_tril = centered.tril()
     centered_no_diag = centered.clone()
     centered_no_diag.diagonal().fill_(-1000000)
     centered_no_diag_after_0 = centered_no_diag[:,1:]
     centered_no_diag = centered_no_diag[centered_no_diag != -1000000]
     centered_no_diag_after_0 = centered_no_diag_after_0[centered_no_diag_after_0 != -1000000]
     statistics = [
+        ('centered overlap (incl pos)', centered),
+        ('centered overlap (incl pos) triu', centered_triu),
+        ('centered overlap (incl pos) tril', centered_tril),
         ('centered overlap after 0 (incl pos)', centered[:,1:]),
         ('centered overlap after 0 (incl pos) no diag', centered_no_diag_after_0),
         ('centered overlap only 0 (incl pos)', centered[:,0]),
@@ -272,16 +277,49 @@ def calculate_embed_and_pos_embed_overlap(model: HookedTransformer, renderer=Non
         ('overlap (incl pos)', res),
         ('self-overlap (incl pos)', self_overlap),
         ('self-overlap after 0 (incl pos)', self_overlap[1:]),
-        ('centered overlap (incl pos)', centered),
         ('centered overlap (incl pos) no diag', centered_no_diag),
         ('centered by mid_range overlap (incl pos)', centered_by_mid_range),
         ('centered by mid_range overlap after 0 (incl pos)', centered_by_mid_range[:,1:]),
         ('centered by mid_range overlap only 0 (incl pos)', centered_by_mid_range[:,0]),
         ('centered by mid_range overlap only 0 (incl pos) no diag', centered_by_mid_range[1:,0]),
     ]
-    return {name: summarize(value, name=name, renderer=renderer, linear_fit=True,
+    return {name: summarize(value, include_value=False, name=name, renderer=renderer, linear_fit=True,
                             imshow_args={'yaxis':'input token', 'xaxis':'output token'},
                             ) for name, value in statistics}
+
+
+def calculate_rowwise_embed_and_pos_embed_overlap(model: HookedTransformer, renderer=None):
+    """
+    For `(W_E + W_pos[-1,:]) @ W_U`, we compute for each row the maximum absolute value of the following quantity:
+    - the largest negative value a number to the right of the diagonal is below the diagonal
+    - the largest positive value a number to the left  of the diagonal is above the diagonal
+    This is the exact value of the largest absolute error introduced in a given row.
+    """
+    W_U, W_E, W_pos = model.W_U, model.W_E, model.W_pos
+    d_model, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_vocab, model.cfg.n_ctx
+    assert W_U.shape == (d_model, d_vocab)
+    assert W_pos.shape == (n_ctx, d_model)
+    assert W_E.shape == (d_vocab, d_model)
+    res = ((W_E + W_pos[-1,:]) @ W_U).detach()
+    self_overlap = res.diag()
+    centered = res - self_overlap[:,None]
+    centered_triu = centered.triu()
+    centered_tril = centered.tril()
+    diffs = centered_tril - centered_triu
+    imshow(res)
+    imshow(centered)
+    imshow(diffs)
+    # # max of positive differences to the right of the diagonal
+    # max_pos_diffs = torch.max(centered_triu, dim=-1).values
+    # # max of negative differences to the left of the diagonal
+    # max_neg_diffs = torch.min(centered_tril, dim=-1).values
+    # # stack the diffs
+    # diffs = torch.stack([max_neg_diffs, max_pos_diffs], dim=-1)
+    # summarize(diffs, name='rowwise diffs (positive and negative)', renderer=renderer)
+    # # take the max of the diffs
+    max_diffs = torch.max(diffs, dim=-1).values
+    return summarize(max_diffs, name='rowwise max absolute diffs', include_value=True, linear_fit=True, renderer=renderer)
+
 
 
 # ## Negligibility of W_pos @ W_V @ W_O @ W_U
@@ -544,11 +582,35 @@ def calculate_attn_by_pos(model: HookedTransformer, pos=False, renderer=None):
     centered = res - res.mean(dim=-1, keepdim=True) if not pos else res
     imshow(centered, title=f'centered (W_E + W_pos[-1]) @ W_Q @ W_K.T @ {resid_name}.T', renderer=renderer,
            xaxis="Key token", yaxis="Query token")
-    print(centered.shape)
+    #print(centered.shape)
     return summarize(centered, name=f'centered (W_E + W_pos[-1]) @ W_Q @ W_K.T @ {resid_name}.T',
                      renderer=renderer,
                      include_value=True)
 
+def calculate_rowwise_attn_by_pos_near(model: HookedTransformer, pos=False, renderer=None, max_offset=1):
+    points = []
+    centered_score = calculate_attn_by_pos(model, renderer=renderer, pos=pos)['value']
+    centered_diag = centered_score.diag()
+    centered_score = centered_score - centered_diag[:, None]
+    # TODO: FIXME: pad the diagonals appropriately
+    res = torch.stack([centered_score.diag(diagonal=offset) * np.sign(offset) for offset in range(-max_offset, max_offset + 1) if offset != 0], dim=-1)
+    imshow(centered_score, renderer=renderer)
+    imshow(res, renderer=renderer)
+    min_right_attn = res.min(dim=-1).values
+    # TODO: quadratic fit instead of linear
+    return summarize(min_right_attn, name=f'min right attn by pos near {max_offset}', renderer=renderer, include_value=True, linear_fit=True)
+    #return min(points)
+
+def calculate_min_attn_by_pos_far(model: HookedTransformer, pos=False, renderer=None, min_offset=2):
+    points = []
+    centered_score = calculate_attn_by_pos(model, renderer=renderer, pos=pos)['value']
+    for row_n, row in enumerate(centered_score):
+        for i in range(row.shape[0]):
+            if i != row_n and abs(i - row_n) >= min_offset:
+                points.append((row[i].item() - row[row_n].item())  / (i - row_n))
+    # histogram
+    plt.hist(points, bins=100, edgecolor='black')
+    return min(points)
 
 # ## Attention Patterns
 

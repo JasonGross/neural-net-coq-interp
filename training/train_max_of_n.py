@@ -96,9 +96,11 @@ PTH_BASE_PATH = PTH_BASE_PATH / 'transformer-takes-max'
 if not os.path.exists(PTH_BASE_PATH):
     os.makedirs(PTH_BASE_PATH)
 
+cfg_dict = simpler_cfg.to_dict()
+cfg_str = '-'.join([f'{k}={cfg_dict[k]}' for k in 'n_ctx d_model n_layers n_heads d_head d_vocab'.split(' ')])
 datetime_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-MODEL_PTH_PATH = PTH_BASE_PATH / f'max-of-n-{datetime_str}.pth'
+MODEL_PTH_PATH = PTH_BASE_PATH / f'max-of-n-{cfg_str}-{datetime_str}.pth'
 
 
 TRAIN_MODEL = ALWAYS_TRAIN_MODEL
@@ -123,7 +125,7 @@ if not ALWAYS_TRAIN_MODEL:
 if TRAIN_MODEL:
     wandb.init(project=f'neural-net-coq-interp-max-{model.cfg.n_ctx}')
 
-    simpler_train_losses = train_model(model, n_epochs=50000, batch_size=256, batches_per_epoch=10, 
+    simpler_train_losses = train_model(model, n_epochs=100, batch_size=256, batches_per_epoch=10, 
             adjacent_fraction=0.3, use_complete_data=False, device=DEVICE, use_wandb=True)
 
     wandb.finish()
