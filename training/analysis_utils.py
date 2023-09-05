@@ -21,7 +21,39 @@ from training_utils import compute_all_tokens
 def linear_func(x, a, b):
     """Linear function: f(x) = a * x + b"""
     return a * x + b
+linear_func.equation = lambda popt: f'y = {popt[0]:.3f}*x + {popt[1]:.3f}'
 
+def quadratic_func(x, a, b, c):
+    return a * x**2 + b * x + c
+quadratic_func.equation = lambda popt: f'y = {popt[0]:.3f}*x^2 + {popt[1]:.3f}*x + {popt[2]:.3f}'
+
+def absolute_shift_func(x, a, b, c):
+    return a * np.abs(x - b) + c
+absolute_shift_func.equation = lambda popt: f'y = {popt[0]:.3f}*|x - {popt[1]:.3f}| + {popt[2]:.3f}'
+
+def linear_sinusoid_func(x, a, b, c, d):
+    return (a * x + b) * np.sin(c * x + d)
+linear_sinusoid_func.equation = lambda popt: f'y = ({popt[0]:.3f}*x + {popt[1]:.3f}) * sin({popt[2]:.3f}*x + {popt[3]:.3f})'
+
+def quadratic_sinusoid_func(x, a, b, c, d, e):
+    return (a * x**2 + b * x + c) * np.sin(d * x + e)
+quadratic_sinusoid_func.equation = lambda popt: f'y = ({popt[0]:.3f}*x^2 + {popt[1]:.3f}*x + {popt[2]:.3f}) * sin({popt[3]:.3f}*x + {popt[4]:.3f})'
+
+def absolute_shift_sinusoid_func(x, a, b, c, d, e):
+    return (a * np.abs(x - b) + c) * np.sin(d * x + e)
+absolute_shift_sinusoid_func.equation = lambda popt: f'y = ({popt[0]:.3f}*|x - {popt[1]:.3f}| + {popt[2]:.3f}) * sin({popt[3]:.3f}*x + {popt[4]:.3f})'
+
+def linear_abs_sinusoid_func(x, a, b, c, d):
+    return (a * x + b) * np.abs(np.sin(c * x + d))
+linear_abs_sinusoid_func.equation = lambda popt: f'y = ({popt[0]:.3f}*x + {popt[1]:.3f}) * |sin({popt[2]:.3f}*x + {popt[3]:.3f})|'
+
+def quadratic_abs_sinusoid_func(x, a, b, c, d, e):
+    return (a * x**2 + b * x + c) * np.abs(np.sin(d * x + e))
+quadratic_abs_sinusoid_func.equation = lambda popt: f'y = ({popt[0]:.3f}*x^2 + {popt[1]:.3f}*x + {popt[2]:.3f}) * |sin({popt[3]:.3f}*x + {popt[4]:.3f})|'
+
+def absolute_shift_abs_sinusoid_func(x, a, b, c, d, e):
+    return (a * np.abs(x - b) + c) * np.abs(np.sin(d * x + e))
+absolute_shift_abs_sinusoid_func.equation = lambda popt: f'y = ({popt[0]:.3f}*|x - {popt[1]:.3f}| + {popt[2]:.3f}) * |sin({popt[3]:.3f}*x + {popt[4]:.3f})|'
 
 
 def imshow(tensor, renderer=None, xaxis="", yaxis="", **kwargs):
@@ -50,7 +82,10 @@ def pm_mean_std(values):
     return f"{values.mean().item()} ± {values.std().item()}"
 
 
-def summarize(values, name=None, histogram=False, renderer=None, hist_args={}, imshow_args=None, include_value=False, linear_fit=False, min=True, max=True, mean=True, median=True, range=True, range_size=True, firstn=None, abs_max=True):
+def summarize(values, name=None, histogram=False, renderer=None, hist_args={},
+              imshow_args=None, include_value=False, linear_fit=False,
+              fit_function=None, fit_equation=None,
+              min=True, max=True, mean=True, median=True, range=True, range_size=True, firstn=None, abs_max=True):
     if histogram:
         hist_args = dict(hist_args)
         if 'title' not in hist_args and name is not None: hist_args['title'] = f'Histogram of {name}'
@@ -70,7 +105,9 @@ def summarize(values, name=None, histogram=False, renderer=None, hist_args={}, i
         else:
             imshow(values, **imshow_args)
 
-    if linear_fit:
+    if fit_function is None and linear_fit: fit_function = linear_func
+    if fit_equation is None and fit_function is not None: fit_equation = fit_function.equation
+    if fit_function is not None:
         assert len(values.shape) in (1, 2)
         if len(values.shape) == 1:
             x_vals = np.arange(values.shape[0])
@@ -81,22 +118,22 @@ def summarize(values, name=None, histogram=False, renderer=None, hist_args={}, i
             y_vals = utils.to_numpy(values.flatten())
             aggregated = 'Aggregated '
         name_space = '' if name is None else f'{name} '
-        lin_title = f"{aggregated}{name_space}Data and Fit"
+        fit_title = f"{aggregated}{name_space}Data and Fit"
         resid_title = f"{aggregated}{name_space}Residual Errors"
 
         # Fit linear regression to the aggregated data
-        popt, _ = curve_fit(linear_func, x_vals, y_vals)
+        popt, _ = curve_fit(fit_function, x_vals, y_vals)
 
         # Scatter plot the data & best fit line
         plt.figure()
         plt.scatter(x_vals, y_vals, label='Data', alpha=0.5, s=1)
-        plt.plot(x_vals, linear_func(x_vals, *popt), 'r-', label=f'Fit: y = {popt[0]:.3f}*x + {popt[1]:.3f}')
-        plt.title(lin_title)
+        plt.plot(x_vals, fit_function(x_vals, *popt), 'r-', label=f'Fit: {fit_equation(popt)}')
+        plt.title(fit_title)
         plt.legend()
         plt.show()
 
         # Plot residual errors
-        residuals = y_vals - linear_func(x_vals, *popt)
+        residuals = y_vals - fit_function(x_vals, *popt)
         order_indices = np.argsort(x_vals)
         plt.figure()
         plt.scatter(x_vals[order_indices], residuals[order_indices], c='b', alpha=0.5)
@@ -113,10 +150,10 @@ def summarize(values, name=None, histogram=False, renderer=None, hist_args={}, i
     if range_size: res['range_size'] = values.max().item() - values.min().item()
     if firstn is not None: res[f'first {firstn}'] = values[:firstn]
     if abs_max: res['abs(max)'] = values.abs().max().item()
-    if linear_fit: res['linear_fit_params'] = popt
-    if linear_fit: res['linear_fit_equation'] = f'y = {popt[0]}*x + {popt[1]}'
-    if linear_fit: res['range_residuals'] = pm_range(residuals)
-    if linear_fit: res['residuals'] = residuals[order_indices]
+    if fit_function is not None: res['fit_equation'] = f'y = {popt[0]}*x + {popt[1]}'
+    if fit_function is not None: res['range_residuals'] = pm_range(residuals)
+    if fit_function is not None: res['residuals'] = residuals[order_indices]
+    if fit_function is not None: res['fit_params'] = popt
 
     return res
 
@@ -587,18 +624,38 @@ def calculate_attn_by_pos(model: HookedTransformer, pos=False, renderer=None):
                      renderer=renderer,
                      include_value=True)
 
+def replace_nans_with_row_max(tensor):
+    # Step 1: Identify the nan values
+    nan_mask = torch.isnan(tensor)
+    
+    # Step 2: Compute the maximum value for each row, ignoring nans
+    non_nan_tensor = torch.where(nan_mask, torch.tensor(float('-inf')).to(tensor.device), tensor)
+    row_max, _ = torch.max(non_nan_tensor, dim=1, keepdim=True)
+    
+    # Replace nan with the max value of the respective row
+    tensor[nan_mask] = row_max.expand_as(tensor)[nan_mask]
+    
+    return tensor
+
 def calculate_rowwise_attn_by_pos_near(model: HookedTransformer, pos=False, renderer=None, max_offset=1):
+    def pad_diagonal_with(shape, diag, offset, val=100000):
+        before_padding = torch.zeros(list(shape[:-2]) + [np.max([0, -offset])], device=diag.device)
+        after_padding  = torch.zeros(list(shape[:-2]) + [np.max([0,  offset])], device=diag.device)
+        before_padding.fill_(val)
+        after_padding.fill_(val)
+        return torch.cat([before_padding, diag, after_padding], dim=-1)
+
     points = []
     centered_score = calculate_attn_by_pos(model, renderer=renderer, pos=pos)['value']
     centered_diag = centered_score.diag()
     centered_score = centered_score - centered_diag[:, None]
-    # TODO: FIXME: pad the diagonals appropriately
-    res = torch.stack([centered_score.diag(diagonal=offset) * np.sign(offset) for offset in range(-max_offset, max_offset + 1) if offset != 0], dim=-1)
+    res = torch.stack([np.sign(offset) * pad_diagonal_with(centered_score.shape, centered_score.diag(diagonal=offset), offset, val=float('nan'))
+                       for offset in range(-max_offset, max_offset + 1) if offset != 0], dim=-1)
     imshow(centered_score, renderer=renderer)
     imshow(res, renderer=renderer)
+    res = replace_nans_with_row_max(res)
     min_right_attn = res.min(dim=-1).values
-    # TODO: quadratic fit instead of linear
-    return summarize(min_right_attn, name=f'min right attn by pos near {max_offset}', renderer=renderer, include_value=True, linear_fit=True)
+    return summarize(min_right_attn, name=f'min right attn by pos near {max_offset}', renderer=renderer, include_value=True, fit_function=quadratic_func)
     #return min(points)
 
 def calculate_min_attn_by_pos_far(model: HookedTransformer, pos=False, renderer=None, min_offset=2):
