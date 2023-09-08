@@ -1,0 +1,54 @@
+name: CI (only native-compute targets)
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  docker-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - env: { COQ_VERSION: "master", DOCKER_COQ_VERSION: "dev-native" , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "", LAPROOF: "", TGTS: "computed" }
+
+    runs-on: ubuntu-latest
+    env: ${{ matrix.env }}
+    name: ${{ matrix.env.COQ_VERSION }}
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+    - uses: coq-community/docker-coq-action@v1
+      with:
+        coq_version: ${{ matrix.env.DOCKER_COQ_VERSION }}
+        ocaml_version: ${{ matrix.env.DOCKER_OCAML_VERSION }}
+        export: CI
+        custom_script: |
+          eval $(opam env)
+          sudo chmod -R a=u .
+          # Work around https://github.com/actions/checkout/issues/766
+          git config --global --add safe.directory "*"
+          echo '::group::install dependencies'
+          opam install -y -v ${{ matrix.env.OPAM_DEPS }}
+          echo '::endgroup::'
+          echo '::group::install LAProof'
+          if [ ! -z "${{ matrix.env.LAPROOF }}" ]; then
+             git clone https://github.com/VeriNum/LAProof.git
+             pushd LAProof
+             git remote add JasonGross https://github.com/JasonGross/LAProof.git
+             git remote update
+             git checkout 7e5c81dcfafde501e87a2c2db4021f5190dff960 # waiting on https://github.com/VeriNum/LAProof/pull/10/
+             make -j2 TIMED=1
+             make install
+             popd
+          fi
+          echo '::endgroup::'
+          make pretty-timed -j2 TGTS="${{ matrix.env.TGTS }}"
+          make print-pretty-timed
