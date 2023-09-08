@@ -11,4 +11,4 @@ Local Open Scope core_scope.
 #[local] Open Scope R_scope.
 #[export] Instance R_has_leb : has_leb R := Rle_bool.
 #[export] Instance R_has_ltb : has_ltb R := Rlt_bool.
-#[export] Instance R_has_eqb : has_ltb R := Req_bool.
+(*#[export] Instance R_has_eqb : has_ltb R := Req_bool.*)
