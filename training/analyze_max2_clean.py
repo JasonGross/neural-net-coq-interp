@@ -85,8 +85,6 @@ if __name__ == '__main__':
 
 # %%
 
-# TODO implement dscore, d(EOVU+POVU), ...
-
 def find_d_score_coeff(model) -> float:
     """
     If input tokens are x, y, with x>y, finds the coefficient c such that

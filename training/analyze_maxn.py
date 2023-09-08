@@ -99,7 +99,7 @@ assert W_K.shape == (1, 1, d_model, d_model)
 
 points = torch.zeros((d_vocab, d_vocab, n_ctx))
 # We have two cases, x in position 0 and x in position 1.
-for pos_of_max in range(n_ctx):
+for pos_of_max in range(n_ctx - 1):
     last_resid = (W_E + W_pos[-1]) # (d_vocab, d_model). Rows = possible residual streams.
     key_tok_resid = (W_E + W_pos[pos_of_max]) # (d_model, d_vocab). Rows = possible residual streams.
     q = last_resid @ W_Q[0, 0, :, :] # (d_vocab, d_model).
@@ -109,7 +109,7 @@ for pos_of_max in range(n_ctx):
     for i, row in enumerate(x_scores):
         for j in range(row.shape[0]):
             if i > j:
-                attn_delta = (row[j].item() - row[i].item())
+                attn_delta = (x_scores[i,j].item() - x_scores[i,i].item())
                 if attn_delta > 0:
                     print(f"query={i}, key={j}, attn_delta={attn_delta:.2f}, pos_of_max={pos_of_max}")
                 points[i, j, pos_of_max] = attn_delta

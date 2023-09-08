@@ -341,5 +341,5 @@ print(all_integers[~correct_idxs], very_wrong_idxs.sum())
 
 calculate_attn(undertrain_simpler_model)
 # %%
-calculate_copying(undertrain_simpler_model)
+analysis_utils.calculate_copying(undertrain_simpler_model)
 # %%

@@ -175,7 +175,7 @@ def center_by_mid_range(tensor: torch.Tensor, dim: Optional[int] = None) -> torc
 
 def compute_slack(model: HookedTransformer, renderer=None):
     all_tokens = compute_all_tokens(model=model)
-    pred_logits = model(all_tokens)[:,-1].detach()
+    pred_logits = model(all_tokens)[:,-1].detach().cpu()
 
     # Extract statistics for each row
     # Use values in all_tokens as indices to gather correct logits

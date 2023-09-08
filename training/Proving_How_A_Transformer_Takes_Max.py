@@ -43,6 +43,7 @@ from coq_export_utils import strify
 from analysis_utils import line, summarize, plot_QK_cosine_similarity, \
     analyze_svd, calculate_OV_of_pos_embed, calculate_attn, calculate_attn_by_pos, \
     calculate_copying, calculate_copying_with_pos, calculate_embed_and_pos_embed_overlap, \
+    calculate_rowwise_embed_and_pos_embed_overlap, \
     calculate_embed_overlap, calculate_pos_embed_overlap, check_monotonicity, \
     compute_slack, plot_avg_qk_heatmap, plot_qk_heatmap, plot_qk_heatmaps_normed, plot_unembed_cosine_similarity
 from coq_export_utils import coq_export_params
@@ -55,7 +56,8 @@ from importlib import reload
 from scipy.optimize import curve_fit
 
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+# DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cpu"
 
 # In[ ]:
 
@@ -330,7 +332,7 @@ print(f"acc: {acc_fn(all_integers_result, all_integers)}")
 
 
 all_integers_ans = all_integers_result[:,-1]
-ans = all_integers_ans.argmax(dim=-1)
+ans = all_integers_ans.argmax(dim=-1).cpu()
 expected = all_integers.max(dim=-1).values
 alt_expected = all_integers.min(dim=-1).values
 correct_idxs = (ans == expected)
@@ -598,54 +600,6 @@ line(train_losses, xaxis="Epoch", yaxis="Loss")
 # In[ ]:
 
 
-# dir(model)
-
-
-# In[ ]:
-
-
-# print(model)
-
-
-# In[ ]:
-
-
-#print(cfg.__dict__)
-
-
-# In[ ]:
-
-
-#{f.name:(f.type, f) for f in dataclasses.fields(cfg)}
-
-
-# In[ ]:
-
-
-# set(type(v) for k, v in cfg.__dict__.items())
-
-
-# In[ ]:
-
-
-#dir(model.blocks[0].ln1)
-
-
-# In[ ]:
-
-
-# model.blocks[0].attn.mask
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
 EXPORT_TO_COQ = True
 if EXPORT_TO_COQ:
     coq_export_params(model)
@@ -755,7 +709,7 @@ print(f"acc: {acc_fn(all_integers_result, all_integers)}")
 
 
 all_integers_ans = all_integers_result[:,-1]
-ans = all_integers_ans.argmax(dim=-1)
+ans = all_integers_ans.argmax(dim=-1).cpu()
 expected = all_integers.max(dim=-1).values
 alt_expected = all_integers.min(dim=-1).values
 correct_idxs = (ans == expected)
