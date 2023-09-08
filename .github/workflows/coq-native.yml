@@ -52,3 +52,4 @@ jobs:
           echo '::endgroup::'
           make pretty-timed -j2 TGTS="${{ matrix.env.TGTS }}"
           make print-pretty-timed
+          make install-computed
