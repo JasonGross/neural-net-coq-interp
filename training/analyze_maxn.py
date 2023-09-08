@@ -66,7 +66,7 @@ dataset = large_data_gen(n_digits=64, sequence_length=N_CTX, batch_size=128, con
 # %%
 # Test accuracy of model and get wrong examples
 accs = []
-for i in tqdm.tqdm(range(100000)):
+for i in tqdm.tqdm(range(3000)):
     batch = dataset.__next__()
     logits = model(batch)
     acc_batch = acc_fn(logits, batch, return_per_token=True)
@@ -126,4 +126,66 @@ plt.title("Attention scores")
 plt.xlabel("Key token")
 plt.ylabel("Query token")
 
+# %%
+list(enumerate(model(torch.tensor([1, 1, 1, 18, 19]))[0, -1, :]))
+
+# %%
+calculate_copying(model)
+
+
+
+# %%
+calculate_rowwise_embed_and_pos_embed_overlap(model)
+
+# %%
+list(enumerate(model(torch.tensor([36, 35, 40, 37, 32]))[0, -1, :]))
+
+# %%
+list(enumerate(model(torch.tensor([37, 37, 40, 27, 32]))[0, -1, :]))
+
+# %%
+# Run the model on a single example using run_with_cache,
+# and look at activations.
+
+all_logits, cache = model.run_with_cache(torch.tensor([18, 1, 18, 1, 19]))
+logits = all_logits[0, -1, :].detach().cpu().numpy()
+print(f"{logits[18]=}, {logits[19]=}")
+
+# %%
+pattern = cache['attn_scores', 0].detach().cpu().numpy()[0, 0]
+plt.imshow(pattern)
+plt.xlabel("Query position")
+plt.ylabel("Key position")
+# Now label each cell with its value
+for (j,i),label in np.ndenumerate(pattern):
+    plt.text(i,j,f'{label:.3f}',ha='center',va='center')
+# %%
+
+last_resid = (W_E + W_pos[-1]) # (d_vocab, d_model). Rows = possible residual streams.
+key_tok_resid = (W_E + W_pos[0]) # (d_model, d_vocab). Rows = possible residual streams.
+q = last_resid @ W_Q[0, 0, :, :] # (d_vocab, d_model).
+k = key_tok_resid @ W_K[0, 0, :, :] # (d_vocab, d_model).
+x_scores = q @ k.T # (d_vocab, d_vocab).
+
+scores = x_scores.detach().cpu().numpy()
+print(f"{scores[19, 18]=}, {scores[19, 19]=}")
+# %%
+# There's some kind of mismatch between cached scores and the attention influences
+# calculated above.
+
+q_cached = cache['q', 0].detach().cpu().numpy()[0, :, 0, :]
+q_cached.shape # (n_ctx, d_model)
+
+k_cached = cache['k', 0].detach().cpu().numpy()[0, :, 0, :]
+k_cached.shape # (n_ctx, d_model)
+
+scores_cached = q_cached @ k_cached.T / np.sqrt(d_model)
+# %%
+plt.imshow(scores_cached[-1:, :])
+for (j, i), label in np.ndenumerate(scores_cached[-1:, :]):
+    plt.text(i, j, f'{label:.3f}', ha='center', va='center')
+# %%
+plt.imshow(pattern[-1:, :])
+for (j, i), label in np.ndenumerate(pattern[-1:, :]):
+    plt.text(i, j, f'{label:.3f}', ha='center', va='center')
 # %%
