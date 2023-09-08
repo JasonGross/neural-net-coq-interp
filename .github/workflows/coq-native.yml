@@ -36,7 +36,9 @@ jobs:
           # Work around https://github.com/actions/checkout/issues/766
           git config --global --add safe.directory "*"
           echo '::group::install dependencies'
-          opam install -y -v ${{ matrix.env.OPAM_DEPS }}
+          if [ ! -z "${{ matrix.env.OPAM_DEPS }}" ]; then
+             opam install -y -v ${{ matrix.env.OPAM_DEPS }}
+          fi
           echo '::endgroup::'
           echo '::group::install LAProof'
           if [ ! -z "${{ matrix.env.LAPROOF }}" ]; then
