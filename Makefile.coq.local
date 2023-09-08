@@ -4,5 +4,5 @@ VO ?= vo
 computed: $(filter $(addsuffix %,$(wildcard theories/*/Computed/)),$(VFILES:.v=.$(VO)))
 
 .PHONY: install-computed
-install-computed: FILESTOINSTALL=$(filter $(addsuffix %,$(wildcard theories/*/Computed/)),$(FILESTOINSTALL))
+install-computed: FILESTOINSTALL:=$(filter $(addsuffix %,$(wildcard theories/*/Computed/)),$(FILESTOINSTALL))
 install-computed: install
