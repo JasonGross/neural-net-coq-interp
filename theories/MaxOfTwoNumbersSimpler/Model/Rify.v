@@ -12,7 +12,7 @@ From vcfloat Require Import IEEE754_extra.
 From vcfloat Require Import FPCompCert.
 From mathcomp.ssreflect Require Import seq.
 From LAProof Require Import dot_acc.
-From NeuralNetInterp.Util Require Import Default Arith.Classes Arith.Instances Arith.Flocq Arith.Flocq.Instances Arith.Flocq.Definitions.
+From NeuralNetInterp.Util Require Import Default Arith.Classes Arith.Instances Arith.Instances.Reals Arith.Flocq Arith.Flocq.Instances Arith.Flocq.Definitions.
 Import (hints) Instances.Uint63.
 Import Dependent.ProperNotations.
 Import Arith.Instances.Truncating Arith.Flocq.Instances.Truncating.
