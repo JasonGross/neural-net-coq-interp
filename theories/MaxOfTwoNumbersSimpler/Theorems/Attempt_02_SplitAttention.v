@@ -2,7 +2,7 @@ From Coq Require Import Zify PreOmega ZifyUint63 Qreals Lqa Lra Reals Floats Sin
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
 From NeuralNetInterp.Util.Tactics Require Import IsFloat IsUint63 BreakMatch DestructHead.
 From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Wf_Uint63.Instances Wf_Uint63.Proofs SolveProperEqRel Default.
-From NeuralNetInterp.Util.Arith Require Import Classes Instances Classes.Laws Instances.Laws FloatArith.Definitions Reals.Definitions.
+From NeuralNetInterp.Util.Arith Require Import Classes Instances Instances.Reals Classes.Laws Instances.Laws FloatArith.Definitions Reals.Definitions.
 From NeuralNetInterp.Torch Require Import Tensor.Instances Slicing.Instances Tensor.Proofs.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Instances.
 From NeuralNetInterp.MaxOfTwoNumbersSimpler Require Import Parameters Model Heuristics TheoremStatement Model.Instances Model.Flocqify Model.Rify.
@@ -126,6 +126,9 @@ From NeuralNetInterp.Util.Arith Require Import Flocq Flocq.Instances Flocq.Notat
 
 From NeuralNetInterp.MaxOfTwoNumbersSimpler.Computed Require Import AllPostembed.
 Import Arith.Instances.Truncating.
+Compute PArray.concretize centered_residual_error_m1.
+Compute PArray.concretize (Tensor.diagonal (ExtraComputations.Model.residual_error_m1)).
+Check cfg.W_E + cfg.W_pos.[slice:(-1:),:]%tensor.
 Compute ExtraComputations.Model.centered_residual_error_m1_pos_min_max : float * float.
 (*      = ((-5.6943830789116392)%float, 3.3232253656859214%float)
      : float * float
