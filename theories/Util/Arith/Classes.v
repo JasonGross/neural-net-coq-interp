@@ -45,6 +45,34 @@ Existing Class has_coer_from.
 Existing Class has_coer_to.
 Existing Class has_coer_can_trans.
 #[export] Typeclasses Opaque has_coer_can_trans has_coer_from has_coer_to.
+#[export] Typeclasses Opaque
+  has_ltb
+  has_eqb
+  has_leb
+  has_add_with
+  has_sub_with
+  has_mul_with
+  has_matmul
+  has_opp
+  has_zero
+  has_one
+  has_mod
+  has_max
+  has_min
+  has_sqrt
+  has_int_div_by
+  has_abs
+  has_div_by
+  has_pow_by
+  has_exp_to
+  has_ln_to
+  has_get_sign
+  has_nan
+  has_is_nan
+  has_is_infinity
+  has_infinity
+  has_coer
+.
 
 Definition gtb {A} {ltbA : has_ltb A} (x y : A) : bool := ltb y x.
 Definition geb {A} {lebA : has_leb A} (x y : A) : bool := leb y x.
