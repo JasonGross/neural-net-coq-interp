@@ -32,11 +32,11 @@ jobs:
       cancel-in-progress: true
 
     steps:
-    - name: Runner Info for ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-docker-build-${{ github.head_ref || github.run_id }}
-      run: true
     - uses: actions/checkout@v3
       with:
         submodules: recursive
+    - name: Runner Info for ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-docker-build-${{ github.head_ref || github.run_id }}
+      run: true
     - uses: coq-community/docker-coq-action@v1
       with:
         custom_image: mathcomp/mathcomp:${{ matrix.env.DOCKER_MATHCOMP_VERSION }}-coq-${{ matrix.env.DOCKER_COQ_VERSION }}
@@ -86,11 +86,11 @@ jobs:
       cancel-in-progress: true
 
     steps:
-    - name: Runner Info for ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-docker-build-native-${{ github.head_ref || github.run_id }}
-      run: true
     - uses: actions/checkout@v3
       with:
         submodules: recursive
+    - name: Runner Info for ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-docker-build-native-${{ github.head_ref || github.run_id }}
+      run: true
     - uses: coq-community/docker-coq-action@v1
       with:
         coq_version: ${{ matrix.env.DOCKER_COQ_VERSION }}
