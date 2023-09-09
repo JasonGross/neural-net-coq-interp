@@ -6,7 +6,7 @@ import transformer_lens
 from transformer_lens import HookedTransformer, HookedTransformerConfig
 import tqdm.auto as tqdm
 import circuitsvis as cv
-from fancy_einsum import einsum
+from einops import einsum
 from pathlib import Path
 from IPython import get_ipython
 import matplotlib.pyplot as plt
@@ -31,7 +31,7 @@ from importlib import reload
 
 if __name__ == '__main__':
     PTH_BASE_PATH = Path(os.getcwd())
-    PTH_BASE_PATH = PTH_BASE_PATH / 'transformer-takes-max'
+    PTH_BASE_PATH = PTH_BASE_PATH / 'trained-models'
     # SIMPLER_MODEL_PTH_PATH = PTH_BASE_PATH / 'max-of-two-simpler.pth'
     # SIMPLER_MODEL_PTH_PATH = PTH_BASE_PATH / 'max-of-n.pth'
     SIMPLER_MODEL_PTH_PATH = PTH_BASE_PATH / 'max-of-n-2023-09-01_01-30-10.pth'
@@ -88,34 +88,54 @@ for i in tqdm.tqdm(range(3000)):
 print(f"Accuracy: {np.mean(accs)}")
 
 # %%
-# Interpreting attention scores
 
-W_E, W_pos, W_Q, W_K = model.W_E, model.W_pos, model.W_Q, model.W_K
-d_model, n_ctx, d_vocab = model.cfg.d_model, model.cfg.n_ctx, model.cfg.d_vocab
-assert W_E.shape == (d_vocab, d_model)
-assert W_pos.shape == (n_ctx, d_model)
-assert W_Q.shape == (1, 1, d_model, d_model)
-assert W_K.shape == (1, 1, d_model, d_model)
+# %%
 
-points = torch.zeros((d_vocab, d_vocab, n_ctx))
-# We have two cases, x in position 0 and x in position 1.
-for pos_of_max in range(n_ctx - 1):
+def find_d_score_coeff(model) -> float:
+    """
+    If input tokens are x, y, with x>y, finds the coefficient c such that
+    score(x) - score(y) >= c * (x-y).
+
+    Complexity: O(d_vocab * d_model^2 * n_ctx + d_vocab^2 * d_model * n_ctx)
+    """
+    W_E, W_pos, W_Q, W_K = model.W_E, model.W_pos, model.W_Q, model.W_K
+    d_model, n_ctx, d_vocab = model.cfg.d_model, model.cfg.n_ctx, model.cfg.d_vocab
+    assert W_E.shape == (d_vocab, d_model)
+    assert W_pos.shape == (n_ctx, d_model)
+    assert W_Q.shape == (1, 1, d_model, d_model)
+    assert W_K.shape == (1, 1, d_model, d_model)
+
+    points = []
+    # We have two cases, x in position 0 and x in position 1.
     last_resid = (W_E + W_pos[-1]) # (d_vocab, d_model). Rows = possible residual streams.
-    key_tok_resid = (W_E + W_pos[pos_of_max]) # (d_model, d_vocab). Rows = possible residual streams.
+    key_tok_resid = (W_E + W_pos[:, None, :]) # (n_ctx, d_model, d_vocab). Dim 1 = possible residual streams.
     q = last_resid @ W_Q[0, 0, :, :] # (d_vocab, d_model).
-    k = key_tok_resid @ W_K[0, 0, :, :] # (d_model, d_vocab).
-    x_scores = q @ k.T # (d_vocab, d_vocab).
-    # x_scores[i, j] is the score from query token i to key token j.
-    for i, row in enumerate(x_scores):
-        for j in range(row.shape[0]):
-            if i > j:
-                attn_delta = (x_scores[i,j].item() - x_scores[i,i].item())
-                if attn_delta > 0:
-                    print(f"query={i}, key={j}, attn_delta={attn_delta:.2f}, pos_of_max={pos_of_max}")
-                points[i, j, pos_of_max] = attn_delta
-                # points.append((row[j].item() - row[i].item()) * (1 if i < j else -1))
-result = points.min().item()
-print(f"Score coefficient: {result:.2f}")
+    print(key_tok_resid.shape)
+    print(W_K.shape)
+    k = einsum(key_tok_resid, W_K[0, 0, :, :], 'n_ctx d_vocab d_model, d_model d_model_k -> n_ctx d_model_k d_vocab')
+    # k = key_tok_resid @ W_K[0, 0, :, :] # (n_ctx, d_model, d_vocab). 
+    x_scores = einsum(q, k, 'd_vocab_q d_model, n_ctx d_model d_vocab_k -> n_ctx d_vocab_q d_vocab_k')
+    print(k.T.shape)
+    print(x_scores.shape)
+    # x_scores[pos, qt, kt] is the score from query token qt to key token kt at position pos.
+    # q_tok is always in the last position; k_tok can be anywhere before it.
+    for q_tok in range(d_vocab):
+        for k_tok in range(d_vocab):
+            for pos_of_k in range(n_ctx - 1):
+                if k_tok < q_tok:
+                    attn_q_k = x_scores[pos_of_k, q_tok, k_tok].item() / np.sqrt(d_model)
+                    attn_q_q = x_scores[-1, q_tok, q_tok].item() / np.sqrt(d_model)
+                    attn_delta = (attn_q_k - attn_q_q)
+                    points.append(attn_delta)
+                    if attn_delta > 0:
+                        print(f"query={q_tok}, key={k_tok}, attn_delta={attn_delta:.2f}, pos_of_k={pos_of_k}, attn_q_k={attn_q_k:.2f}, attn_q_q={attn_q_q:.2f}")
+                    # TODO still need to account for y > x case
+    # result = 0
+    # print(f"Score coefficient: {result:.2f}")
+    return min(points)
+
+find_d_score_coeff(model)
+
 # %%
 # plt.hist(points.flatten())
 # %%
@@ -147,9 +167,9 @@ list(enumerate(model(torch.tensor([37, 37, 40, 27, 32]))[0, -1, :]))
 # Run the model on a single example using run_with_cache,
 # and look at activations.
 
-all_logits, cache = model.run_with_cache(torch.tensor([18, 1, 18, 1, 19]))
+all_logits, cache = model.run_with_cache(torch.tensor([23, 23, 23, 23, 25]))
 logits = all_logits[0, -1, :].detach().cpu().numpy()
-print(f"{logits[18]=}, {logits[19]=}")
+print(f"{logits[23]=}, {logits[25]=}")
 
 # %%
 pattern = cache['attn_scores', 0].detach().cpu().numpy()[0, 0]
@@ -168,7 +188,7 @@ k = key_tok_resid @ W_K[0, 0, :, :] # (d_vocab, d_model).
 x_scores = q @ k.T # (d_vocab, d_vocab).
 
 scores = x_scores.detach().cpu().numpy()
-print(f"{scores[19, 18]=}, {scores[19, 19]=}")
+print(f"{scores[25, 23]=}, {scores[25, 25]=}")
 # %%
 # There's some kind of mismatch between cached scores and the attention influences
 # calculated above.
@@ -189,3 +209,4 @@ plt.imshow(pattern[-1:, :])
 for (j, i), label in np.ndenumerate(pattern[-1:, :]):
     plt.text(i, j, f'{label:.3f}', ha='center', va='center')
 # %%
+HookedTransformer

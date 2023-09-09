@@ -91,7 +91,7 @@ if IN_COLAB:
 else:
     PTH_BASE_PATH = Path(os.getcwd())
 
-PTH_BASE_PATH = PTH_BASE_PATH / 'transformer-takes-max'
+PTH_BASE_PATH = PTH_BASE_PATH / 'trained-models'
 
 if not os.path.exists(PTH_BASE_PATH):
     os.makedirs(PTH_BASE_PATH)

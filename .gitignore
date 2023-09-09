@@ -51,3 +51,4 @@ Makefile.coq.conf
 .vscode/settings.json
 training/wandb/
 training/__pycache__/
+training/trained-models/

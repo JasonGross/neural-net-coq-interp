@@ -6,7 +6,7 @@ import transformer_lens
 from transformer_lens import HookedTransformer, HookedTransformerConfig
 import tqdm.auto as tqdm
 import circuitsvis as cv
-from einops import reduce, repeat, rearrange, einsum
+from fancy_einsum import einsum
 from pathlib import Path
 from IPython import get_ipython
 
@@ -30,11 +30,11 @@ from importlib import reload
 if __name__ == '__main__':
     PTH_BASE_PATH = Path(os.getcwd())
     PTH_BASE_PATH = PTH_BASE_PATH / 'trained-models'
-    SIMPLER_MODEL_PTH_PATH = PTH_BASE_PATH / 'max-of-two-simpler.pth'
-    # SIMPLER_MODEL_PTH_PATH = PTH_BASE_PATH / 'max-of-n-2023-09-01_01-30-10.pth'
+    # SIMPLER_MODEL_PTH_PATH = PTH_BASE_PATH / 'max-of-two-simpler.pth'
+    SIMPLER_MODEL_PTH_PATH = PTH_BASE_PATH / 'max-of-n-2023-09-01_01-30-10.pth'
 
-    N_CTX = 2
-    # N_CTX = 5
+    # N_CTX = 2
+    N_CTX = 5
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     SEED = 123
 
@@ -71,7 +71,7 @@ def min_effect_of_EU_PU(model) -> float:
     # The logit effect of token x and position p is given by the vector:
     #   logits(x, p) = (W_E[x] + W_pos[p]) @ W_U
     max_logit_deltas = torch.zeros((d_vocab, n_ctx))
-    for x in range(d_vocab): # query token
+    for x in range(d_vocab):
         for p in range(n_ctx):
             logit_deltas = (W_E[x] + W_pos[p]) @ W_U # (d_vocab,)
             max_logit_deltas[x, p] = logit_deltas.max() - logit_deltas.min()
@@ -84,6 +84,8 @@ if __name__ == '__main__':
     min_effect_of_EU_PU(model)
 
 # %%
+
+# TODO implement dscore, d(EOVU+POVU), ...
 
 def find_d_score_coeff(model) -> float:
     """
@@ -101,30 +103,24 @@ def find_d_score_coeff(model) -> float:
 
     points = []
     # We have two cases, x in position 0 and x in position 1.
-    last_resid = (W_E + W_pos[-1]) # (d_vocab, d_model). Rows = possible residual streams.
-    key_tok_resid = (W_E + W_pos[:, None, :]) # (n_ctx, d_model, d_vocab). Dim 1 = possible residual streams.
-    q = last_resid @ W_Q[0, 0, :, :] # (d_vocab, d_model).
-    print(key_tok_resid.shape)
-    print(W_K.shape)
-    k = einsum(key_tok_resid, W_K[0, 0, :, :], 'n_ctx d_vocab d_model, d_model d_model_k -> n_ctx d_model_k d_vocab')
-    # k = key_tok_resid @ W_K[0, 0, :, :] # (n_ctx, d_model, d_vocab). 
-    x_scores = einsum(q, k, 'd_vocab_q d_model, n_ctx d_model d_vocab_k -> n_ctx d_vocab_q d_vocab_k')
-    print(k.T.shape)
-    print(x_scores.shape)
-    # x_scores[pos, qt, kt] is the score from query token qt to key token kt at position pos.
-    # q_tok is always in the last position; k_tok can be anywhere before it.
-    for q_tok in range(d_vocab):
-        for k_tok in range(d_vocab):
-            for pos_of_max in range(n_ctx - 1):
-                if k_tok < q_tok:
-                    points.append((x_scores[pos_of_max, q_tok, k_tok].item() - x_scores[-1, q_tok, q_tok].item())/(k_tok-q_tok))
-                    # TODO still need to account for y > x case
-    # result = 0
-    # print(f"Score coefficient: {result:.2f}")
-    return min(points)
+    for pos_of_max in range(n_ctx):
+        last_resid = (W_E + W_pos[-1]) # (d_vocab, d_model). Rows = possible residual streams.
+        key_tok_resid = (W_E + W_pos[pos_of_max]) # (d_model, d_vocab). Rows = possible residual streams.
+        q = last_resid @ W_Q[0, 0, :, :] # (d_vocab, d_model).
+        k = key_tok_resid @ W_K[0, 0, :, :] # (d_model, d_vocab).
+        x_scores = q @ k.T # (d_vocab, d_vocab).
+        # x_scores[i, j] is the score from query token i to key token j.
+        for i, row in enumerate(x_scores):
+            for j in range(row.shape[0]):
+                if j != i:
+                    points.append((row[j].item() - row[i].item())  / (j - i))
+                    # points.append((row[j].item() - row[i].item()) * (1 if i < j else -1))
+    result = min(points)
+    print(f"Score coefficient: {result:.2f}")
+    return result
 
 if __name__ == '__main__':
-    points = find_d_score_coeff(model)
+    find_d_score_coeff(model)
 
 # %%
 
@@ -153,7 +149,7 @@ def find_d_EVOU_PVOUx(model) -> float:
     PVOU_cummax = PVOU.cummax(dim=1).values # (n_ctx, d_vocab)
     min_PVOU_effect = (PVOU - PVOU_cummax).min(dim=0).values # (d_vocab,)
 
-    # To improve this bound we take into account x-dependence of EVOU and PVOU.
+    # We could take into account x-dependence of EVOU and PVOU.
     result = (min_EVOU_effect + min_PVOU_effect).min()
     print(f"Correct copying effect from:")
     print(f"EVOU: {min_EVOU_effect.min().item():.2f}, PVOU: {min_PVOU_effect.min().item():.2f}")
