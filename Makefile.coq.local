@@ -2,3 +2,15 @@ VO ?= vo
 
 .PHONY: computed
 computed: $(filter $(addsuffix %,$(wildcard theories/*/Computed/)),$(VFILES:.v=.$(VO)))
+
+.PHONY: models
+models: $(filter theories/%/Model.vo,$(VFILES:.v=.$(VO)))
+
+.PHONY: theorem-statements
+theorem-statements: $(filter theories/%/TheoremStatement.vo,$(VFILES:.v=.$(VO)))
+
+.PHONY: utils
+utils: $(filter-out $(addsuffix %,$(dir $(wildcard theories/*/TheoremStatement.v))),$(VFILES:.v=.$(VO)))
+
+.PHONY: coq-ci-target
+coq-ci-target: models theorem-statements
