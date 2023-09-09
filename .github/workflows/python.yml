@@ -2,8 +2,16 @@ name: CI (Python)
 
 on:
   push:
+    paths:
+      - training/**
+      - Makefile
+      - .github/workflows/python.yml
   pull_request:
   workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: training
 
 jobs:
   test-python:
@@ -23,7 +31,6 @@ jobs:
     - uses: actions/checkout@v3
       with:
         submodules: recursive
-        path: 'training'
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:
@@ -31,11 +38,8 @@ jobs:
         cache: 'pip'
     - name: Install dependencies
       run: |
-        pwd
-        ls
-        find .
         python -m pip install --upgrade pip
-        python -m pip install -r training/requirements.txt
+        python -m pip install -r requirements.txt
     - name: Lint with flake8
       run: |
         pip install flake8
