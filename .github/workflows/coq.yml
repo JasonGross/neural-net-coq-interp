@@ -5,6 +5,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   docker-build:
     strategy:
@@ -63,8 +66,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - env: { COQ_VERSION: "master", DOCKER_COQ_VERSION: "dev-native" , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "", LAPROOF: "", TGTS: "computed" }
-        - env: { COQ_VERSION: "master (for Coq CI)", DOCKER_COQ_VERSION: "dev-native" , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "", LAPROOF: "", TGTS: "coq-ci-target" }
+        - env: { COQ_VERSION: "master (native)", DOCKER_COQ_VERSION: "dev-native" , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "", LAPROOF: "", TGTS: "computed" }
+        - env: { COQ_VERSION: "master (for Coq CI, native)", DOCKER_COQ_VERSION: "dev-native" , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "", LAPROOF: "", TGTS: "coq-ci-target" }
 
     runs-on: ubuntu-latest
     env: ${{ matrix.env }}
