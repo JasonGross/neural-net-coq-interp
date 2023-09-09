@@ -40,8 +40,8 @@ jobs:
         cache: 'pip'
     - name: Install system dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install -y libgmp-dev libmpfr-dev libmpc-dev
+        sudo apt update
+        sudo apt install -y libgmp-dev libmpfr-dev libmpc-dev
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
