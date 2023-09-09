@@ -32,6 +32,8 @@ jobs:
     - name: Install dependencies
       run: |
         pwd
+        ls
+        find .
         python -m pip install --upgrade pip
         python -m pip install -r training/requirements.txt
     - name: Lint with flake8
