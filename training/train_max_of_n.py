@@ -23,7 +23,7 @@ from coq_export_utils import strify
 #     compute_slack, plot_avg_qk_heatmap, plot_qk_heatmap, plot_qk_heatmaps_normed, plot_unembed_cosine_similarity
 from coq_export_utils import coq_export_params
 from max_of_n import acc_fn, loss_fn, train_model, large_data_gen
-from training_utils import compute_all_tokens, get_data, make_generator_from_data
+from training_utils import compute_all_tokens, make_testset_trainset, make_generator_from_data
 
 import os, sys
 from importlib import reload

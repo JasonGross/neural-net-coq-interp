@@ -4,42 +4,27 @@
 
 # In[ ]:
 
-
+from typing import List, Any, Iterable
 import numpy as np
 from transformer_lens import HookedTransformer
-
-
 import torch
-
-
 import itertools
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+# In[ ]:
 
-def generate_data(n_digits, sequence_length=2):
+def generate_all_sequences(n_digits, sequence_length=2):
   data = list(itertools.product(range(n_digits), repeat=sequence_length))
   data = torch.tensor(data)
   return data
 
-
 # In[ ]:
 
-# somewhat redundant with generate_data
 def compute_all_tokens(model: HookedTransformer):
-    return generate_data(n_digits=model.cfg.d_vocab, sequence_length=model.cfg.n_ctx)
-    # d_vocab, n_ctx = model.cfg.d_vocab, model.cfg.n_ctx
-    # one_tokens = torch.arange(0, d_vocab)
-    # # take n_ctx cartesian_prod copies of one_tokens
-    # all_tokens = torch.cartesian_prod(*[one_tokens for _ in range(n_ctx)])
-
-    # # Reshape the tensor to the required shape (d_vocab^n_ctx, n_ctx)
-    # all_tokens = all_tokens.reshape(d_vocab**n_ctx, n_ctx)
-    # return all_tokens
-
-
+    return generate_all_sequences(n_digits=model.cfg.d_vocab, sequence_length=model.cfg.n_ctx)
+  
 # In[ ]:
-
 
 def shuffle_data(data):
   indices = np.array(range(len(data)))
@@ -47,31 +32,9 @@ def shuffle_data(data):
   data = data[indices]
   return data
 
-
 # In[ ]:
 
-
-def make_generator_from_data(data, batch_size=128):
-  """
-  Returns a generator that yields slices of length `batch_size` from a list.
-
-  Args:
-      data (List[Any]): The input list to be split into batches.
-      batch_size (int): The size of each batch.
-
-  Yields:
-      List[Any]: A slice of the input list of length `batch_size`. The final slice may be shorter if the
-      length of the list is not evenly divisible by `batch_size`.
-  """
-  data = shuffle_data(data)
-  for i in range(0,len(data), batch_size):
-    yield data[i:i+batch_size]
-
-
-# In[ ]:
-
-
-def get_data(
+def make_testset_trainset(
     n_digits,
     sequence_length=2,
     training_ratio=0.7,
@@ -91,16 +54,16 @@ def get_data(
           remaining data. Each set is a list of tuples containing `sequence_length` integers with values 0 <= n < n_digits.
           The tuples have been shuffled before being split into the train and test sets.
   """
-  data = generate_data(n_digits=n_digits, sequence_length=sequence_length)
+  data = generate_all_sequences(n_digits=n_digits, sequence_length=sequence_length)
 
   data = shuffle_data(data)
-
-  split_idx = int(len(data) * training_ratio)
 
   if force_adjacent:
     idxs = (data[:,0] - data[:,1]).abs() == 1
     data, extra_data = data[~idxs], data[idxs]
     data = torch.cat([extra_data, data], dim=0)
+
+  split_idx = int(len(data) * training_ratio)
 
   data_train = data[:split_idx]
   data_test = data[split_idx:]
@@ -111,14 +74,24 @@ def get_data(
 
   return data_train, data_test
 
-
 # In[ ]:
 
+def make_generator_from_data(data: List[Any], batch_size: int = 128) -> Iterable[List[Any]]:
+  """
+  Returns a generator that yields slices of length `batch_size` from a list.
 
-# # Loss Function
+  Args:
+      data: The input list to be split into batches.
+      batch_size: The size of each batch.
 
-# The loss is the cross entropy between the prediction for the final token and the true maximum of the sequence.
+  Yields:
+      A slice of the input list of length `batch_size`. The final slice may be shorter if the
+      length of the list is not evenly divisible by `batch_size`.
+  """
+  data = shuffle_data(data)
+  for i in range(0,len(data), batch_size):
+    yield data[i:i+batch_size]
 
-# In[ ]:
+
 
 

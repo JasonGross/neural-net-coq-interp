@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from transformer_lens import HookedTransformer
-from training_utils import get_data, make_generator_from_data
+from training_utils import make_testset_trainset, make_generator_from_data
 import tqdm.auto as tqdm
 import wandb
 
@@ -82,7 +82,7 @@ def train_model(
   train_losses = []
 
   if use_complete_data:
-    data_train, data_test = get_data(n_digits=n_digits, sequence_length=sequence_length, force_adjacent=adjacent_fraction > 0)
+    data_train, data_test = make_testset_trainset(n_digits=n_digits, sequence_length=sequence_length, force_adjacent=adjacent_fraction > 0)
     train_data_gen_gen = lambda: make_generator_from_data(data_train, batch_size=batch_size)
   else:
     train_data_gen = large_data_gen(n_digits=n_digits, sequence_length=sequence_length, batch_size=batch_size, context="train", device=device, adjacent_fraction=adjacent_fraction)

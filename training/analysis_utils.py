@@ -141,7 +141,7 @@ def summarize(values, name=None, histogram=False, renderer=None, hist_args={},
         plt.show()
 
     res = {}
-    if include_value: res['value'] = values.detach().clone()
+    if include_value: res['value'] = values.detach().clone().cpu()
     if min: res['min'] = values.min().item()
     if max: res['max'] = values.max().item()
     if mean: res['mean'] = pm_mean_std(values.float())
@@ -173,71 +173,24 @@ def center_by_mid_range(tensor: torch.Tensor, dim: Optional[int] = None) -> torc
 # In[ ]:
 
 
-def compute_slack(model: HookedTransformer, renderer=None):
+def compute_slack(model: HookedTransformer, renderer=None, histogram_all_incorrect_logit_differences=False):
     all_tokens = compute_all_tokens(model=model)
-    pred_logits = model(all_tokens)[:,-1].detach().cpu()
+    predicted_logits = model(all_tokens)[:,-1].detach().cpu()
 
     # Extract statistics for each row
     # Use values in all_tokens as indices to gather correct logits
-    indices_max = all_tokens.max(dim=1).values.unsqueeze(1)
-    indices_min = all_tokens.min(dim=1).values.unsqueeze(1)
-    correct_logits = torch.gather(pred_logits, 1, indices_max).squeeze()
-    incorrect_logits = torch.gather(pred_logits, 1, indices_min).squeeze()
-
-    max_logits = pred_logits.max(dim=1).values
-    min_logits = pred_logits.min(dim=1).values
-
-    sorted_logits, _ = pred_logits.sort(dim=1, descending=True)
-    diff_max_second = sorted_logits[:, 0] - sorted_logits[:, 1]
-    diff_min_second = sorted_logits[:, -1] - sorted_logits[:, -2]
-    diff_correct_incorrect = correct_logits - incorrect_logits
-
-    # diagonal entries are zero, so remove them
-    non_zero_diff_correct_incorrect = diff_correct_incorrect[diff_correct_incorrect != 0]
-
-    # Sort diff_correct_incorrect and get sorted indices
-    sorted_values, sorted_indices = torch.sort(diff_max_second)
-
-    # Use the non-zero indices to get the sorted subtensors
-    sorted_all_tokens = all_tokens[sorted_indices]
-    sorted_diff_max_second = diff_max_second[sorted_indices]
-
-    statistics = [
-        ('Non-Zero Diff Correct-Incorrect', non_zero_diff_correct_incorrect),
-        ('Correct Logit', correct_logits),
-        ('Incorrect Logit', incorrect_logits),
-        ('all tokens sorted by Diff Max-Second Largest', sorted_all_tokens),
-        ('Diff Max-Second Largest sorted', sorted_diff_max_second),
-        ('Max Logit', max_logits),
-        ('Min Logit', min_logits),
-        ('Diff Max-Second Largest', diff_max_second),
-        ('Diff Min-Second Smallest', diff_min_second),
-        ('Diff Correct-Incorrect', diff_correct_incorrect),
-    ]
-
-    # display a histogram of the logits
-    plt.hist(pred_logits.numpy(), bins=100, edgecolor='black') # choose 100 bins for granularity
-    plt.title('Histogram of Logits')
-    plt.xlabel('Logit Value')
-    plt.ylabel('Frequency')
-    plt.show()
-
-    # Plot histograms for each statistic
-    # for stat_name, stat_values in statistics:
-    #     plt.figure()
-    #     plt.hist(stat_values.cpu().numpy(), bins=100, edgecolor='black')
-    #     plt.title(f'Histogram of {stat_name}')
-    #     plt.xlabel('Value')
-    #     plt.ylabel('Frequency')
-    #     plt.show()
-
-    # Return summary maps
-    summary_maps = {}
-    for stat_name, stat_values in statistics:
-        summary = summarize(stat_values, name=stat_name, renderer=renderer, histogram=True, firstn=10)
-        summary_maps[stat_name] = summary
-
-    return summary_maps
+    indices_of_max = all_tokens.max(dim=1, keepdim=True).values
+    correct_logits = torch.gather(predicted_logits, 1, indices_of_max)
+    logits_above_correct = correct_logits - predicted_logits
+    # replace correct logit indices with large number so that they don't get picked up by the min
+    logits_above_correct[torch.arange(logits_above_correct.shape[0]), indices_of_max.squeeze()] = float('inf')
+    max_incorrect_logit = logits_above_correct.min(dim=1).values
+    
+    if histogram_all_incorrect_logit_differences:
+        all_incorrect_logits = logits_above_correct[logits_above_correct != float('inf')]
+        summarize(all_incorrect_logits, name='all incorrect logit differences', histogram=True, renderer=renderer)
+    
+    return summarize(max_incorrect_logit, name='min(correct logit - incorrect logit)', renderer=renderer, histogram=True)
 
 
 # ## Negligibility of W_E @ W_U

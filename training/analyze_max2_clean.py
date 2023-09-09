@@ -1,29 +1,11 @@
 # %%
 import torch
-import torch.nn as nn
 import numpy as np
-import transformer_lens
 from transformer_lens import HookedTransformer, HookedTransformerConfig
 import tqdm.auto as tqdm
-import circuitsvis as cv
-from einops import reduce, repeat, rearrange, einsum
+from einops import einsum
 from pathlib import Path
-from IPython import get_ipython
-
-from coq_export_utils import strify
-from analysis_utils import line, summarize, plot_QK_cosine_similarity, \
-    analyze_svd, calculate_OV_of_pos_embed, calculate_attn, calculate_attn_by_pos, \
-    calculate_copying, calculate_copying_with_pos, calculate_embed_and_pos_embed_overlap, \
-    calculate_rowwise_embed_and_pos_embed_overlap, \
-    calculate_embed_overlap, calculate_pos_embed_overlap, check_monotonicity, \
-    compute_slack, plot_avg_qk_heatmap, plot_qk_heatmap, plot_qk_heatmaps_normed, plot_unembed_cosine_similarity
-from coq_export_utils import coq_export_params
-from max_of_n import acc_fn, loss_fn, train_model, large_data_gen
-from training_utils import compute_all_tokens, get_data, make_generator_from_data
-
-import os, sys
-from importlib import reload
-
+import os
 
 # %%
 
@@ -72,7 +54,7 @@ def min_effect_of_EU_PU(model) -> float:
     #   logits(x, p) = (W_E[x] + W_pos[p]) @ W_U
     max_logit_deltas = torch.zeros((d_vocab, n_ctx))
     for x in range(d_vocab): # query token
-        for p in range(n_ctx):
+        for p in range(n_ctx): #NB we actually only care about p = -1
             logit_deltas = (W_E[x] + W_pos[p]) @ W_U # (d_vocab,)
             max_logit_deltas[x, p] = logit_deltas.max() - logit_deltas.min()
 

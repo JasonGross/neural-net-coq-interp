@@ -48,7 +48,7 @@ from analysis_utils import line, summarize, plot_QK_cosine_similarity, \
     compute_slack, plot_avg_qk_heatmap, plot_qk_heatmap, plot_qk_heatmaps_normed, plot_unembed_cosine_similarity
 from coq_export_utils import coq_export_params
 from max_of_n import acc_fn, loss_fn, train_model, large_data_gen
-from training_utils import compute_all_tokens, get_data, make_generator_from_data
+from training_utils import compute_all_tokens, make_testset_trainset, make_generator_from_data
 
 import os, sys
 from importlib import reload
@@ -753,7 +753,7 @@ analyze_svd(model.blocks[0].ln1.w[:,None] * model.W_U)
 
 # Notebook runs fine until here, I won't bother fixing the rest --TK
 
-data_train, data_test = get_data(sequence_length=2)
+data_train, data_test = make_testset_trainset(sequence_length=2)
 train_data_gen = make_generator_from_data(data_train, batch_size=128)
 tokens = next(train_data_gen)
 logits, cache = model.run_with_cache(tokens)
@@ -1297,7 +1297,7 @@ plot_qk_heatmap(model, keypos=0, querypos=0)
 # In[ ]:
 
 
-data_train, data_test = get_data(sequence_length=2)
+data_train, data_test = make_testset_trainset(sequence_length=2)
 train_data_gen = make_generator_from_data(data_train, batch_size=128)
 tokens = next(train_data_gen)
 logits = model(tokens)
@@ -1528,7 +1528,7 @@ line(train_losses, xaxis="Epoch", yaxis="Loss")
 # In[ ]:
 
 
-data_train, data_test = get_data(sequence_length=3)
+data_train, data_test = make_testset_trainset(sequence_length=3)
 train_data_gen = make_generator_from_data(data_train, batch_size=128)
 tokens = next(train_data_gen)
 logits, cache = model_3t.run_with_cache(tokens)
@@ -1614,7 +1614,7 @@ plot_ov_heatmap(model_3t, pos=2)
 # In[ ]:
 
 
-data_train, data_test = get_data(sequence_length=3)
+data_train, data_test = make_testset_trainset(sequence_length=3)
 train_data_gen = make_generator_from_data(data_train, batch_size=128)
 tokens = next(train_data_gen)
 logits = model_3t(tokens)
