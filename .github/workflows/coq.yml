@@ -19,7 +19,7 @@ jobs:
     name: ${{ matrix.env.COQ_VERSION }}
 
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-${{ github.head_ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-docker-build-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
 
     steps:
@@ -71,7 +71,7 @@ jobs:
     name: ${{ matrix.env.COQ_VERSION }}
 
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-${{ github.head_ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-docker-build-native-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
 
     steps:
