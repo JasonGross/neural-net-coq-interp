@@ -10,3 +10,8 @@ CHECK_PY_FILES := \
 .PHONY: check
 check:
 	$(PYTHON) $(CHECK_PY_FILES)
+
+.PHONY: save-env
+save-env:
+	conda list -e > requirements.txt
+	conda env export > environment.yml
