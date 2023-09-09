@@ -2,6 +2,12 @@ name: CI (Coq)
 
 on:
   push:
+    paths:
+      - theories/**
+      - _CoqProject
+      - Makefile
+      - Makefile.coq.local
+      - .github/workflows/coq.yml
   pull_request:
   workflow_dispatch:
 
