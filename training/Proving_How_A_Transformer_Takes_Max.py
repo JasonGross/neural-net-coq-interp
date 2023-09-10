@@ -753,7 +753,7 @@ analyze_svd(model.blocks[0].ln1.w[:,None] * model.W_U)
 
 # Notebook runs fine until here, I won't bother fixing the rest --TK
 
-data_train, data_test = make_testset_trainset(sequence_length=2)
+data_train, data_test = make_testset_trainset(model)
 train_data_gen = make_generator_from_data(data_train, batch_size=128)
 tokens = next(train_data_gen)
 logits, cache = model.run_with_cache(tokens)
@@ -1297,7 +1297,7 @@ plot_qk_heatmap(model, keypos=0, querypos=0)
 # In[ ]:
 
 
-data_train, data_test = make_testset_trainset(sequence_length=2)
+data_train, data_test = make_testset_trainset(model)
 train_data_gen = make_generator_from_data(data_train, batch_size=128)
 tokens = next(train_data_gen)
 logits = model(tokens)
@@ -1528,7 +1528,7 @@ line(train_losses, xaxis="Epoch", yaxis="Loss")
 # In[ ]:
 
 
-data_train, data_test = make_testset_trainset(sequence_length=3)
+data_train, data_test = make_testset_trainset(model_3t)
 train_data_gen = make_generator_from_data(data_train, batch_size=128)
 tokens = next(train_data_gen)
 logits, cache = model_3t.run_with_cache(tokens)
@@ -1614,7 +1614,7 @@ plot_ov_heatmap(model_3t, pos=2)
 # In[ ]:
 
 
-data_train, data_test = make_testset_trainset(sequence_length=3)
+data_train, data_test = make_testset_trainset(model_3t)
 train_data_gen = make_generator_from_data(data_train, batch_size=128)
 tokens = next(train_data_gen)
 logits = model_3t(tokens)
