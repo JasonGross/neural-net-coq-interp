@@ -5,7 +5,7 @@ from transformer_lens import HookedTransformer, HookedTransformerConfig
 import tqdm.auto as tqdm
 from training_utils import train_or_load_model, make_testset_trainset, make_generator_from_data
 from max_of_n import acc_fn, loss_fn
-from training_utils import make_testset_trainset, make_generator_from_data
+from training_utils import make_testset_trainset, make_generator_from_data, DEFAULT_WANDB_ENTITY
 
 # %%
 
@@ -59,7 +59,7 @@ model_is_trained = False
 
 def train(fail_if_cant_load=FAIL_IF_CANT_LOAD, train_if_cant_load=TRAIN_MODEL_IF_CANT_LOAD, overwrite_data=OVERWRITE_DATA,
           always_train_model=ALWAYS_TRAIN_MODEL,
-          wandb_entity='team-jason', #'tkwa-team',
+          wandb_entity=DEFAULT_WANDB_ENTITY,
           save_in_google_drive=SAVE_IN_GOOGLE_DRIVE):
     
     global model_is_trained

@@ -22,6 +22,10 @@ def default_device(deterministic: bool = False) -> str:
 
 # In[ ]:
 
+DEFAULT_WANDB_ENTITY = 'tkwa-team' # 'team-jason'
+
+# In[ ]:
+
 def in_colab() -> bool:
     """
     Returns True if running in Google Colab, False otherwise.
@@ -195,7 +199,7 @@ def train_or_load_model(
       force_train: bool = False,
       overwrite_data: bool = False,
       model_description: str = "trained model",
-      wandb_entity:str = 'tkwa-team',
+      wandb_entity:str = DEFAULT_WANDB_ENTITY,
       fail_if_cant_load: bool = False,
       save_in_google_drive: bool = False,
       **kwargs, # kwargs for **locals() below
