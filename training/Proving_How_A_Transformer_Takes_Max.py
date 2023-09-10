@@ -323,7 +323,7 @@ get_ipython().run_cell_magic('time', '', 'all_integers_result = simpler_model(al
 
 # In[ ]:
 
-
+all_integers_result = simpler_model(all_integers)
 print(f"loss: {loss_fn(all_integers_result, all_integers)}")
 print(f"acc: {acc_fn(all_integers_result, all_integers)}")
 

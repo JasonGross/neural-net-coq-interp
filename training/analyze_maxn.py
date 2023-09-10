@@ -140,11 +140,11 @@ find_d_score_coeff(model)
 # plt.hist(points.flatten())
 # %%
 # 2d plot of x_scores
-plt.imshow(x_scores.detach().cpu().numpy())
+#plt.imshow(x_scores.detach().cpu().numpy())
 # Set axis labels
-plt.title("Attention scores")
-plt.xlabel("Key token")
-plt.ylabel("Query token")
+#plt.title("Attention scores")
+#plt.xlabel("Key token")
+#plt.ylabel("Query token")
 
 # %%
 list(enumerate(model(torch.tensor([1, 1, 1, 18, 19]))[0, -1, :]))
@@ -181,14 +181,14 @@ for (j,i),label in np.ndenumerate(pattern):
     plt.text(i,j,f'{label:.3f}',ha='center',va='center')
 # %%
 
-last_resid = (W_E + W_pos[-1]) # (d_vocab, d_model). Rows = possible residual streams.
-key_tok_resid = (W_E + W_pos[0]) # (d_model, d_vocab). Rows = possible residual streams.
-q = last_resid @ W_Q[0, 0, :, :] # (d_vocab, d_model).
-k = key_tok_resid @ W_K[0, 0, :, :] # (d_vocab, d_model).
-x_scores = q @ k.T # (d_vocab, d_vocab).
+#last_resid = (W_E + W_pos[-1]) # (d_vocab, d_model). Rows = possible residual streams.
+#key_tok_resid = (W_E + W_pos[0]) # (d_model, d_vocab). Rows = possible residual streams.
+#q = last_resid @ W_Q[0, 0, :, :] # (d_vocab, d_model).
+#k = key_tok_resid @ W_K[0, 0, :, :] # (d_vocab, d_model).
+#x_scores = q @ k.T # (d_vocab, d_vocab).
 
-scores = x_scores.detach().cpu().numpy()
-print(f"{scores[25, 23]=}, {scores[25, 25]=}")
+#scores = x_scores.detach().cpu().numpy()
+#print(f"{scores[25, 23]=}, {scores[25, 25]=}")
 # %%
 # There's some kind of mismatch between cached scores and the attention influences
 # calculated above.
@@ -199,7 +199,7 @@ q_cached.shape # (n_ctx, d_model)
 k_cached = cache['k', 0].detach().cpu().numpy()[0, :, 0, :]
 k_cached.shape # (n_ctx, d_model)
 
-scores_cached = q_cached @ k_cached.T / np.sqrt(d_model)
+scores_cached = q_cached @ k_cached.T / np.sqrt(model.cfg.d_model)
 # %%
 plt.imshow(scores_cached[-1:, :])
 for (j, i), label in np.ndenumerate(scores_cached[-1:, :]):
