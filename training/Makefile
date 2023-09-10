@@ -17,15 +17,21 @@ BROKEN_PACKAGES_GREP_PATTERN:='^mkl'
 save-env-quick:
 	conda env export > environment.yml
 	# pip can't find mkl packages for some reason?
-	python -m pip list --format=freeze | grep -v $(BROKEN_PACKAGES_GREP_PATTERN) > requirements.txt
+	$(PYTHON) -m pip list --format=freeze | grep -v $(BROKEN_PACKAGES_GREP_PATTERN) > requirements.txt
+
+ENV_DIR=tmp-env
 
 .PHONY: save-env
 save-env:
 	conda env export > environment.yml
 	# pip can't find mkl packages for some reason?
-	python -m pip list --format=freeze | grep -v $(BROKEN_PACKAGES_GREP_PATTERN) > requirements.txt
-	rm -rf env
-	python -m venv env
-	. env/bin/activate && python -m pip install -r requirements.txt
-	. env/bin/activate && python -m pip list --format=freeze > requirements.txt
+	$(PYTHON) -m pip list --format=freeze | grep -v $(BROKEN_PACKAGES_GREP_PATTERN) > requirements.txt
+	rm -rf "$(ENV_DIR)"
+	$(PYTHON) -m venv "$(ENV_DIR)"
+	. "$(ENV_DIR)/bin/activate" && python -m pip install -r requirements.txt
+	. "$(ENV_DIR)/bin/activate" && python -m pip list --format=freeze > requirements.txt
+	rm -rf "$(ENV_DIR)"
 
+.PHONY: git-lint
+git-lint:
+	git ls-files "*.py" | xargs flake8 --count --select=E9,F63,F7,F82 --show-source --statistics
