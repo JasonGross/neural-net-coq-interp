@@ -51,35 +51,60 @@ model = HookedTransformer(simpler_cfg).to(DEVICE)
 for name, param in model.named_parameters():
     if "b_" in name:
         param.requires_grad = False
+        
+model_is_trained = False
+
 
 # %%
 
-data_train, data_test = make_testset_trainset(model, force_adjacent=FORCE_ADJACENT)
-train_data_gen_gen = lambda: make_generator_from_data(data_train, batch_size=BATCH_SIZE)
+def train(fail_if_cant_load=FAIL_IF_CANT_LOAD, train_if_cant_load=TRAIN_MODEL_IF_CANT_LOAD, overwrite_data=OVERWRITE_DATA,
+          always_train_model=ALWAYS_TRAIN_MODEL,
+          wandb_entity='team-jason', #'tkwa-team',
+          save_in_google_drive=SAVE_IN_GOOGLE_DRIVE):
+    
+    global model_is_trained
+      
+    data_train, data_test = make_testset_trainset(model, force_adjacent=FORCE_ADJACENT)
+    train_data_gen_gen = lambda: make_generator_from_data(data_train, batch_size=BATCH_SIZE)
+
+    training_losses, model_pth_path = train_or_load_model(
+        f'neural-net-coq-interp-max-{model.cfg.n_ctx}-epochs-{N_EPOCHS}',
+        model,
+        loss_fn=loss_fn,
+        acc_fn=acc_fn,
+        train_data_gen_maybe_lambda=train_data_gen_gen,
+        train_data_gen_is_lambda=True,
+        data_test=data_test,
+        n_epochs=N_EPOCHS,
+        batch_size=BATCH_SIZE,
+        adjacent_fraction=1,
+        use_complete_data=True,
+        batches_per_epoch=10,
+        wandb_project=f'neural-net-coq-interp-max-{model.cfg.n_ctx}-epochs-{N_EPOCHS}',
+        deterministic=DETERMINISTIC,
+        save_in_google_drive=save_in_google_drive,
+        overwrite_data=overwrite_data,
+        train_model_if_cant_load=train_if_cant_load,
+        model_description=f"trained max of {model.cfg.n_ctx} model",
+        save_model=True,
+        force_train=always_train_model,
+        wandb_entity=wandb_entity,
+        fail_if_cant_load=fail_if_cant_load,
+    )
+    
+    model_is_trained = True
+    return training_losses, model_pth_path
 
 # %%
 
-training_losses, model_pth_path = train_or_load_model(
-    f'neural-net-coq-interp-max-{model.cfg.n_ctx}-epochs-{N_EPOCHS}',
-    model,
-    loss_fn=loss_fn,
-    acc_fn=acc_fn,
-    train_data_gen_maybe_lambda=train_data_gen_gen,
-    train_data_gen_is_lambda=True,
-    data_test=data_test,
-    n_epochs=N_EPOCHS,
-    batch_size=BATCH_SIZE,
-    adjacent_fraction=1,
-    use_complete_data=True,
-    batches_per_epoch=10,
-    wandb_project=f'neural-net-coq-interp-max-{model.cfg.n_ctx}-epochs-{N_EPOCHS}',
-    deterministic=DETERMINISTIC,
-    save_in_google_drive=SAVE_IN_GOOGLE_DRIVE,
-    overwrite_data=OVERWRITE_DATA,
-    train_model_if_cant_load=TRAIN_MODEL_IF_CANT_LOAD,
-    model_description=f"trained max of {model.cfg.n_ctx} model",
-    save_model=True,
-    force_train=ALWAYS_TRAIN_MODEL,
-    wandb_entity='team-jason', #'tkwa-team',
-    fail_if_cant_load=FAIL_IF_CANT_LOAD,
-)
+def get_model(train_if_necessary = False,  **kwargs):
+    
+    train(fail_if_cant_load = not train_if_necessary, train_if_cant_load = train_if_necessary, **kwargs)
+    
+    return model
+    
+
+# %%
+if __name__ == '__main__':
+    training_losses, model_pth_path = train()
+
