@@ -16,56 +16,31 @@ from analysis_utils import line, summarize, plot_QK_cosine_similarity, \
     calculate_copying, calculate_copying_with_pos, calculate_embed_and_pos_embed_overlap, \
     calculate_rowwise_embed_and_pos_embed_overlap, \
     calculate_embed_overlap, calculate_pos_embed_overlap, check_monotonicity, \
-    compute_slack, plot_avg_qk_heatmap, plot_qk_heatmap, plot_qk_heatmaps_normed, plot_unembed_cosine_similarity
+    plot_avg_qk_heatmap, plot_qk_heatmap, plot_qk_heatmaps_normed, plot_unembed_cosine_similarity
 from coq_export_utils import coq_export_params
 from max_of_n import acc_fn, loss_fn, train_model, large_data_gen
+from interp_max_utils import logit_delta
 from training_utils import compute_all_tokens, make_testset_trainset, make_generator_from_data
 
 import os, sys
 from importlib import reload
 
+from train_max_of_2 import get_model
+
 
 # %%
 
 if __name__ == '__main__':
-    PTH_BASE_PATH = Path(os.getcwd())
-    PTH_BASE_PATH = PTH_BASE_PATH / 'trained-models'
-    SIMPLER_MODEL_PTH_PATH = PTH_BASE_PATH / 'max-of-two-simpler.pth'
-    # SIMPLER_MODEL_PTH_PATH = PTH_BASE_PATH / 'max-of-n-2023-09-01_01-30-10.pth'
-
-    N_CTX = 2
-    # N_CTX = 5
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-    SEED = 123
-
-    simpler_cfg = HookedTransformerConfig(
-        d_model=32,
-        n_layers=1,
-        n_heads=1,
-        d_head=32,
-        # n_ctx=2,
-        n_ctx=N_CTX,
-        d_vocab=64,
-        seed=SEED,
-        device=DEVICE,
-        attn_only=True,
-        normalization_type=None,
-    )
-    model = HookedTransformer(simpler_cfg, move_to_device=True)
-
-    cached_data = torch.load(SIMPLER_MODEL_PTH_PATH)
-    model.load_state_dict(cached_data['model'])
+    
+    TRAIN_IF_NECESSARY = False
+    model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
+    
 # %%
 
-def logit_delta(model: HookedTransformer) -> float: 
+if __name__ == '__main__':
+    print(f"minimum difference between the true_max logit and any other logit is {logit_delta(model)}")
     
-    """
-    Largest difference between logit(true_max) and logit(y) for y != true_max.
-    Complexity: O(d_vocab^n_ctx * fwd_pass)
-    fwd_pass = (n_ctx^2 * d_vocab * d_model^2) + (n_ctx * d_vocab * d_model^2)
-    todo fix complexity. 
-    """
-
+# %%
 
 def min_effect_of_EU_PU(model) -> float:
     """

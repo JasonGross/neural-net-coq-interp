@@ -45,9 +45,10 @@ from analysis_utils import line, summarize, plot_QK_cosine_similarity, \
     calculate_copying, calculate_copying_with_pos, calculate_embed_and_pos_embed_overlap, \
     calculate_rowwise_embed_and_pos_embed_overlap, \
     calculate_embed_overlap, calculate_pos_embed_overlap, check_monotonicity, \
-    compute_slack, plot_avg_qk_heatmap, plot_qk_heatmap, plot_qk_heatmaps_normed, plot_unembed_cosine_similarity
+    plot_avg_qk_heatmap, plot_qk_heatmap, plot_qk_heatmaps_normed, plot_unembed_cosine_similarity
 from coq_export_utils import coq_export_params
 from max_of_n import acc_fn, loss_fn, train_model, large_data_gen
+from interp_max_utils import logit_delta
 from training_utils import compute_all_tokens, make_testset_trainset, make_generator_from_data
 
 import os, sys
@@ -341,7 +342,7 @@ print(all_integers[~correct_idxs], very_wrong_idxs.sum())
 # In[ ]:
 
 
-compute_slack(simpler_model)#, renderer='png')
+logit_delta(simpler_model)#, renderer='png')
 
 
 # In[ ]:

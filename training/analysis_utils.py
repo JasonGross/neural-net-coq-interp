@@ -15,7 +15,6 @@ import torch.nn.functional as F
 from transformer_lens import HookedTransformer
 import transformer_lens.utils as utils
 import plotly.express as px
-from training_utils import compute_all_tokens
 
 
 def linear_func(x, a, b):
@@ -171,26 +170,6 @@ def center_by_mid_range(tensor: torch.Tensor, dim: Optional[int] = None) -> torc
 # Let's find out what the actual logits are, and how much slack we have on errors
 
 # In[ ]:
-
-
-def compute_slack(model: HookedTransformer, renderer=None, histogram_all_incorrect_logit_differences=False):
-    all_tokens = compute_all_tokens(model=model)
-    predicted_logits = model(all_tokens)[:,-1].detach().cpu()
-
-    # Extract statistics for each row
-    # Use values in all_tokens as indices to gather correct logits
-    indices_of_max = all_tokens.max(dim=1, keepdim=True).values
-    correct_logits = torch.gather(predicted_logits, 1, indices_of_max)
-    logits_above_correct = correct_logits - predicted_logits
-    # replace correct logit indices with large number so that they don't get picked up by the min
-    logits_above_correct[torch.arange(logits_above_correct.shape[0]), indices_of_max.squeeze()] = float('inf')
-    max_incorrect_logit = logits_above_correct.min(dim=1).values
-    
-    if histogram_all_incorrect_logit_differences:
-        all_incorrect_logits = logits_above_correct[logits_above_correct != float('inf')]
-        summarize(all_incorrect_logits, name='all incorrect logit differences', histogram=True, renderer=renderer)
-    
-    return summarize(max_incorrect_logit, name='min(correct logit - incorrect logit)', renderer=renderer, histogram=True)
 
 
 # ## Negligibility of W_E @ W_U
