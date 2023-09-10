@@ -52,3 +52,4 @@ Makefile.coq.conf
 training/wandb/
 training/__pycache__/
 training/trained-models/
+training/artifacts/
