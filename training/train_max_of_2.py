@@ -80,8 +80,6 @@ training_losses, model_pth_path = train_or_load_model(
     model_description=f"trained max of {model.cfg.n_ctx} model",
     save_model=True,
     force_train=ALWAYS_TRAIN_MODEL,
-    wandb_entity='tkwa-team',
+    wandb_entity='team-jason', #'tkwa-team',
     fail_if_cant_load=FAIL_IF_CANT_LOAD,
 )
-
-
