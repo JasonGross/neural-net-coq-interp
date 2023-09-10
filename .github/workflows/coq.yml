@@ -8,6 +8,8 @@ on:
       - Makefile
       - Makefile.coq.local
       - .github/workflows/coq.yml
+    branches:
+      - main
   pull_request:
   workflow_dispatch:
 
