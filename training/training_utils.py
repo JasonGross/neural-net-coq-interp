@@ -67,7 +67,7 @@ def generate_all_sequences(n_digits, sequence_length=2):
 
 def compute_all_tokens(model: HookedTransformer):
     return generate_all_sequences(n_digits=model.cfg.d_vocab, sequence_length=model.cfg.n_ctx)
-  
+
 # In[ ]:
 
 def shuffle_data(data):
@@ -186,7 +186,7 @@ def train_or_load_model(
       save_model=True,
       model_pth_path=None,
       deterministic: bool = False,
-      optimizer=torch.optim.Adam, 
+      optimizer=torch.optim.Adam,
       optimizer_kwargs={'lr':1e-3, 'betas': (.9, .999)},
       train_data_gen_is_lambda: bool = False,
       loss_fn_kwargs={'return_per_token':True},
@@ -211,7 +211,7 @@ def train_or_load_model(
   if not force_train and os.path.exists(model_pth_path):
     res = load_model(model, model_pth_path)
     if res is not None: return res
-  
+
   if wandb_project is not None:
     wandb_model_path = f"{wandb_entity}/{wandb_project}/{model_name}:latest"
     if not force_train:
@@ -231,8 +231,8 @@ def train_or_load_model(
 
   if wandb_project is not None:
     config_info = make_wandb_config(**locals())
-    run = wandb.init(project=wandb_project, config=config_info, job_type="train")
-  
+    run = wandb.init(project=wandb_project, entity=wandb_entity, config=config_info, job_type="train")
+
   optimizer = optimizer(model.parameters(), **optimizer_kwargs)
   train_data_gen_lambda = (lambda: train_data_gen_maybe_lambda) if not train_data_gen_is_lambda else train_data_gen_maybe_lambda
 
@@ -258,7 +258,7 @@ def train_or_load_model(
 
     if wandb_project is not None:
       log_data = {'train_loss': train_losses[-1]}
-      if log_acc: log_data['train_acc'] = acc_fn(model(tokens), tokens) 
+      if log_acc: log_data['train_acc'] = acc_fn(model(tokens), tokens)
       wandb.log(log_data)
 
   model.eval()
