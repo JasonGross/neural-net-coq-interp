@@ -52,7 +52,7 @@ if __name__ == '__main__':
         attn_only=True,
         normalization_type=None,
     )
-    model = HookedTransformer(simpler_cfg, move_to_device=False)
+    model = HookedTransformer(simpler_cfg, move_to_device=False).cpu()
 
     cached_data = torch.load(SIMPLER_MODEL_PTH_PATH)
     model.load_state_dict(cached_data['model'])
@@ -173,40 +173,62 @@ def find_d_EVOU_PVOUy(model) -> float:
     When x is maximum, the minimum logit effect of copying the incorrect residual stream.
     Basically the max amount that copying y increases z more than x where z < x and y < x.
     """
-W_E, W_pos, W_V, W_O, W_U = model.W_E, model.W_pos, model.W_V, model.W_O, model.W_U
-d_model, n_ctx, d_vocab = model.cfg.d_model, model.cfg.n_ctx, model.cfg.d_vocab
-assert W_E.shape == (d_vocab, d_model)
-assert W_pos.shape == (n_ctx, d_model)
-assert W_V.shape == (1, 1, d_model, d_model)
-assert W_O.shape == (1, 1, d_model, d_model)
-assert W_U.shape == (d_model, d_vocab)
+    W_E, W_pos, W_V, W_O, W_U = model.W_E, model.W_pos, model.W_V, model.W_O, model.W_U
+    d_model, n_ctx, d_vocab = model.cfg.d_model, model.cfg.n_ctx, model.cfg.d_vocab
+    assert W_E.shape == (d_vocab, d_model)
+    assert W_pos.shape == (n_ctx, d_model)
+    assert W_V.shape == (1, 1, d_model, d_model)
+    assert W_O.shape == (1, 1, d_model, d_model)
+    assert W_U.shape == (d_model, d_vocab)
 
-EVOU = W_E @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (d_vocab, d_vocab). EVOU[i, j] is how copying i affects j.
-EVOU.names = ('qtok', 'ktok')
-PVOU = W_pos @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (n_ctx, d_vocab)
+    EVOU = W_E @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (d_vocab, d_vocab). EVOU[i, j] is how copying i affects j.
+    EVOU.names = ('qtok', 'ktok')
+    PVOU = W_pos @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (n_ctx, d_vocab)
 
-# Our reasoning is simpler than for find_d_EVOU_PVOUx: just the largest logit delta from each query token
-EVOU_neg_range = -EVOU.max(dim='ktok').values + EVOU.min(dim='ktok').values # (d_vocab,) for each query token
-# Case 1: y = x - 1 e.g. 37, 38. We want EVOU[37, 38] - max_j EVOU[37, j].
-# EVOU_delta_case_1 = torch.diff(EVOU, dim=1).min(dim='ktok').values # (d_vocab,)
-EVOU_y_yp1 = torch.cat((EVOU.rename(None).diag(1), torch.tensor((1000,)))) # (d_vocab,)
-EVOU_y_smaller = EVOU.cummax(dim='ktok').values.diagonal() # (d_vocab,)
-EVOU_delta_case_1 = (EVOU_y_yp1[:, None] - EVOU_y_smaller) # (d_vocab, d_vocab)
+    # Our reasoning is simpler than for find_d_EVOU_PVOUx: just the largest logit delta from each query token
+    EVOU_neg_range = -EVOU.max(dim='ktok').values + EVOU.min(dim='ktok').values # (d_vocab,) for each query token
+    # Case 1: y = x - 1 e.g. 37, 38. We want EVOU[37, 38] - max_j EVOU[37, j].
+    # EVOU_delta_case_1 = torch.diff(EVOU, dim=1).min(dim='ktok').values # (d_vocab,)
+    EVOU_y_yp1 = torch.cat((EVOU.rename(None).diag(1), torch.tensor((1000,)))) # (d_vocab,)
+    EVOU_y_smaller = EVOU.cummax(dim='ktok').values.diagonal() # (d_vocab,)
+    EVOU_delta_case_1 = (EVOU_y_yp1[:, None] - EVOU_y_smaller) # (d_vocab, d_vocab)
 
-# Worst case over all positions of (effect on x - effect on y) where y <= x.
-PVOU_cummax_reverse = PVOU.flip(dims=(1,)).cummax(dim=1).values.flip(dims=(1,))
-min_PVOU_effect_case_2 = (PVOU - PVOU_cummax_reverse).min(dim=0).values # (d_vocab,)
+    # Worst case over all positions of (effect on x - effect on y) where y <= x.
+    PVOU_cummax_reverse = PVOU.flip(dims=(1,)).cummax(dim=1).values.flip(dims=(1,))
+    min_PVOU_effect_case_2 = (PVOU - PVOU_cummax_reverse).min(dim=0).values # (d_vocab,): qtok
+    
 
-
-result_case_1 = (EVOU_delta_case_1 + min_PVOU_effect_case_2).min()
-result_case_2 = (EVOU_neg_range + min_PVOU_effect_case_2).min()
-print(f"Incorrect copying effect:")
-print(f"Case 1: {result_case_1.item():.2f}, Case 2: {result_case_2.item():.2f}")
-result_case_1, result_case_2
-# return result_case_1, result_case_2
+    result_case_1 = (EVOU_delta_case_1 + min_PVOU_effect_case_2).min()
+    result_case_2 = (EVOU_neg_range + min_PVOU_effect_case_2).min()
+    print(f"Incorrect copying effect:")
+    print(f"Case 1: {result_case_1.item():.2f}, Case 2: {result_case_2.item():.2f}")
+    # result_case_1, result_case_2
+    return result_case_1, result_case_2
 
 if __name__ == '__main__':
     find_d_EVOU_PVOUy(model)
+
+# %%
+
+def logit_diff_on_gap_1_cases(model):
+    """
+    Runs model on all cases x, x+1 and x+1, x
+    Can we make this inference * d_vocab, rather than inference * d_vocab * n_ctx by dealing with order?
+    The only difference when changing order is PU and the query token...
+    """
+    # Make a 2 x (d_vocab - 1) x n_ctx tensor of input tokens
+    inputs = torch.arange(model.cfg.d_vocab - 1).repeat(2, 2, 1)
+    inputs[0, 0] += 1
+    inputs[1, 1] += 1
+    inputs = rearrange(inputs, 'perm n_ctx d_vocab_m1 -> (perm d_vocab_m1) n_ctx').to('cpu') # (126, 2)
+    logits = model(inputs)[:, -1, :] # (126, d_vocab)
+    # Get logit difference for each case
+    logit_diffs = logits[range(logits.shape[0]), inputs.max(dim=1).values] - \
+                  logits[range(logits.shape[0]), inputs.min(dim=1).values]
+    return logit_diffs
+
+logit_diffs = logit_diff_on_gap_1_cases(model)
+print(f"{min(logit_diffs)=}")
 
 # %%
 
@@ -219,22 +241,24 @@ def slack(model):
     If this is >0, the model gets 100% accuracy.
     """
 
-d_EU_PU = min_effect_of_EU_PU(model)
-d_score_coeff = find_d_score_coeff(model)
-worst_case_attn_pattern = torch.zeros((model.cfg.d_vocab, model.cfg.n_ctx))
-worst_case_attn_pattern[:, 0] = d_score_coeff
-worst_case_attn_pattern = torch.softmax(worst_case_attn_pattern, dim=1)[0]
-print(f"Worst case attention weight for x: {worst_case_attn_pattern.min().item():.3f}")
-d_EOVU_POVUx = find_d_EVOU_PVOUx(model)
-d_EOVU_POVUy_c1, d_EOVU_POVUy_c2 = find_d_EVOU_PVOUy(model)
+    d_EU_PU = min_effect_of_EU_PU(model)
+    d_score_coeff = find_d_score_coeff(model)
+    worst_case_attn_pattern = torch.zeros((model.cfg.d_vocab, model.cfg.n_ctx))
+    worst_case_attn_pattern[:, 0] = d_score_coeff
+    worst_case_attn_pattern = torch.softmax(worst_case_attn_pattern, dim=1)[0]
+    print(f"Worst case attention weight for x: {worst_case_attn_pattern.min().item():.3f}")
+    d_EOVU_POVUx = find_d_EVOU_PVOUx(model)
+    d_EOVU_POVUy_c1, d_EOVU_POVUy_c2 = find_d_EVOU_PVOUy(model)
 
-d_attn_out_U_case_1 = sigmoid(d_score_coeff) * d_EOVU_POVUx + (1 - sigmoid(d_score_coeff)) * d_EOVU_POVUy_c1
-d_attn_out_U_case_2 = sigmoid(d_score_coeff * 2) * d_EOVU_POVUx + (1 - sigmoid(d_score_coeff * 2)) * d_EOVU_POVUy_c2
-d_attn_out_U = torch.minimum(d_attn_out_U_case_1, d_attn_out_U_case_2)
+    # d_attn_out_U_case_1 = sigmoid(d_score_coeff) * d_EOVU_POVUx + (1 - sigmoid(d_score_coeff)) * d_EOVU_POVUy_c1
+    d_attn_out_U_case_2 = sigmoid(d_score_coeff * 2) * d_EOVU_POVUx + (1 - sigmoid(d_score_coeff * 2)) * d_EOVU_POVUy_c2
 
-result = (d_EU_PU + d_attn_out_U).min().item() # min over query token
-print(f"Total model slack: {result:.2f}")
-print(f"Model {'is' if result > 0 else 'is not'} proven 100% accurate.")
+    result = (d_EU_PU + d_attn_out_U_case_2).min().item() # min over query token
+    min_logit_diff = logit_diff_on_gap_1_cases(model).min().item()
+    print(f"Min logit diff on gap 1: {min_logit_diff:.2f}")
+    result = min(result, min_logit_diff)
+    print(f"Total model slack: {result:.2f}")
+    print(f"Model {'is' if result > 0 else 'is not'} proven 100% accurate.")
 
 if __name__ == '__main__':
     slack(model)
@@ -266,9 +290,5 @@ plt.xlabel("key token")
 plt.ylabel("query token")
 # %%
 
-d_38_37 = all_attn_scores[-1, 38, 38] - all_attn_scores[0, 38, 37]
-
 # %%
-
-EVOU[37, 38] - EVOU[37, :].max()
 # %%

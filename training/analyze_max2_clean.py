@@ -1,11 +1,30 @@
 # %%
 import torch
+import torch.nn as nn
 import numpy as np
+import transformer_lens
 from transformer_lens import HookedTransformer, HookedTransformerConfig
 import tqdm.auto as tqdm
-from einops import einsum
+import circuitsvis as cv
+from einops import reduce, repeat, rearrange, einsum
 from pathlib import Path
-import os
+from IPython import get_ipython
+
+from coq_export_utils import strify
+from analysis_utils import line, summarize, plot_QK_cosine_similarity, \
+    analyze_svd, calculate_OV_of_pos_embed, calculate_attn, calculate_attn_by_pos, \
+    calculate_copying, calculate_copying_with_pos, calculate_embed_and_pos_embed_overlap, \
+    calculate_rowwise_embed_and_pos_embed_overlap, \
+    calculate_embed_overlap, calculate_pos_embed_overlap, check_monotonicity, \
+    plot_avg_qk_heatmap, plot_qk_heatmap, plot_qk_heatmaps_normed, plot_unembed_cosine_similarity
+from coq_export_utils import coq_export_params
+from max_of_n import acc_fn, loss_fn, train_model, large_data_gen
+from training_utils import compute_all_tokens, make_generator_from_data
+
+import os, sys
+from importlib import reload
+import matplotlib.pyplot as plt
+
 
 # %%
 
@@ -33,16 +52,17 @@ if __name__ == '__main__':
         attn_only=True,
         normalization_type=None,
     )
-    model = HookedTransformer(simpler_cfg, move_to_device=True)
+    model = HookedTransformer(simpler_cfg, move_to_device=False)
 
     cached_data = torch.load(SIMPLER_MODEL_PTH_PATH)
     model.load_state_dict(cached_data['model'])
 # %%
 
-def min_effect_of_EU_PU(model) -> float:
+def min_effect_of_EU_PU(model) -> torch.Tensor:
     """
     Calculate the maximum negative effect of the EU and PU paths on the output.
     Complexity: O(d_vocab^2 * n_ctx * d_model)
+    Return shape: (q_token,)
     """
     W_E, W_pos, W_U = model.W_E, model.W_pos, model.W_U
     d_model, n_ctx, d_vocab = model.cfg.d_model, model.cfg.n_ctx, model.cfg.d_vocab
@@ -54,18 +74,19 @@ def min_effect_of_EU_PU(model) -> float:
     #   logits(x, p) = (W_E[x] + W_pos[p]) @ W_U
     max_logit_deltas = torch.zeros((d_vocab, n_ctx))
     for x in range(d_vocab): # query token
-        for p in range(n_ctx): #NB we actually only care about p = -1
+        for p in range(n_ctx):
             logit_deltas = (W_E[x] + W_pos[p]) @ W_U # (d_vocab,)
             max_logit_deltas[x, p] = logit_deltas.max() - logit_deltas.min()
 
-    result = -max_logit_deltas.max()
-    print(f"EU and PU paths have min effect of {result:.2f}")
+    result = -max_logit_deltas.max(dim=1).values # (q_token,)
+    print(f"EU and PU paths have min effect of {result.min():.2f}")
     return result
 
 if __name__ == '__main__':
-    min_effect_of_EU_PU(model)
+    eu_pu = min_effect_of_EU_PU(model)
 
 # %%
+
 
 def find_d_score_coeff(model) -> float:
     """
@@ -86,27 +107,29 @@ def find_d_score_coeff(model) -> float:
     last_resid = (W_E + W_pos[-1]) # (d_vocab, d_model). Rows = possible residual streams.
     key_tok_resid = (W_E + W_pos[:, None, :]) # (n_ctx, d_model, d_vocab). Dim 1 = possible residual streams.
     q = last_resid @ W_Q[0, 0, :, :] # (d_vocab, d_model).
-    print(key_tok_resid.shape)
-    print(W_K.shape)
+    # print(f"{key_tok_resid.shape=}")
+    # print(f"{W_K.shape=}")
     k = einsum(key_tok_resid, W_K[0, 0, :, :], 'n_ctx d_vocab d_model, d_model d_model_k -> n_ctx d_model_k d_vocab')
     # k = key_tok_resid @ W_K[0, 0, :, :] # (n_ctx, d_model, d_vocab). 
     x_scores = einsum(q, k, 'd_vocab_q d_model, n_ctx d_model d_vocab_k -> n_ctx d_vocab_q d_vocab_k')
-    print(k.T.shape)
-    print(x_scores.shape)
+    # print(f"{x_scores.shape=}")
+    score_coeffs = torch.zeros((n_ctx - 1, d_vocab, d_vocab)) + 1000.
+    global all_attn_scores
+    all_attn_scores = x_scores
     # x_scores[pos, qt, kt] is the score from query token qt to key token kt at position pos.
     # q_tok is always in the last position; k_tok can be anywhere before it.
     for q_tok in range(d_vocab):
         for k_tok in range(d_vocab):
             for pos_of_max in range(n_ctx - 1):
-                if k_tok < q_tok:
-                    points.append((x_scores[pos_of_max, q_tok, k_tok].item() - x_scores[-1, q_tok, q_tok].item())/(k_tok-q_tok))
-                    # TODO still need to account for y > x case
+                if k_tok != q_tok:
+                    score_coeffs[pos_of_max, q_tok, k_tok] = (x_scores[pos_of_max, q_tok, k_tok].item() - x_scores[-1, q_tok, q_tok].item())/(k_tok-q_tok)
+
     # result = 0
     # print(f"Score coefficient: {result:.2f}")
-    return min(points)
+    return score_coeffs.min(dim=2).values.min(dim=0).values # (d_vocab,)
 
 if __name__ == '__main__':
-    points = find_d_score_coeff(model)
+    score_coeff = find_d_score_coeff(model)
 
 # %%
 
@@ -164,16 +187,22 @@ def find_d_EVOU_PVOUy(model) -> float:
 
     # Our reasoning is simpler than for find_d_EVOU_PVOUx: just the largest logit delta from each query token
     EVOU_neg_range = -EVOU.max(dim='ktok').values + EVOU.min(dim='ktok').values # (d_vocab,) for each query token
-    EVOU_delta_case_1 = torch.diff(EVOU, dim=1).min(dim='ktok').values # (d_vocab,)
+    # Case 1: y = x - 1 e.g. 37, 38. We want EVOU[37, 38] - max_j EVOU[37, j].
+    # EVOU_delta_case_1 = torch.diff(EVOU, dim=1).min(dim='ktok').values # (d_vocab,)
+    EVOU_y_yp1 = torch.cat((EVOU.rename(None).diag(1), torch.tensor((1000,)))) # (d_vocab,)
+    EVOU_y_smaller = EVOU.cummax(dim='ktok').values.diagonal() # (d_vocab,)
+    EVOU_delta_case_1 = (EVOU_y_yp1[:, None] - EVOU_y_smaller) # (d_vocab, d_vocab)
 
     # Worst case over all positions of (effect on x - effect on y) where y <= x.
     PVOU_cummax_reverse = PVOU.flip(dims=(1,)).cummax(dim=1).values.flip(dims=(1,))
-    min_PVOU_effect = (PVOU - PVOU_cummax_reverse).min(dim=0).values # (d_vocab,)
+    min_PVOU_effect_case_2 = (PVOU - PVOU_cummax_reverse).min(dim=0).values # (d_vocab,)
 
-    result_case_1 = (EVOU_delta_case_1 + min_PVOU_effect).min()
-    result_case_2 = (EVOU_neg_range + min_PVOU_effect).min()
+
+    result_case_1 = (EVOU_delta_case_1 + min_PVOU_effect_case_2).min()
+    result_case_2 = (EVOU_neg_range + min_PVOU_effect_case_2).min()
     print(f"Incorrect copying effect:")
     print(f"Case 1: {result_case_1.item():.2f}, Case 2: {result_case_2.item():.2f}")
+    # result_case_1, result_case_2
     return result_case_1, result_case_2
 
 if __name__ == '__main__':
@@ -190,24 +219,56 @@ def slack(model):
     If this is >0, the model gets 100% accuracy.
     """
 
-    d_EU_PU = min_effect_of_EU_PU(model)
-    d_score_coeff = find_d_score_coeff(model)
-    worst_case_attn_pattern = torch.softmax(torch.tensor([d_score_coeff] + [0] * (model.cfg.n_ctx - 1)), dim=0)
-    print(f"Worst case attention weight for x: {worst_case_attn_pattern[0].item():.3f}")
-    d_EOVU_POVUx = find_d_EVOU_PVOUx(model)
-    d_EOVU_POVUy_c1, d_EOVU_POVUy_c2 = find_d_EVOU_PVOUy(model)
+d_EU_PU = min_effect_of_EU_PU(model)
+d_score_coeff = find_d_score_coeff(model)
+worst_case_attn_pattern = torch.zeros((model.cfg.d_vocab, model.cfg.n_ctx))
+worst_case_attn_pattern[:, 0] = d_score_coeff
+worst_case_attn_pattern = torch.softmax(worst_case_attn_pattern, dim=1)[0]
+print(f"Worst case attention weight for x: {worst_case_attn_pattern.min().item():.3f}")
+d_EOVU_POVUx = find_d_EVOU_PVOUx(model)
+d_EOVU_POVUy_c1, d_EOVU_POVUy_c2 = find_d_EVOU_PVOUy(model)
 
-    d_attn_out_U_case_1 = sigmoid(d_score_coeff) * d_EOVU_POVUx + (1 - sigmoid(d_score_coeff)) * d_EOVU_POVUy_c1
-    d_attn_out_U_case_2 = sigmoid(d_score_coeff * 2) * d_EOVU_POVUx + (1 - sigmoid(d_score_coeff * 2)) * d_EOVU_POVUy_c2
-    d_attn_out_U = min(d_attn_out_U_case_1, d_attn_out_U_case_2)
+d_attn_out_U_case_1 = sigmoid(d_score_coeff*2) * d_EOVU_POVUx + (1 - sigmoid(d_score_coeff*2)) * d_EOVU_POVUy_c1
+d_attn_out_U_case_2 = sigmoid(d_score_coeff * 2) * d_EOVU_POVUx + (1 - sigmoid(d_score_coeff * 2)) * d_EOVU_POVUy_c2
+d_attn_out_U = torch.minimum(d_attn_out_U_case_1, d_attn_out_U_case_2)
 
-    result = (d_EU_PU + d_attn_out_U).item()
-    print(f"Total model slack: {result:.2f}")
-    print(f"Model {'is' if result > 0 else 'is not'} proven 100% accurate.")
+result = (d_EU_PU + d_attn_out_U).min().item() # min over query token
+print(f"Total model slack: {result:.2f}")
+print(f"Model {'is' if result > 0 else 'is not'} proven 100% accurate.")
 
 if __name__ == '__main__':
     slack(model)
 
 # %%
+# Bar graph of d_attn_out_U_case_1
+plt.bar(range(64), d_attn_out_U_case_1.detach().numpy())
+print(f"argmin={d_attn_out_U_case_1.argmin().item()}")
+plt.show()
+# %%
+# Bar graph of d_attn_out_U_case_2
+plt.bar(range(64), d_attn_out_U_case_2.detach().numpy())
+print(f"argmin={d_attn_out_U_case_2.argmin().item()}")
+plt.show()
+# %%
+# Bar graph of d_score_coeff
+plt.bar(range(64), d_score_coeff.detach().numpy())
+print(f"argmin={d_score_coeff.argmin().item()}")
+plt.show()
+# %%
 
+score_coeff
+# %%
+all_attn_scores.shape
+
+# 2d heatmap
+plt.imshow(all_attn_scores[-1].detach().numpy())
+plt.xlabel("key token")
+plt.ylabel("query token")
+# %%
+
+d_38_37 = all_attn_scores[-1, 38, 38] - all_attn_scores[0, 38, 37]
+
+# %%
+
+EVOU[37, 38] - EVOU[37, :].max()
 # %%
