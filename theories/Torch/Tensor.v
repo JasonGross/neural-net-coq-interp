@@ -439,6 +439,9 @@ Module Shape.
     := Shape.reduce (fun z x => z * Uint63.to_Z x)%Z 1%Z.
   Definition reshape {r} (s : Index r) : Index 1
     := [Uint63.of_Z (reshape' s)].
+
+  Definition keepdim {keepdim : with_default "keepdim" bool false} : t _
+    := if keepdim return t (if keepdim then _ else _) then [1] else [].
 End Shape.
 Notation ShapeType := Shape.IndexType.
 Notation Shape := Shape.Index.
@@ -755,6 +758,13 @@ Module PArray.
   Lemma checkpoint_correct {r s A default t} {idxs : RawIndex r}
     : @checkpoint r s A default t idxs = t idxs.
   Proof. cbv [checkpoint]; erewrite reabstract_ext_correct; reflexivity. Qed.
+
+  Definition maybe_checkpoint {r s A default} {use_checkpoint : with_default "use_checkpoint" bool true} t : @tensor r s A
+    := if use_checkpoint then @checkpoint r s A default t else t.
+
+  Lemma maybe_checkpoint_correct {r s A default use_checkpoint t} {idxs : RawIndex r}
+    : @maybe_checkpoint r s A default use_checkpoint t idxs = t idxs.
+  Proof. cbv [maybe_checkpoint]; destruct use_checkpoint; rewrite ?checkpoint_correct; reflexivity. Qed.
 End PArray.
 
 Module List.
@@ -850,6 +860,13 @@ Module List.
   Lemma checkpoint_correct {r s A default} {t} {idxs : RawIndex r}
     : @checkpoint r s A default t idxs = t idxs.
   Proof. cbv [checkpoint]; erewrite reabstract_ext_correct; reflexivity. Qed.
+
+  Definition maybe_checkpoint {r s A default} {use_checkpoint : with_default "use_checkpoint" bool true} t : @tensor r s A
+    := if use_checkpoint then @checkpoint r s A default t else t.
+
+  Lemma maybe_checkpoint_correct {r s A default use_checkpoint t} {idxs : RawIndex r}
+    : @maybe_checkpoint r s A default use_checkpoint t idxs = t idxs.
+  Proof. cbv [maybe_checkpoint]; destruct use_checkpoint; rewrite ?checkpoint_correct; reflexivity. Qed.
 End List.
 
 Definition adjust_index_for (s : ShapeType) : Index.IndexType -> RawIndex.IndexType
@@ -993,22 +1010,11 @@ Definition reduce_axis_m1' {r} {s1 : Shape r} {s2} {A B}
 
 Definition reduce_axis_m1 {r} {s1 : Shape r} {s2} {keepdim : with_default "keepdim" bool false} {A B}
   (reduction : forall (start stop step : RawIndexType), (RawIndexType -> A) -> B)
-  : tensor (s1 ::' s2) A -> tensor (s1 ++' if keepdim return Shape (if keepdim then _ else _) then [1] else []) B
+  : tensor (s1 ::' s2) A -> tensor (s1 ++' @Shape.keepdim keepdim) B
   := if keepdim
-          return tensor (s1 ::' s2) A -> tensor (s1 ++' if keepdim return Shape (if keepdim then _ else _) then [1] else []) B
+          return tensor (s1 ::' s2) A -> tensor (s1 ++' @Shape.keepdim keepdim) B
      then fun t idxs => reduce_axis_m1' reduction t (RawIndex.hd idxs)
      else reduce_axis_m1' reduction.
-
-Definition softmax_dim_m1 {r} {s0 : Shape r} {s'} (s:=(s0 ::' s')%shape) {A B C} {addB : has_add B} {expA : has_exp_to A B} {zeroB : has_zero B} {divB : has_div_by B B C} (t : tensor s A) : tensor s C
-  := (let exp_t : tensor s B := map exp t in
-      let sum_exp_t : tensor s B := reduce_axis_m1 (keepdim:=true) sum exp_t in
-      exp_t / sum_exp_t)%core.
-
-Definition log_softmax_dim_m1 {r} {s0 : Shape r} {s'} (s:=(s0 ::' s')%shape) {A B C D} {addB : has_add B} {lnA : has_ln_to B C} {expA : has_exp_to A B} {zeroB : has_zero B} {divB : has_div_by A C D} (t : tensor s A) : tensor s D
-  := (let exp_t : tensor s B := map exp t in
-      let sum_exp_t : tensor s B := reduce_axis_m1 (keepdim:=true) sum exp_t in
-      let ln_sum_exp_t : tensor s C := map ln sum_exp_t in
-      t / ln_sum_exp_t)%core.
 
 Definition unsqueeze_dim_m1 {r} {s : Shape r} {A} (t : tensor s A) : tensor (s ::' 1) A
   := fun idxs => raw_get t (RawIndex.hd idxs).
@@ -1032,14 +1038,105 @@ Definition reshape {A r1 r2} {s1 : Shape r1} (t : tensor s1 A) (s2 : Shape r2) :
   := unreshape_m1 (reshape_m1 t : tensor (Shape.reshape s2) A).
  *)
 
+Section reduce_axis_m1.
+  Context {r} {s1 : Shape r} {s2 : ShapeType} {keepdim : with_default "keepdim" bool false}
+    {A}
+    {zeroA : has_zero A} {oneA : has_one A} {coerZ : has_coer Z A}
+    {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
+    {maxA : has_max A} {minA : has_min A}
+    {lebA : has_leb A} {ltbA : has_ltb A}.
+
+  Definition sum_dim_m1 : tensor (s1 ::' s2) A -> tensor (s1 ++' @Shape.keepdim keepdim) A
+    := reduce_axis_m1 (keepdim:=keepdim) Reduction.sum.
+  Definition prod_dim_m1 : tensor (s1 ::' s2) A -> tensor (s1 ++' @Shape.keepdim keepdim) A
+    := reduce_axis_m1 (keepdim:=keepdim) Reduction.prod.
+  Definition max_dim_m1 : tensor (s1 ::' s2) A -> tensor (s1 ++' @Shape.keepdim keepdim) A
+    := reduce_axis_m1 (keepdim:=keepdim) Reduction.max.
+  Definition min_dim_m1 : tensor (s1 ::' s2) A -> tensor (s1 ++' @Shape.keepdim keepdim) A
+    := reduce_axis_m1 (keepdim:=keepdim) Reduction.min.
+  Definition argmax_dim_m1 : tensor (s1 ::' s2) A -> tensor (s1 ++' @Shape.keepdim keepdim) RawIndexType
+    := reduce_axis_m1 (keepdim:=keepdim) Reduction.argmax.
+  Definition argmin_dim_m1 : tensor (s1 ::' s2) A -> tensor (s1 ++' @Shape.keepdim keepdim) RawIndexType
+    := reduce_axis_m1 (keepdim:=keepdim) Reduction.argmin.
+  Definition mean_dim_m1 : tensor (s1 ::' s2) A -> tensor (s1 ++' @Shape.keepdim keepdim) A
+    := reduce_axis_m1 (keepdim:=keepdim) Reduction.mean.
+  Definition var_dim_m1 {correction : with_default "correction" Z 1%Z}
+    : tensor (s1 ::' s2) A -> tensor (s1 ++' @Shape.keepdim keepdim) A
+    := reduce_axis_m1 (keepdim:=keepdim) (Reduction.var (correction:=correction)).
+End reduce_axis_m1.
+
+Section reduce.
+  Context {r} {s : Shape r}
+    {A}
+    {zeroA : has_zero A} {oneA : has_one A} {coerZ : has_coer Z A}
+    {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
+    {maxA : has_max A} {minA : has_min A}
+    {lebA : has_leb A} {ltbA : has_ltb A}.
+
+  Definition sum (t : tensor s A) : tensor [] A
+    := reduce_axis_m1 Reduction.sum (reshape_all t).
+  Definition prod (t : tensor s A) : tensor [] A
+    := reduce_axis_m1 Reduction.prod (reshape_all t).
+  Definition max (t : tensor s A) : tensor [] A
+    := reduce_axis_m1 Reduction.max (reshape_all t).
+  Definition min (t : tensor s A) : tensor [] A
+    := reduce_axis_m1 Reduction.min (reshape_all t).
+  Definition mean (t : tensor s A) : tensor [] A
+    := reduce_axis_m1 Reduction.mean (reshape_all t).
+  Definition var {correction : with_default "correction" Z 1%Z} (t : tensor s A) : tensor [] A
+    := reduce_axis_m1 (Reduction.var (correction:=correction)) (reshape_all t).
+End reduce.
+
+Definition softmax_dim_m1 {r} {s0 : Shape r} {s'}
+  (s:=(s0 ::' s')%shape)
+  {A B C}
+  {addB : has_add B} {expA : has_exp_to A B} {zeroB : has_zero B} {divB : has_div_by B B C}
+  {use_checkpoint : with_default "use_checkpoint" bool true}
+  {defaultB : pointed B}
+  (t : tensor s A) : tensor s C
+  := (let exp_t : tensor s B := PArray.maybe_checkpoint (map exp t) in
+      let sum_exp_t : tensor (s0 ::' 1) B := PArray.maybe_checkpoint (sum_dim_m1 (keepdim:=true) exp_t) in
+      exp_t / sum_exp_t)%core.
+
+Definition log_softmax_dim_m1 {r} {s0 : Shape r} {s'} (s:=(s0 ::' s')%shape)
+  {A B C D}
+  {addB : has_add B} {lnA : has_ln_to B C} {expA : has_exp_to A B} {zeroB : has_zero B} {subB : has_sub_with A C D}
+  {use_checkpoint : with_default "use_checkpoint" bool true}
+  {defaultB : pointed B}
+  {defaultC : pointed C}
+  (t : tensor s A) : tensor s D
+  := (let exp_t : tensor s B := PArray.maybe_checkpoint (map exp t) in
+      let sum_exp_t : tensor (s0 ::' 1) B := sum_dim_m1 (keepdim:=true) exp_t in
+      let ln_sum_exp_t : tensor (s0 ::' 1) C := PArray.maybe_checkpoint (map ln sum_exp_t) in
+      t - ln_sum_exp_t)%core.
+
+Definition softmax {r} {s : Shape r}
+  {A B C}
+  {addB : has_add B} {expA : has_exp_to A B} {zeroB : has_zero B} {divB : has_div_by B B C}
+  {use_checkpoint : with_default "use_checkpoint" bool true}
+  {defaultB : pointed B}
+  (t : tensor s A) : tensor s C
+  := (let exp_t : tensor s B := PArray.maybe_checkpoint (map exp t) in
+      let sum_exp_t : B := item (sum_dim_m1 (keepdim:=false) (reshape_all exp_t)) in
+      exp_t / broadcast' sum_exp_t)%core.
+
+Definition log_softmax {r} {s : Shape r}
+  {A B C D}
+  {addB : has_add B} {lnA : has_ln_to B C} {expA : has_exp_to A B} {zeroB : has_zero B} {subACD : has_sub_with A C D}
+  {use_checkpoint : with_default "use_checkpoint" bool true}
+  {defaultB : pointed B}
+  (t : tensor s A) : tensor s D
+  := (let exp_t : tensor s B := PArray.maybe_checkpoint (map exp t) in
+      let sum_exp_t : B := item (sum_dim_m1 (keepdim:=false) (reshape_all exp_t)) in
+      let ln_sum_exp_t : C := ln sum_exp_t in
+      t - broadcast' ln_sum_exp_t)%core.
+
 Definition to_bool {r} {s : Shape r} {A} {zero : has_zero A} {eqb : has_eqb A} (xs : tensor s A) : tensor s bool
   := map (fun x => x ≠? 0)%core xs.
 
 Definition of_bool {r} {s : Shape r} {A} {zero : has_zero A} {one : has_one A} (xs : tensor s bool) : tensor s A
   := map (fun x:bool => if x then 1 else 0)%core xs.
 
-Definition mean {r} {s : Shape r} {A} {B C} {zero : has_zero A} {add : has_add A} {div_by : has_div_by A B C} {coer : has_coer Z B} (t : tensor s A) : tensor [] C
-  := reduce_axis_m1 Reduction.mean (reshape_all t).
 (*
 Definition arange {A B} {START STOP STEP IDX} {oneA : has_one A} {zeroStart : has_zero START} {oneStep : has_one STEP} {sub : has_sub_with STOP START A} {subA : has_sub A} {div : has_int_div_by A STEP B} {coerZ : has_coer B Z} {coerIDX : has_coer int IDX} {add : has_add_with START C D} {mul : has_mul_with STEP IDX C}
   {start : with_default "start" START 0%core} (stop : STOP) {step : with_default "step" STEP 1%core}

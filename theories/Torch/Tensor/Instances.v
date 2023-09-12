@@ -74,6 +74,15 @@ Module Tensor.
 
     #[export] Instance checkpoint_Proper_dep {r s} : Dependent.Proper (Dependent.idR ==> eqfR ==> eqfR) (@checkpoint r s).
     Proof. repeat intro; rewrite !checkpoint_correct_eqf; auto. Qed.
+
+    #[export] Instance maybe_checkpoint_Proper {r s A default use_checkpoint} : Proper (eqf ==> eqf) (@maybe_checkpoint r s A default use_checkpoint).
+    Proof. cbv [maybe_checkpoint]; break_innermost_match; try exact _; repeat first [ assumption | intro ]. Qed.
+
+    Definition maybe_checkpoint_correct_eqf {r s A default use_checkpoint} t : eqf (@maybe_checkpoint r s A default use_checkpoint t) t
+      := fun idxs => maybe_checkpoint_correct.
+
+    #[export] Instance maybe_checkpoint_Proper_dep {r s} : Dependent.Proper (Dependent.idR ==> Dependent.const (fun _ _ => True) ==> eqfR ==> eqfR) (@maybe_checkpoint r s).
+    Proof. repeat intro; rewrite !maybe_checkpoint_correct_eqf; auto. Qed.
   End PArray.
   Export (hints) PArray.
 
@@ -99,6 +108,15 @@ Module Tensor.
 
     #[export] Instance checkpoint_Proper_dep {r s} : Dependent.Proper (Dependent.idR ==> eqfR ==> eqfR) (@checkpoint r s).
     Proof. repeat intro; rewrite !checkpoint_correct_eqf; auto. Qed.
+
+    #[export] Instance maybe_checkpoint_Proper {r s A default use_checkpoint} : Proper (eqf ==> eqf) (@maybe_checkpoint r s A default use_checkpoint).
+    Proof. cbv [maybe_checkpoint]; break_innermost_match; try exact _; repeat first [ assumption | intro ]. Qed.
+
+    Definition maybe_checkpoint_correct_eqf {r s A default use_checkpoint} t : eqf (@maybe_checkpoint r s A default use_checkpoint t) t
+      := fun idxs => maybe_checkpoint_correct.
+
+    #[export] Instance maybe_checkpoint_Proper_dep {r s} : Dependent.Proper (Dependent.idR ==> Dependent.const (fun _ _ => True) ==> eqfR ==> eqfR) (@maybe_checkpoint r s).
+    Proof. repeat intro; rewrite !maybe_checkpoint_correct_eqf; auto. Qed.
   End List.
   Export (hints) List.
 
@@ -281,11 +299,17 @@ Definition curry {r A} {s : Shape r} : tensor A s -> @RawIndex.curriedT r A
     : Proper (eqfR RA ==> eqfR RB ==> eqfR RC) (@map2' ri1 ri2 ro sA1 sB1 sA2 sB2 so A B C f)
     := _.
 
+  #[export] Instance broadcast'_Proper_dep {r} : Dependent.Proper (Dependent.idR ==> eqfR) (@broadcast' r).
+  Proof.
+    cbv [broadcast' repeat']; repeat intro; assumption.
+  Qed.
+  #[export] Instance broadcast'_Proper {r A R} : Proper (R ==> eqfR R) (@broadcast' r A).
+  Proof. apply broadcast'_Proper_dep. Qed.
   #[export] Instance broadcast_Proper_dep {r r' s} : Dependent.Proper (eqfR ==> eqfR) (@broadcast r r' s).
   Proof.
-    cbv [broadcast broadcast' repeat']; repeat intro.
+    cbv [broadcast]; repeat intro.
     apply reshape_app_combine_Proper_dep.
-    intro; assumption.
+    eapply broadcast'_Proper_dep; assumption.
   Qed.
   #[export] Instance broadcast_Proper {r r' s A R} : Proper (eqfR R ==> eqfR R) (@broadcast r r' s A).
   Proof. apply broadcast_Proper_dep. Qed.
@@ -374,54 +398,6 @@ Qed.
 
    *)
 
-  #[export] Instance softmax_dim_m1_Proper_dep {r s0 s'}
-    : Dependent.Proper3
-        ((Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR)
-           ==> (Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_2 Dependent.idR)
-           ==> Dependent.lift3_2 Dependent.idR
-           ==> (Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_3 Dependent.idR)
-           ==> Dependent.lift3_1 eqfR
-           ==> Dependent.lift3_3 eqfR)
-        (@softmax_dim_m1 r s0 s').
-  Proof.
-    repeat intro; cbv [softmax_dim_m1 div].
-    eapply tensor_div_by_Proper_dep; repeat intro; hnf.
-    all: try eapply (@reduce_axis_m1_Proper_dep r s0 s' true); repeat intro; hnf.
-    all: try (eapply map_Proper_dep; try eassumption; repeat intro).
-    all: try eapply Reduction.sum_Proper_dep.
-    all: repeat intro; cbv in *; subst; eauto.
-  Qed.
-
-  #[export] Instance softmax_dim_m1_Proper {r s0 s' A B C addB expA zeroB divB}
-    : Proper (eqf ==> eqf) (@softmax_dim_m1 r s0 s' A B C addB expA zeroB divB).
-  Proof. eapply softmax_dim_m1_Proper_dep; repeat intro; hnf in *; try reflexivity; subst; reflexivity. Qed.
-
-  #[export] Instance log_softmax_dim_m1_Proper_dep {r s0 s'}
-    : Dependent.Proper4
-        ((Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_2 Dependent.idR)
-           ==> (Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_3 Dependent.idR)
-           ==> (Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_2 Dependent.idR)
-           ==> Dependent.lift4_2 Dependent.idR
-           ==> (Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_3 Dependent.idR ==> Dependent.lift4_4 Dependent.idR)
-           ==> Dependent.lift4_1 eqfR
-           ==> Dependent.lift4_4 eqfR)
-        (@log_softmax_dim_m1 r s0 s').
-  Proof.
-    repeat intro; cbv [log_softmax_dim_m1 div].
-    eapply tensor_div_by_Proper_dep; repeat intro; hnf in *.
-    all: cbv [Dependent.respectful4 Dependent.lift4_1 Dependent.lift4_2 Dependent.lift4_3 Dependent.lift4_4] in *.
-    all: eauto.
-    all: eapply map_Proper_dep; repeat intro; hnf in *; eauto.
-    all: eapply (@reduce_axis_m1_Proper_dep r s0 s' true); repeat intro; hnf in *.
-    all: try (eapply map_Proper_dep; try eassumption; repeat intro).
-    all: try eapply Reduction.sum_Proper_dep.
-    all: repeat intro; cbv in *; subst; eauto.
-  Qed.
-
-  #[export] Instance log_softmax_dim_m1_Proper {r s0 s' A B C D addB lnA expA zeroB divB}
-    : Proper (eqf ==> eqf) (@log_softmax_dim_m1 r s0 s' A B C D addB lnA expA zeroB divB).
-  Proof. eapply log_softmax_dim_m1_Proper_dep; repeat intro; hnf in *; try reflexivity; subst; try reflexivity; subst; reflexivity. Qed.
-
   #[export] Instance unsqueeze_dim_m1_Proper_dep {r s} : Dependent.Proper (eqfR ==> eqfR) (@unsqueeze_dim_m1 r s).
   Proof. cbv; eauto. Qed.
 
@@ -451,6 +427,378 @@ Qed.
   #[export] Instance unreshape_all_Proper {r s A R} : Proper (eqfR R ==> eqfR R) (@unreshape_all r s A).
   Proof. apply unreshape_all_Proper_dep. Qed.
 
+  #[export] Instance sum_dim_m1_Proper_dep {r s1 s2 keepdim}
+    : Dependent.Proper
+        (Dependent.idR
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> eqfR
+           ==> eqfR)
+        (@sum_dim_m1 r s1 s2 keepdim).
+  Proof.
+    repeat intro; cbv [sum_dim_m1].
+    eapply @reduce_axis_m1_Proper_dep; try eassumption.
+    repeat intro; eapply Reduction.sum_Proper_dep; eauto.
+  Qed.
+
+  #[export] Instance sum_dim_m1_Proper {r s1 s2 keepdim A zeroA addA}
+    : Proper (eqf ==> eqf) (@sum_dim_m1 r s1 s2 keepdim A zeroA addA).
+  Proof. apply sum_dim_m1_Proper_dep; repeat intro; subst; reflexivity. Qed.
+
+  #[export] Instance prod_dim_m1_Proper_dep {r s1 s2 keepdim}
+    : Dependent.Proper
+        (Dependent.idR
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> eqfR
+           ==> eqfR)
+        (@prod_dim_m1 r s1 s2 keepdim).
+  Proof.
+    repeat intro; cbv [prod_dim_m1].
+    eapply @reduce_axis_m1_Proper_dep; try eassumption.
+    repeat intro; eapply Reduction.prod_Proper_dep; eauto.
+  Qed.
+
+  #[export] Instance prod_dim_m1_Proper {r s1 s2 keepdim A oneA mulA}
+    : Proper (eqf ==> eqf) (@prod_dim_m1 r s1 s2 keepdim A oneA mulA).
+  Proof. apply prod_dim_m1_Proper_dep; repeat intro; subst; reflexivity. Qed.
+
+  #[export] Instance max_dim_m1_Proper_dep {r s1 s2 keepdim}
+    : Dependent.Proper
+        ((Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> eqfR
+           ==> eqfR)
+        (@max_dim_m1 r s1 s2 keepdim).
+  Proof.
+    repeat intro; cbv [max_dim_m1].
+    eapply @reduce_axis_m1_Proper_dep; try eassumption.
+    repeat intro; eapply Reduction.max_Proper_dep; eauto.
+  Qed.
+
+  #[export] Instance max_dim_m1_Proper {r s1 s2 keepdim A maxA}
+    : Proper (eqf ==> eqf) (@max_dim_m1 r s1 s2 keepdim A maxA).
+  Proof. apply max_dim_m1_Proper_dep; repeat intro; subst; reflexivity. Qed.
+
+  #[export] Instance min_dim_m1_Proper_dep {r s1 s2 keepdim}
+    : Dependent.Proper
+        ((Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> eqfR
+           ==> eqfR)
+        (@min_dim_m1 r s1 s2 keepdim).
+  Proof.
+    repeat intro; cbv [min_dim_m1].
+    eapply @reduce_axis_m1_Proper_dep; try eassumption.
+    repeat intro; eapply Reduction.min_Proper_dep; eauto.
+  Qed.
+
+  #[export] Instance min_dim_m1_Proper {r s1 s2 keepdim A minA}
+    : Proper (eqf ==> eqf) (@min_dim_m1 r s1 s2 keepdim A minA).
+  Proof. apply min_dim_m1_Proper_dep; repeat intro; subst; reflexivity. Qed.
+
+  #[export] Instance argmax_dim_m1_Proper_dep {r s1 s2 keepdim}
+    : Dependent.Proper
+        ((Dependent.idR ==> Dependent.idR ==> Dependent.const eq)
+           ==> eqfR
+           ==> Dependent.const eqf)
+        (@argmax_dim_m1 r s1 s2 keepdim).
+  Proof.
+    repeat intro; cbv [argmax_dim_m1].
+    eapply @reduce_axis_m1_Proper_dep; try eassumption.
+    repeat intro; eapply Reduction.argmax_Proper_dep; eauto.
+  Qed.
+
+  #[export] Instance argmax_dim_m1_Proper {r s1 s2 keepdim A ltbA}
+    : Proper (eqf ==> eqf) (@argmax_dim_m1 r s1 s2 keepdim A ltbA).
+  Proof. apply argmax_dim_m1_Proper_dep; repeat intro; subst; reflexivity. Qed.
+
+  #[export] Instance argmin_dim_m1_Proper_dep {r s1 s2 keepdim}
+    : Dependent.Proper
+        ((Dependent.idR ==> Dependent.idR ==> Dependent.const eq)
+           ==> eqfR
+           ==> Dependent.const eqf)
+        (@argmin_dim_m1 r s1 s2 keepdim).
+  Proof.
+    repeat intro; cbv [argmin_dim_m1].
+    eapply @reduce_axis_m1_Proper_dep; try eassumption.
+    repeat intro; eapply Reduction.argmin_Proper_dep; eauto.
+  Qed.
+
+  #[export] Instance argmin_dim_m1_Proper {r s1 s2 keepdim A lebA}
+    : Proper (eqf ==> eqf) (@argmin_dim_m1 r s1 s2 keepdim A lebA).
+  Proof. apply argmin_dim_m1_Proper_dep; repeat intro; subst; reflexivity. Qed.
+
+  #[export] Instance mean_dim_m1_Proper_dep {r s1 s2 keepdim}
+    : Dependent.Proper
+        (Dependent.idR
+           ==> (Dependent.const eq ==> Dependent.idR)
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> eqfR
+           ==> eqfR)
+        (@mean_dim_m1 r s1 s2 keepdim).
+  Proof.
+    repeat intro; cbv [mean_dim_m1].
+    eapply @reduce_axis_m1_Proper_dep; try eassumption.
+    repeat intro; eapply Reduction.mean_Proper_dep; eauto.
+  Qed.
+
+  #[export] Instance mean_dim_m1_Proper {r s1 s2 keepdim A zeroA coerZA addA divA}
+    : Proper (eqf ==> eqf) (@mean_dim_m1 r s1 s2 keepdim A zeroA coerZA addA divA).
+  Proof. apply mean_dim_m1_Proper_dep; repeat intro; subst; reflexivity. Qed.
+
+  #[export] Instance var_dim_m1_Proper_dep {r s1 s2 keepdim}
+    : Dependent.Proper
+        (Dependent.idR
+           ==> (Dependent.const eq ==> Dependent.idR)
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> Dependent.const eq
+           ==> eqfR
+           ==> eqfR)
+        (@var_dim_m1 r s1 s2 keepdim).
+  Proof.
+    repeat intro; cbv [var_dim_m1].
+    eapply @reduce_axis_m1_Proper_dep; try eassumption.
+    repeat intro; eapply Reduction.var_Proper_dep; eauto.
+  Qed.
+
+  #[export] Instance var_dim_m1_Proper {r s1 s2 keepdim A zeroA coerZA addA subA mulA divA correction}
+    : Proper (eqf ==> eqf) (@var_dim_m1 r s1 s2 keepdim A zeroA coerZA addA subA mulA divA correction).
+  Proof. apply var_dim_m1_Proper_dep; repeat intro; subst; reflexivity. Qed.
+
+  #[export] Instance sum_Proper_dep {r s}
+    : Dependent.Proper
+        (Dependent.idR
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> eqfR
+           ==> eqfR)
+        (@sum r s).
+  Proof.
+    repeat intro; cbv [sum].
+    eapply @reduce_axis_m1_Proper_dep; try eapply reshape_all_Proper_dep; try eassumption.
+    repeat intro; eapply Reduction.sum_Proper_dep; eauto.
+  Qed.
+
+  #[export] Instance sum_Proper {r s A zeroA addA}
+    : Proper (eqf ==> eqf) (@sum r s A zeroA addA).
+  Proof. apply sum_Proper_dep; repeat intro; subst; reflexivity. Qed.
+
+  #[export] Instance prod_Proper_dep {r s}
+    : Dependent.Proper
+        (Dependent.idR
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> eqfR
+           ==> eqfR)
+        (@prod r s).
+  Proof.
+    repeat intro; cbv [prod].
+    eapply @reduce_axis_m1_Proper_dep; try eapply reshape_all_Proper_dep; try eassumption.
+    repeat intro; eapply Reduction.prod_Proper_dep; eauto.
+  Qed.
+
+  #[export] Instance prod_Proper {r s A oneA mulA}
+    : Proper (eqf ==> eqf) (@prod r s A oneA mulA).
+  Proof. apply prod_Proper_dep; repeat intro; subst; reflexivity. Qed.
+
+  #[export] Instance max_Proper_dep {r s}
+    : Dependent.Proper
+        ((Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> eqfR
+           ==> eqfR)
+        (@max r s).
+  Proof.
+    repeat intro; cbv [max].
+    eapply @reduce_axis_m1_Proper_dep; try eapply reshape_all_Proper_dep; try eassumption.
+    repeat intro; eapply Reduction.max_Proper_dep; eauto.
+  Qed.
+
+  #[export] Instance max_Proper {r s A maxA}
+    : Proper (eqf ==> eqf) (@max r s A maxA).
+  Proof. apply max_Proper_dep; repeat intro; subst; reflexivity. Qed.
+
+  #[export] Instance min_Proper_dep {r s}
+    : Dependent.Proper
+        ((Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> eqfR
+           ==> eqfR)
+        (@min r s).
+  Proof.
+    repeat intro; cbv [min].
+    eapply @reduce_axis_m1_Proper_dep; try eapply reshape_all_Proper_dep; try eassumption.
+    repeat intro; eapply Reduction.min_Proper_dep; eauto.
+  Qed.
+
+  #[export] Instance min_Proper {r s A minA}
+    : Proper (eqf ==> eqf) (@min r s A minA).
+  Proof. apply min_Proper_dep; repeat intro; subst; reflexivity. Qed.
+
+  #[export] Instance mean_Proper_dep {r s}
+    : Dependent.Proper
+        (Dependent.idR
+           ==> (Dependent.const eq ==> Dependent.idR)
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> eqfR
+           ==> eqfR)
+        (@mean r s).
+  Proof.
+    repeat intro; cbv [mean].
+    eapply @reduce_axis_m1_Proper_dep; try eapply reshape_all_Proper_dep; try eassumption.
+    repeat intro; eapply Reduction.mean_Proper_dep; eauto.
+  Qed.
+
+  #[export] Instance mean_Proper {r s A zeroA coerZA addA divA}
+    : Proper (eqf ==> eqf) (@mean r s A zeroA coerZA addA divA).
+  Proof. apply mean_Proper_dep; repeat intro; subst; reflexivity. Qed.
+
+  #[export] Instance var_Proper_dep {r s}
+    : Dependent.Proper
+        (Dependent.idR
+           ==> (Dependent.const eq ==> Dependent.idR)
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> Dependent.const eq
+           ==> eqfR
+           ==> eqfR)
+        (@var r s).
+  Proof.
+    repeat intro; cbv [var].
+    eapply @reduce_axis_m1_Proper_dep; try eapply reshape_all_Proper_dep; try eassumption.
+    repeat intro; eapply Reduction.var_Proper_dep; eauto.
+  Qed.
+
+  #[export] Instance var_Proper {r s A zeroA coerZA addA subA mulA divA correction}
+    : Proper (eqf ==> eqf) (@var r s A zeroA coerZA addA subA mulA divA correction).
+  Proof. apply var_Proper_dep; repeat intro; subst; reflexivity. Qed.
+
+  #[export] Instance softmax_dim_m1_Proper_dep {r s0 s'}
+    : Dependent.Proper3
+        ((Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR)
+           ==> (Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_2 Dependent.idR)
+           ==> Dependent.lift3_2 Dependent.idR
+           ==> (Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_3 Dependent.idR)
+           ==> Dependent.const3 (fun _ _ => True)
+           ==> Dependent.lift3_2 Dependent.idR
+           ==> Dependent.lift3_1 eqfR
+           ==> Dependent.lift3_3 eqfR)
+        (@softmax_dim_m1 r s0 s').
+  Proof.
+    repeat intro; cbv [softmax_dim_m1 div].
+    eapply tensor_div_by_Proper_dep; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct.
+    all: try (eapply sum_dim_m1_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
+    all: try (eapply map_Proper_dep; try eassumption; repeat intro).
+    all: repeat intro; cbv in *; subst; eauto.
+  Qed.
+
+  #[export] Instance softmax_dim_m1_Proper {r s0 s' A B C addB expA zeroB divB use_checkpoint defaultB}
+    : Proper (eqf ==> eqf) (@softmax_dim_m1 r s0 s' A B C addB expA zeroB divB use_checkpoint defaultB).
+  Proof. eapply softmax_dim_m1_Proper_dep; repeat intro; hnf in *; try reflexivity; subst; reflexivity. Qed.
+
+  Lemma softmax_dim_m1_equiv {r s0 s' A B C addB expA zeroB divB use_checkpoint defaultB t}
+    : eqf
+        (@softmax_dim_m1 r s0 s' A B C addB expA zeroB divB use_checkpoint defaultB t)
+        (@softmax_dim_m1 r s0 s' A B C addB expA zeroB divB false defaultB t).
+  Proof. eapply softmax_dim_m1_Proper_dep; cbv; repeat intro; try (refine eq_refl; solve_constraints); subst; constructor. Qed.
+
+  #[export] Instance log_softmax_dim_m1_Proper_dep {r s0 s'}
+    : Dependent.Proper4
+        ((Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_2 Dependent.idR)
+           ==> (Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_3 Dependent.idR)
+           ==> (Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_2 Dependent.idR)
+           ==> Dependent.lift4_2 Dependent.idR
+           ==> (Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_3 Dependent.idR ==> Dependent.lift4_4 Dependent.idR)
+           ==> Dependent.const4 (fun _ _ => True)
+           ==> Dependent.lift4_2 Dependent.idR
+           ==> Dependent.lift4_3 Dependent.idR
+           ==> Dependent.lift4_1 eqfR
+           ==> Dependent.lift4_4 eqfR)
+        (@log_softmax_dim_m1 r s0 s').
+  Proof.
+    repeat intro; cbv [log_softmax_dim_m1 sub].
+    eapply tensor_sub_Proper_dep; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct.
+    all: try (eapply map_Proper_dep; try eassumption; repeat intro; hnf).
+    all: try (eapply sum_dim_m1_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
+    all: try (eapply map_Proper_dep; try eassumption; repeat intro; hnf).
+    all: repeat intro; cbv in *; subst; eauto.
+  Qed.
+
+  #[export] Instance log_softmax_dim_m1_Proper {r s0 s' A B C D addB lnA expA zeroB subB use_checkpoint defaultB defaultC}
+    : Proper (eqf ==> eqf) (@log_softmax_dim_m1 r s0 s' A B C D addB lnA expA zeroB subB use_checkpoint defaultB defaultC).
+  Proof. eapply log_softmax_dim_m1_Proper_dep; repeat intro; hnf in *; try reflexivity; subst; reflexivity. Qed.
+
+  Lemma log_softmax_dim_m1_equiv {r s0 s' A B C D addB lnA expA zeroB subB use_checkpoint defaultB defaultC t}
+    : eqf
+        (@log_softmax_dim_m1 r s0 s' A B C D addB lnA expA zeroB subB use_checkpoint defaultB defaultC t)
+        (@log_softmax_dim_m1 r s0 s' A B C D addB lnA expA zeroB subB false defaultB defaultC t).
+  Proof. eapply log_softmax_dim_m1_Proper_dep; cbv; repeat intro; try (refine eq_refl; solve_constraints); subst; constructor. Qed.
+
+  #[export] Instance softmax_Proper_dep {r s}
+    : Dependent.Proper3
+        ((Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR)
+           ==> (Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_2 Dependent.idR)
+           ==> Dependent.lift3_2 Dependent.idR
+           ==> (Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_3 Dependent.idR)
+           ==> Dependent.const3 (fun _ _ => True)
+           ==> Dependent.lift3_2 Dependent.idR
+           ==> Dependent.lift3_1 eqfR
+           ==> Dependent.lift3_3 eqfR)
+        (@softmax r s).
+  Proof.
+    repeat intro; cbv [softmax div].
+    eapply tensor_div_by_Proper_dep; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct.
+    all: try eapply broadcast'_Proper_dep.
+    all: try (eapply item_Proper_dep; repeat intro).
+    all: try (eapply sum_dim_m1_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
+    all: try (eapply reshape_all_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
+    all: try (eapply map_Proper_dep; try eassumption; repeat intro).
+    all: repeat intro; cbv in *; subst; eauto.
+  Qed.
+
+  #[export] Instance softmax_Proper {r s A B C addB expA zeroB divB use_checkpoint defaultB}
+    : Proper (eqf ==> eqf) (@softmax r s A B C addB expA zeroB divB use_checkpoint defaultB).
+  Proof. eapply softmax_Proper_dep; repeat intro; hnf in *; try reflexivity; subst; reflexivity. Qed.
+
+  Lemma softmax_equiv {r s A B C addB expA zeroB divB use_checkpoint defaultB t}
+    : eqf
+        (@softmax r s A B C addB expA zeroB divB use_checkpoint defaultB t)
+        (@softmax r s A B C addB expA zeroB divB false defaultB t).
+  Proof. eapply softmax_Proper_dep; cbv; repeat intro; try (refine eq_refl; solve_constraints); subst; constructor. Qed.
+
+  #[export] Instance log_softmax_Proper_dep {r s}
+    : Dependent.Proper4
+        ((Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_2 Dependent.idR)
+           ==> (Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_3 Dependent.idR)
+           ==> (Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_2 Dependent.idR)
+           ==> Dependent.lift4_2 Dependent.idR
+           ==> (Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_3 Dependent.idR ==> Dependent.lift4_4 Dependent.idR)
+           ==> Dependent.const4 (fun _ _ => True)
+           ==> Dependent.lift4_2 Dependent.idR
+           ==> Dependent.lift4_1 eqfR
+           ==> Dependent.lift4_4 eqfR)
+        (@log_softmax r s).
+  Proof.
+    repeat intro; cbv [log_softmax sub ln].
+    eapply tensor_sub_Proper_dep; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct.
+    all: try eapply broadcast'_Proper_dep.
+    all: match goal with H : _ |- _ => eapply H end; repeat intro; hnf; try assumption.
+    all: try (eapply item_Proper_dep; repeat intro).
+    all: try (eapply sum_dim_m1_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
+    all: try (eapply reshape_all_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
+    all: try (eapply map_Proper_dep; try eassumption; repeat intro).
+  Qed.
+
+  #[export] Instance log_softmax_Proper {r s A B C D addB lnA expA zeroB subB use_checkpoint defaultB}
+    : Proper (eqf ==> eqf) (@log_softmax r s A B C D addB lnA expA zeroB subB use_checkpoint defaultB).
+  Proof. eapply log_softmax_Proper_dep; repeat intro; hnf in *; try instantiate (1:=eq); subst; reflexivity. Qed.
+
+  Lemma log_softmax_equiv {r s A B C D addB lnA expA zeroB subB use_checkpoint defaultB t}
+    : eqf
+        (@log_softmax r s A B C D addB lnA expA zeroB subB use_checkpoint defaultB t)
+        (@log_softmax r s A B C D addB lnA expA zeroB subB false defaultB t).
+  Proof. eapply log_softmax_Proper_dep; cbv; repeat intro; try instantiate (1:=eq); subst; constructor. Qed.
+
   #[export] Instance to_bool_Proper_dep {r s} : Dependent.Proper (Dependent.idR ==> (Dependent.idR ==> Dependent.idR ==> Dependent.const eq) ==> eqfR ==> Dependent.const eqf) (@to_bool r s).
   Proof.
     repeat intro; cbv [to_bool]; eapply map_Proper_dep; repeat intro; hnf in *;
@@ -471,29 +819,6 @@ Qed.
 
   #[export] Instance of_bool_Proper {A r s zero one} : Proper (eqf ==> eqf) (@of_bool A r s zero one).
   Proof. apply of_bool_Proper_dep; reflexivity. Qed.
-
-  #[export] Instance mean_Proper_dep {r s}
-    : Dependent.Proper3
-        (Dependent.lift3_1 Dependent.idR
-           ==> (Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_1 Dependent.idR)
-           ==> (Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_3 Dependent.idR)
-           ==> (Dependent.const3 eq ==> Dependent.lift3_2 Dependent.idR)
-           ==> Dependent.lift3_1 eqfR ==> Dependent.lift3_3 eqfR)
-        (@mean r s).
-  Proof.
-    cbv [mean]; repeat intro.
-    eapply reduce_axis_m1_Proper_dep; repeat intro; hnf in *.
-    2: eapply reshape_all_Proper_dep; repeat intro; hnf in *.
-    1: eapply Reduction.mean_Proper_dep; repeat intro; hnf in *.
-    all: try eassumption.
-    all: cbv in *; eauto.
-    all: subst; eauto.
-    all: match goal with H : _ |- _ => eapply H end.
-    all: eauto.
-  Qed.
-
-  #[export] Instance mean_Proper {r s A B C zero addA div_boyABC coerB} : Proper (eqf ==> eqf) (@mean r s A B C zero addA div_boyABC coerB).
-  Proof. eapply mean_Proper_dep; repeat instantiate (1:=eq); cbv; intros; subst; reflexivity. Qed.
 
   (*(* TODO: nary *)
 Definition tupleify {s1 s2 A B} (t1 : tensor A [s1]) (t2 : tensor B [s2]) : tensor (A * B) [s1; s2]

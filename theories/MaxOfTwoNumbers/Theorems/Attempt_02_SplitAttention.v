@@ -151,7 +151,7 @@ Proof.
   cbv beta iota delta [HookedTransformer.HookedTransformer.unembed HookedTransformer.unembed] in *; let_bind_subst_shape ().
   cbv beta iota delta [Unembed.forward] in *; let_bind_subst_shape ().
   cbv beta iota delta [all_tokens] in true_maximum; let_bind_subst_shape ().
-  set (all_toks_c := PArray.checkpoint _) in (value of true_maximum).
+  set (all_toks_c := PArray.maybe_checkpoint _) in (value of true_maximum).
   (*
   set (out' := PArray.checkpoint _) in (value of out).
   do 8 lazymatch goal with

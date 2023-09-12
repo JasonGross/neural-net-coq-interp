@@ -54,6 +54,10 @@ Module HookedTransformer.
               => rewrite PArray.checkpoint_correct
             | [ |- ?R _ (PArray.checkpoint _ _) ]
               => rewrite PArray.checkpoint_correct
+            | [ |- ?R (PArray.maybe_checkpoint _ _) _ ]
+              => rewrite PArray.maybe_checkpoint_correct
+            | [ |- ?R _ (PArray.maybe_checkpoint _ _) ]
+              => rewrite PArray.maybe_checkpoint_correct
             | [ |- ?R (Tensor.of_bool _ _) (Tensor.of_bool _ _) ]
               => apply (Tensor.of_bool_Proper_dep _ _ R)
             | [ |- ?R (Tensor.map2 _ _ _ _) (Tensor.map2 _ _ _ _) ]
@@ -92,6 +96,42 @@ Module HookedTransformer.
               => apply (Tensor.reshape_snoc_split_Proper_dep _ _ R)
             | [ |- ?R (reshape_all _ _) (reshape_all _ _) ]
               => apply Tensor.reshape_all_Proper_dep
+            | [ |- ?R (Tensor.sum_dim_m1 _ _) (Tensor.sum_dim_m1 _ _) ]
+              => apply Tensor.sum_dim_m1_Proper_dep
+            | [ |- ?R (Tensor.prod_dim_m1 _ _) (Tensor.prod_dim_m1 _ _) ]
+              => apply Tensor.prod_dim_m1_Proper_dep
+            | [ |- ?R (Tensor.max_dim_m1 _ _) (Tensor.max_dim_m1 _ _) ]
+              => apply Tensor.max_dim_m1_Proper_dep
+            | [ |- ?R (Tensor.min_dim_m1 _ _) (Tensor.min_dim_m1 _ _) ]
+              => apply Tensor.min_dim_m1_Proper_dep
+            | [ |- ?R (Tensor.argmax_dim_m1 _ _) (Tensor.argmax_dim_m1 _ _) ]
+              => eapply Tensor.argmax_dim_m1_Proper_dep
+            | [ |- ?R (Tensor.argmin_dim_m1 _ _) (Tensor.argmin_dim_m1 _ _) ]
+              => eapply Tensor.argmin_dim_m1_Proper_dep
+            | [ |- ?R (Tensor.mean_dim_m1 _ _) (Tensor.mean_dim_m1 _ _) ]
+              => apply Tensor.mean_dim_m1_Proper_dep
+            | [ |- ?R (Tensor.var_dim_m1 _ _) (Tensor.var_dim_m1 _ _) ]
+              => apply Tensor.var_dim_m1_Proper_dep
+            | [ |- ?R (Tensor.softmax_dim_m1 _ _) (Tensor.softmax_dim_m1 _ _) ]
+              => apply Tensor.softmax_dim_m1_Proper_dep
+            | [ |- ?R (Tensor.log_softmax_dim_m1 _ _) (Tensor.log_softmax_dim_m1 _ _) ]
+              => apply Tensor.log_softmax_dim_m1_Proper_dep
+            | [ |- ?R (Tensor.sum _ _) (Tensor.sum _ _) ]
+              => apply Tensor.sum_Proper_dep
+            | [ |- ?R (Tensor.prod _ _) (Tensor.prod _ _) ]
+              => apply Tensor.prod_Proper_dep
+            | [ |- ?R (Tensor.max _ _) (Tensor.max _ _) ]
+              => apply Tensor.max_Proper_dep
+            | [ |- ?R (Tensor.min _ _) (Tensor.min _ _) ]
+              => apply Tensor.min_Proper_dep
+            | [ |- ?R (Tensor.mean _ _) (Tensor.mean _ _) ]
+              => apply Tensor.mean_Proper_dep
+            | [ |- ?R (Tensor.var _ _) (Tensor.var _ _) ]
+              => apply Tensor.var_Proper_dep
+            | [ |- ?R (Tensor.softmax _ _) (Tensor.softmax _ _) ]
+              => apply Tensor.softmax_Proper_dep
+            | [ |- ?R (Tensor.log_softmax _ _) (Tensor.log_softmax _ _) ]
+              => apply Tensor.log_softmax_Proper_dep
             | [ |- ?R (@SliceIndex.slice ?A ?ri ?ro ?idxs ?s _ _) (@SliceIndex.slice ?A ?ri ?ro ?idxs ?s _ _) ]
               => eapply (@SliceIndex.slice_Proper A ri ro idxs s R)
             | [ |- ?R (@FancyIndex.slice ?rb ?sb ?ri ?ro ?s ?A ?idxs _ _) (@FancyIndex.slice ?rb ?sb ?ri ?ro ?s ?A' ?idxs' _ _) ]
@@ -813,7 +853,7 @@ Module HookedTransformer.
       cbv [blocks] in *; cbn [List.map firstn fold_right] in *.
       let IH := multimatch goal with H : _ |- _ => H end in
       apply IH; clear IH; repeat intro; eauto; [].
-      break_innermost_match; rewrite ?Tensor.PArray.checkpoint_correct.
+      break_innermost_match; rewrite ?Tensor.PArray.checkpoint_correct, ?Tensor.PArray.maybe_checkpoint_correct.
       all: apply TransformerBlock.attn_only_out_Proper_dep; t.
     Qed.
 

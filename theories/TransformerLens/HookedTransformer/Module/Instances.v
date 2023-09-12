@@ -30,7 +30,7 @@ Module ModelInstances (cfg : Config) (Model : ModelSig cfg).
     : Proper ((fun _ _ => True) ==> Tensor.eqf) (@all_tokens).
   Proof.
     cbv [all_tokens]; repeat intro; break_innermost_match.
-    all: rewrite ?PArray.checkpoint_correct; reflexivity.
+    all: rewrite ?PArray.checkpoint_correct, ?PArray.maybe_checkpoint_correct; reflexivity.
   Qed.
 
   Module Embed.

@@ -163,6 +163,7 @@ Module Model.
         ((Dependent.const eq ==> Dependent.idR)
            ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
            ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
            ==> (Dependent.idR ==> Dependent.idR)
            ==> (Dependent.idR ==> Dependent.idR)
            ==> (Dependent.idR ==> Dependent.idR)
@@ -173,8 +174,8 @@ Module Model.
         (@loss_fn r batch pos return_per_token).
   Proof. cbv [loss_fn]; HookedTransformer.t. Qed.
 
-  #[export] Instance loss_fn_Proper {r batch pos return_per_token A coerZ addA divA oppA expA lnA use_checkpoint}
-    : Proper (Tensor.eqf ==> Tensor.eqf ==> Tensor.eqf) (@loss_fn r batch pos return_per_token A coerZ addA divA oppA expA lnA use_checkpoint).
+  #[export] Instance loss_fn_Proper {r batch pos return_per_token A coerZ addA subA divA oppA expA lnA use_checkpoint}
+    : Proper (Tensor.eqf ==> Tensor.eqf ==> Tensor.eqf) (@loss_fn r batch pos return_per_token A coerZ addA subA divA oppA expA lnA use_checkpoint).
   Proof. apply loss_fn_Proper_dep; repeat intro; subst; reflexivity. Qed.
 
   #[export] Instance acc_fn_Proper_dep {r batch pos return_per_token}
@@ -188,7 +189,7 @@ Module Model.
            ==> Dependent.const Tensor.eqf
            ==> Tensor.eqfR)
         (@acc_fn r batch pos return_per_token).
-  Proof. cbv [acc_fn]; HookedTransformer.t; try (subst; reflexivity). Qed.
+  Proof. cbv [acc_fn]; HookedTransformer.t; subst; reflexivity. Qed.
 
   #[export] Instance acc_fn_Proper {r batch pos return_per_token A coerZ addA divA ltbA use_checkpoint}
     : Proper (Tensor.eqf ==> Tensor.eqf ==> Tensor.eqf) (@acc_fn r batch pos return_per_token A coerZ addA divA ltbA use_checkpoint).

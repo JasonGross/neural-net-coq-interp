@@ -23,7 +23,7 @@ Module Model (cfg : Config).
     : tensor [(cfg.d_vocab ^ cfg.n_ctx)%core : N; cfg.n_ctx] RawIndexType
     := let all_toks := Tensor.arange (start:=0) (Uint63.of_Z cfg.d_vocab) in
        let all_tokens := Tensor.cartesian_exp all_toks cfg.n_ctx in
-       (if use_checkpoint then PArray.checkpoint else fun x => x) all_tokens.
+       PArray.maybe_checkpoint all_tokens.
 
   Module Embed.
     Section __.
@@ -552,7 +552,7 @@ End LayerNorm.
     Ltac set_checkpoint _ :=
       repeat match goal with
         | [ H := context G[?x] |- _ ]
-          => lazymatch x with PArray.checkpoint _ => idtac end;
+          => lazymatch x with PArray.checkpoint _ => idtac | PArray.maybe_checkpoint _ => idtac end;
              lazymatch (eval cbv delta [H] in H) with
              | x => fail
              | _ => idtac
@@ -562,7 +562,7 @@ End LayerNorm.
              let G' := context G[x'] in
              change G' in (value of H)
         | [ |- context G[?x] ]
-          => lazymatch x with PArray.checkpoint _ => idtac end;
+          => lazymatch x with PArray.checkpoint _ => idtac | PArray.maybe_checkpoint _ => idtac end;
              let x' := fresh "t" in
              pose x as x';
              let G' := context G[x'] in

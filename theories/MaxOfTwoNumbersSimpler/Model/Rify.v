@@ -37,10 +37,10 @@ Module Model.
     repeat match goal with H := _ |- _ => subst H end.
     cbv [Classes.abs Classes.sub Classes.leb R_has_abs R_has_sub R_has_leb].
     cbv [logits cfg.normalization_type].
-    cbv [HookedTransformer.HookedTransformer.logits HookedTransformer.HookedTransformer.ln_final].
+    cbv [HookedTransformer.HookedTransformer.logits HookedTransformer.HookedTransformer.ln_final PArray.maybe_checkpoint].
     set (resid1 := HookedTransformer.HookedTransformer.resid_postembed _ _ _).
     set (resid2 := HookedTransformer.HookedTransformer.resid_postembed _ _ _).
-    cbv [HookedTransformer.HookedTransformer.blocks_cps].
+    cbv [HookedTransformer.HookedTransformer.blocks_cps PArray.maybe_checkpoint].
     vm_compute List.length.
     cbv [List.fold_right].
     cbv [List.firstn HookedTransformer.HookedTransformer.blocks List.map coer_blocks_params cfg.blocks_params cfg.normalization_type].

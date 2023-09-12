@@ -289,7 +289,7 @@ Proof.
   2: { subst res'; cbv [mean]; set (k:=Reduction.mean); clearbody res k; clear.
        cbv -[of_Z to_Z Z.modulo Z.opp Z.mul]; reflexivity. }
   subst res.
-  cbv [mean Shape.reshape' reshape_all RawIndex.unreshape RawIndex.item map' map2' reshape_app_combine reshape_app_combine' RawIndex.uncurry_radd map reshape_app_split reshape_app_split' RawIndex.curry_radd map2 raw_get get reduce_axis_m1 reduce_axis_m1' map RawIndex.split_radd RawIndex.combine_radd RawIndex.snoc RawIndex.nil reshape_snoc_split reshape_snoc_combine map' broadcast broadcast' repeat' repeat Nat.radd Shape.nil Shape.reduce RawIndex.tl RawIndex.unreshape' Shape.tl] in *;
+  cbv [mean Shape.reshape' reshape_all RawIndex.unreshape RawIndex.item map' map2' reshape_app_combine reshape_app_combine' RawIndex.uncurry_radd map reshape_app_split reshape_app_split' RawIndex.curry_radd map2 raw_get get reduce_axis_m1 reduce_axis_m1' map RawIndex.split_radd RawIndex.combine_radd RawIndex.snoc RawIndex.nil reshape_snoc_split reshape_snoc_combine map' broadcast broadcast' repeat' repeat Nat.radd Shape.nil Shape.reduce RawIndex.tl RawIndex.unreshape' Shape.tl argmax_dim_m1 PArray.maybe_checkpoint max_dim_m1 sum_dim_m1] in *;
     cbn [fst snd] in *.
   set (k := of_Z _); vm_compute in k; subst k.
   cbv [Reduction.mean].
