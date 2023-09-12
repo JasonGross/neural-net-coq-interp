@@ -39,6 +39,11 @@ if __name__ == '__main__':
 
 if __name__ == '__main__':
     print(f"minimum difference between the true_max logit and any other logit is {logit_delta(model)}")
+    all_tokens = compute_all_tokens(model=model)
+    predicted_logits = model(all_tokens).detach().cpu()
+    print(f"accuracy is {acc_fn(predicted_logits, all_tokens)}")
+    print(f"loss (mean log(Pr(true max))) is {loss_fn(predicted_logits, all_tokens)}")
+    print(f"loss (mean log(Pr(true max))) is {loss_fn(predicted_logits, all_tokens).item().hex()}")
     
 # %%
 
