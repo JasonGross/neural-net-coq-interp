@@ -48,6 +48,7 @@ Makefile.coq
 Makefile.coq.conf
 
 .#*
+*#
 .vscode/settings.json
 training/wandb/
 training/__pycache__/
