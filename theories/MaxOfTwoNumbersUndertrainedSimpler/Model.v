@@ -108,4 +108,9 @@ Module Export Model.
           then res
           else Tensor.mean res)%core.
   End with_batch.
+
+  Definition true_accuracy : float
+    := Tensor.item (acc_fn (return_per_token := false) (logits all_tokens) all_tokens).
+  Definition true_loss : float
+    := Tensor.item (loss_fn (return_per_token := false) (logits all_tokens) all_tokens).
 End Model.

@@ -21,14 +21,18 @@ Definition expected_correct : int := Eval vm_compute in total - Uint63.of_Z 0 (*
 Definition totalf : float := Eval vm_compute in PrimFloat.of_uint63 total.
 Definition expected_correctf : float := Eval vm_compute in PrimFloat.of_uint63 expected_correct.
 Definition expected_accuracy : float := Eval vm_compute in expected_correctf / totalf.
-
-Definition real_accuracy : float
-  := Tensor.item (acc_fn (return_per_token := false) (logits all_tokens) all_tokens).
-
-Definition error : float := Eval cbv in (0.5 / totalf)%float.
+Definition expected_loss : float := 0x1.7acd560000000p-23.
 
 Module Accuracy.
+  Definition error : float := Eval cbv in (0.5 / totalf)%float.
   Local Notation abs := (@abs float float_has_abs) (only parsing).
-  Notation best := ((abs (real_accuracy / expected_accuracy - 1) <=? error)%float = true)
+  Notation best := ((abs (true_accuracy / expected_accuracy - 1) <=? error)%float = true)
                      (only parsing).
 End Accuracy.
+
+Module Loss.
+  Definition error : float := 0x2p-4%float.
+  Local Notation abs := (@abs float float_has_abs) (only parsing).
+  Notation best := ((abs (true_loss / expected_loss - 3) <=? error)%float = true)
+                     (only parsing).
+End Loss.
