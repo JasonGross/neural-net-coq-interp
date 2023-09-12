@@ -19,6 +19,7 @@ Local Open Scope raw_tensor_scope.
 Definition total : int := Eval vm_compute in Shape.item (Shape.reshape (shape_of all_tokens)).
 Definition expected_correct : int := Eval vm_compute in total - Uint63.of_Z 0 (* (List.length Heuristics.incorrect_results)*).
 Definition totalf : float := Eval vm_compute in PrimFloat.of_uint63 total.
+
 Definition expected_correctf : float := Eval vm_compute in PrimFloat.of_uint63 expected_correct.
 Definition expected_accuracy : float := Eval vm_compute in expected_correctf / totalf.
 Definition expected_loss : float := 0x1.7acd560000000p-23.
@@ -31,8 +32,9 @@ Module Accuracy.
 End Accuracy.
 
 Module Loss.
-  Definition error : float := 0x2p-4%float.
+  Definition relative_error : float := 0x2p-4%float.
+  Definition error : float := 0x1p-21%float. (* this is pretty close to ulp for float32 for numbers around 1 *)
   Local Notation abs := (@abs float float_has_abs) (only parsing).
-  Notation best := ((abs (true_loss / expected_loss - 3) <=? error)%float = true)
+  Notation best := ((abs (true_loss - expected_loss) <=? error)%float = true)
                      (only parsing).
 End Loss.

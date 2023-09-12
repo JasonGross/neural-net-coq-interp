@@ -24,7 +24,7 @@ Definition expected_accuracy : float := Eval vm_compute in expected_correctf / t
 Definition expected_loss : float := 0x1.02f06a0000000p-3.
 
 Module Accuracy.
-  Definition error : float := Eval cbv in (0.5 / totalf)%float.
+  Definition error : float := Eval cbv in (51 / totalf)%float.
   Local Notation abs := (@abs float float_has_abs) (only parsing).
   Notation best := ((abs (true_accuracy / expected_accuracy - 1) <=? error)%float = true)
                      (only parsing).

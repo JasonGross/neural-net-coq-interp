@@ -8,17 +8,17 @@ From NeuralNetInterp.MaxOfTwoNumbersUndertrainedSimpler.Computed Require Import 
 Local Open Scope uint63_scope.
 Local Open Scope core_scope.
 
-Compute abs (computed_accuracy - expected_accuracy). (*     = 0%float *)
-Compute (abs (computed_accuracy - expected_accuracy) * totalf)%float. (* = 0 *) (* probably from floating point assoc issues, etc *)
-Compute Qred (PrimFloat.to_Q (computed_accuracy * totalf)) / Qred (PrimFloat.to_Q totalf). (*      = 8192 # 8192 *)
-Compute abs (computed_accuracy / expected_accuracy). (*      = 1%float *)
-Compute (abs (1 - computed_accuracy / expected_accuracy) * totalf)%float. (* = 0%float *) (* probably from floating point assoc issues, etc *)
+Compute abs (computed_accuracy - expected_accuracy). (*     = 0.006103515625%float *)
+Compute (abs (computed_accuracy - expected_accuracy) * totalf)%float. (*     = 50%float *) (* probably from floating point assoc issues, etc *)
+Compute Qred (PrimFloat.to_Q (computed_accuracy * totalf)) / Qred (PrimFloat.to_Q totalf). (*     = 8092 # 8192 *)
+Compute abs (computed_accuracy / expected_accuracy). (*     = 0.99385900270203886%float *)
+Compute (abs (1 - computed_accuracy / expected_accuracy) * totalf)%float. (*     = 50.307049864897635%float *) (* probably from floating point assoc issues, etc *)
 
-Compute (computed_loss, expected_loss). (*     = (5.4667811687832829e-07%float, 1.7639347049680509e-07%float) *)
-Compute abs (computed_loss - expected_loss). (*     = 3.702846463815232e-07%float *)
-Compute Qred (PrimFloat.to_Q (computed_loss * totalf)) / Qred (PrimFloat.to_Q totalf). (*      = 0x0.0000092bf6f2377%xQ *)
-Compute abs (computed_loss / expected_loss). (*     = 3.0991970130109205%float *)
-Compute abs (3%float - computed_loss / expected_loss). (*     = 0.099197013010920543%float *)
+Compute (computed_loss, expected_loss). (*     = (0.12643549334277809%float, 0.12643511593341827%float) *)
+Compute abs (computed_loss - expected_loss). (*     = 3.7740935981966928e-07%float *)
+Compute Qred (PrimFloat.to_Q (computed_loss * totalf)) / Qred (PrimFloat.to_Q totalf). (*      =      = 2277659362819761 # 18014398509481984 *)
+Compute abs (computed_loss / expected_loss). (*     = 1.0000029850042611%float *)
+Compute abs (1%float - computed_loss / expected_loss). (*     = 2.9850042611023753e-06%float *)
 
 Theorem good_accuracy : TheoremStatement.Accuracy.best (* (abs (real_accuracy / expected_accuracy - 1) <=? error)%float = true *).
 Proof.
