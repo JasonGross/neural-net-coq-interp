@@ -204,7 +204,7 @@ Ltac zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
 
 Theorem good_accuracy : TheoremStatement.Accuracy.best (* (abs (real_accuracy - expected_accuracy) <? error)%float = true *).
 Proof.
-  cbv [real_accuracy].
+  cbv [true_accuracy].
   cbv [Classes.abs Classes.leb Classes.ltb Classes.sub item float_has_abs float_has_sub].
   cbv [item raw_get].
   (* convert from prim float to flocq *)
