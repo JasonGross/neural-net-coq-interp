@@ -6,6 +6,7 @@ import tqdm.auto as tqdm
 from training_utils import train_or_load_model, make_testset_trainset, make_generator_from_data
 from max_of_n import acc_fn, loss_fn
 from training_utils import make_testset_trainset, make_generator_from_data, DEFAULT_WANDB_ENTITY
+from coq_export_utils import coq_export_params
 
 # %%
 
@@ -107,4 +108,6 @@ def get_model(train_if_necessary = False,  **kwargs):
 # %%
 if __name__ == '__main__':
     training_losses, model_pth_path = train()
+    print(coq_export_params(model))
 
+# %%

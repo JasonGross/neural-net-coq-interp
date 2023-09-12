@@ -1,5 +1,6 @@
 # %%
 import dataclasses
+from typing import Iterable
 import numpy as np
 import torch
 from transformer_lens import HookedTransformer, FactoredMatrix
@@ -49,15 +50,15 @@ def strify(v, ty=None, description=None, parens_if_space=False):
 
 
 
-def coq_export_params(model: HookedTransformer):
-    print('Module cfg <: CommonConfig.')
+def coq_export_params_lines(model: HookedTransformer) -> Iterable[str]:
+    yield 'Module cfg <: CommonConfig.'
     for f in dataclasses.fields(model.cfg):
         val = dataclasses.asdict(model.cfg)[f.name]
         ty = f.type
         if f.name == 'attn_types' and ty == 'Optional[List]': ty = 'Optional[List[str]]'
         if f.name == 'normalization_type' and ty == 'Optional[str]': ty = 'Optional[NormalizationType]'
-        print(f'  Definition {f.name} := {strify(val, ty=ty, description=f.name)}.')
-    print('End cfg.')
+        yield f'  Definition {f.name} := {strify(val, ty=ty, description=f.name)}.'
+    yield 'End cfg.'
 
     for name in (#'OV',
     #'QK',
@@ -78,9 +79,9 @@ def coq_export_params(model: HookedTransformer):
     'b_V',):
     #'b_in',
     #'b_out'):
-        print(f'Definition {name} :=')
-        print(strify(getattr(model, name)))
-        print('.')
+        yield f'Definition {name} :='
+        yield strify(getattr(model, name))
+        yield '.'
 
     
     for layer, block in enumerate(model.blocks):
@@ -88,14 +89,16 @@ def coq_export_params(model: HookedTransformer):
             if hasattr(block, module):
                 for name in names:
                     if hasattr(getattr(block, module), name):
-                        print(f'Definition L{layer}_{module}_{name} :=')
-                        print(strify(getattr(getattr(block, module), name)))
-                        print('.')
+                        yield f'Definition L{layer}_{module}_{name} :='
+                        yield strify(getattr(getattr(block, module), name))
+                        yield '.'
 
     for module, names in (('ln_final', ('b', 'w')), ):
         if hasattr(model, module):
             for name in names:
-                print(f'Definition {module}_{name} :=')
-                print(strify(getattr(getattr(model, module), name)))
-                print('.')
+                yield f'Definition {module}_{name} :='
+                yield strify(getattr(getattr(model, module), name))
+                yield '.'
 # %%
+def coq_export_params(model: HookedTransformer):
+    return '\n'.join(coq_export_params_lines(model))
