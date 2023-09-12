@@ -5,9 +5,9 @@ From NeuralNetInterp.Util Require Import Pointed ValueExtraction.
 Set NativeCompute Timing.
 (*Set NativeCompute Profiling.*)
 (* expected: about 45 minutes in vm, about 19 minutes in native *)
-Time Local Definition all_tokens_logits_concrete_value := native_compute logits_all_tokens_concrete_opt.
+Time #[native_compile=no] Local Definition all_tokens_logits_concrete_value := native_compute logits_all_tokens_concrete_opt.
 
-Time Definition all_tokens_logits_concrete : PArray.concrete_tensor _ _ := (*Eval native_compute in pre *)Eval hnf in extract all_tokens_logits_concrete_value.
+Time #[native_compile=no] Definition all_tokens_logits_concrete : PArray.concrete_tensor _ _ := (*Eval native_compute in pre *)Eval hnf in extract all_tokens_logits_concrete_value.
 Time Definition all_tokens_logits_concrete_eq : all_tokens_logits_concrete = logits_all_tokens_concrete_opt := extract_eq all_tokens_logits_concrete_value. (*
 Proof. native_cast_no_check (eq_refl logits_all_tokens_concrete). Time Qed.*)
 

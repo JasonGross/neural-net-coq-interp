@@ -9,9 +9,9 @@ Local Notation prev := (PArray.concretize prea) (only parsing).
 Local Definition pre := prev.
 
 Set NativeCompute Timing.
-Time Local Definition all_tokens_masked_attn_scores_concrete_value := native_compute pre.
+Time #[native_compile=no] Local Definition all_tokens_masked_attn_scores_concrete_value := native_compute pre.
 
-Time Definition all_tokens_masked_attn_scores_concrete : PArray.concrete_tensor _ _ := (*Eval native_compute in pre*) Eval hnf in extract all_tokens_masked_attn_scores_concrete_value.
+Time #[native_compile=no] Definition all_tokens_masked_attn_scores_concrete : PArray.concrete_tensor _ _ := (*Eval native_compute in pre*) Eval hnf in extract all_tokens_masked_attn_scores_concrete_value.
 Definition all_tokens_masked_attn_scores_concrete_eq : all_tokens_masked_attn_scores_concrete = prev := extract_eq all_tokens_masked_attn_scores_concrete_value.
 (*Proof. native_cast_no_check (eq_refl prev). Time Qed.*)
 
