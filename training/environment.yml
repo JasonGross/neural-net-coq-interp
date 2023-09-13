@@ -202,5 +202,5 @@ dependencies:
   - zstd=1.5.5=hc292b87_0
   - pip:
       - fancy-einsum==0.0.3
-      - transformer-lens==1.6.0
+      - transformer-lens==1.6.1
 prefix: /home/ubuntu/anaconda3/envs/neural-net-coq-interp-clean
