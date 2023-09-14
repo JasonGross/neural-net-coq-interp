@@ -27,12 +27,12 @@ Module ModelComputations (cfg : Config) (Import Model : ModelSig cfg).
     #[local] Coercion coerA' : float >-> A.
     #[local] Existing Instance defaultA.
 
-    Definition logit_delta : A
-      := let all_tokens
-           := PArray.maybe_checkpoint all_tokens in
-         let all_predicted_logits : tensor [_;_;_] A
-           := PArray.maybe_checkpoint (Model.HookedTransformer.logits all_tokens) in
-         let predicted_logits : tensor [_;_] A
+    Definition logit_delta
+      (batch : N := cfg.d_vocab ^ cfg.n_ctx)
+      (all_tokens : tensor [batch; cfg.n_ctx] RawIndexType)
+      (all_predicted_logits : tensor [batch; cfg.n_ctx; cfg.d_vocab_out] A)
+      : A
+      := let predicted_logits : tensor [_;_] A
            := all_predicted_logits.[:,-1,:] in
          let indices_of_max : tensor [_;1] RawIndexType
            := Tensor.max_dim_m1 (keepdim:=true) all_tokens in
@@ -52,14 +52,25 @@ Module ModelComputations (cfg : Config) (Import Model : ModelSig cfg).
          Tensor.item (Tensor.min min_incorrect_logit).
   End generic.
 
-  Definition logit_delta_float : float := logit_delta.
-(*
+  Definition logit_delta_float_gen : _ -> _ -> float := logit_delta.
+
+  Definition logit_delta_float : float := logit_delta all_tokens logits_all_tokens.
+
+  (*
   Derive logit_delta_float_opt
-    SuchThat (logit_delta_float_opt = logit_delta_float)
+    SuchThat (forall all_tokens all_tokensc,
+                 all_tokensc = PArray.concretize all_tokens
+                 -> forall all_predicted_logits all_predicted_logitsc,
+                   all_predicted_logitsc = PArray.concretize all_predicted_logits
+                   -> logit_delta_float_opt all_tokensc all_predicted_logitsc = logit_delta_float all_tokens all_predicted_logits)
     As logit_delta_float_opt_eq.
   Proof.
+    intros.
+    cbv beta delta [logit_delta_float logit_delta].
+    do_red ().
     start_optimizing ().
     cbv beta iota delta [logit_delta].
+    lift_lets ().
     do_red ().
     red_early_layers (); red_late_layers_1 (); red_late_layers_2 ().
     cbv beta zeta in *; do_red (); subst_local_cleanup ().
@@ -81,3 +92,5 @@ Module ModelComputations (cfg : Config) (Import Model : ModelSig cfg).
   Definition logit_delta_
  *)
 End ModelComputations.
+
+Module Type ModelComputationsSig (cfg : Config) (Model : ModelSig cfg) := Nop <+ ModelComputations cfg Model.

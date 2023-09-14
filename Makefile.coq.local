@@ -6,6 +6,9 @@ computed: $(filter $(addsuffix %,$(wildcard theories/*/Computed/)),$(VFILES:.v=.
 .PHONY: models
 models: $(filter theories/%/Model.vo,$(VFILES:.v=.$(VO)))
 
+.PHONY: models-all
+models-all: models $(filter $(addsuffix %,$(wildcard theories/*/Model/)),$(VFILES:.v=.$(VO)))
+
 .PHONY: theorem-statements
 theorem-statements: $(filter theories/%/TheoremStatement.vo,$(VFILES:.v=.$(VO)))
 

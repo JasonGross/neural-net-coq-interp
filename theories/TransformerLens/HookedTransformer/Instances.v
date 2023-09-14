@@ -60,6 +60,8 @@ Module HookedTransformer.
               => rewrite PArray.maybe_checkpoint_correct
             | [ |- ?R (Tensor.of_bool _ _) (Tensor.of_bool _ _) ]
               => apply (Tensor.of_bool_Proper_dep _ _ R)
+            | [ |- ?R (Tensor.item _) (Tensor.item _) ]
+              => apply Tensor.item_Proper_dep
             | [ |- ?R (Tensor.map2 _ _ _ _) (Tensor.map2 _ _ _ _) ]
               => apply (Tensor.map2_Proper_dep _ _ R)
             | [ |- ?R (Tensor.map2 _ _ _ _) (Tensor.map2 _ _ _ _) ]
@@ -134,6 +136,8 @@ Module HookedTransformer.
               => apply Tensor.log_softmax_Proper_dep
             | [ |- ?R (@SliceIndex.slice ?A ?ri ?ro ?idxs ?s _ _) (@SliceIndex.slice ?A ?ri ?ro ?idxs ?s _ _) ]
               => eapply (@SliceIndex.slice_Proper A ri ro idxs s R)
+            | [ |- ?R (SliceIndex.slice _ _ _) (SliceIndex.slice _ _ _) ]
+              => apply SliceIndex.slice_Proper_dep
             | [ |- ?R (@FancyIndex.slice ?rb ?sb ?ri ?ro ?s ?A ?idxs _ _) (@FancyIndex.slice ?rb ?sb ?ri ?ro ?s ?A' ?idxs' _ _) ]
               => apply (@FancyIndex.slice_Proper_dep rb sb ri ro s)
             | [ |- ?R (Reduction.argmax _ _ _ _) (Reduction.argmax _ _ _ _) ]
