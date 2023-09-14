@@ -57,4 +57,4 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - run: make check
     - run: wandb login --anonymously
-    - run: python train_max_of_2.py --fail-if-cant-load
+    - run: make analyze

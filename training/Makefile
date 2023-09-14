@@ -8,8 +8,24 @@ CHECK_PY_FILES := \
 	#
 
 .PHONY: check
-check:
-	$(PYTHON) $(CHECK_PY_FILES)
+check::
+
+define add_target
+$(1)::
+	$(2)
+endef
+
+$(foreach f,$(CHECK_PY_FILES),$(eval $(call add_target,check,$(PYTHON) $(f))))
+
+ANALYZE_PY_FILES := \
+	train_max_of_2.py \
+	proof_max2_01_exhaustive.py \
+	#
+
+.PHONY: analyze
+analyze::
+
+$(foreach f,$(ANALYZE_PY_FILES),$(eval $(call add_target,analyze,$(PYTHON) $(f) --fail-if-cant-load)))
 
 BROKEN_PACKAGES_GREP_PATTERN:='^mkl'
 
