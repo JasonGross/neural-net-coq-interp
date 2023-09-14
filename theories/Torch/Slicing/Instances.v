@@ -62,6 +62,14 @@ Module SliceIndex.
     Proof.
       cbv [slice]; destruct idx; repeat intro; apply slice_idxs_Proper_dep; try assumption; repeat intro; eauto.
     Qed.
+
+    #[export] Instance set_slice_Proper_dep {ris ros ri ro transfer_shape_idxs set_slice_idxs idx s}
+      {set_slice_idxs_Proper_dep : forall {s}, Dependent.Proper (Tensor.eqfR ==> Tensor.eqfR ==> Tensor.eqfR) (@set_slice_idxs s)}
+      : Dependent.Proper (Tensor.eqfR ==> Tensor.eqfR ==> Tensor.eqfR)
+          (@set_slice ris ros ri ro transfer_shape_idxs (@set_slice_idxs) idx s).
+    Proof.
+      cbv [set_slice]; repeat intro; break_innermost_match; try apply set_slice_idxs_Proper_dep; try assumption; repeat intro; eauto.
+    Qed.
   End SliceIndexType.
   Export (hints) SliceIndexType.
 
@@ -72,6 +80,14 @@ Module SliceIndex.
   Qed.
   #[export] Instance slice_Proper {A ri ro idxs s R} : Proper (Tensor.eqfR R ==> Tensor.eqfR R) (@slice A ri ro idxs s).
   Proof. apply slice_Proper_dep. Qed.
+
+  #[export] Instance set_slice_Proper_dep {ri ro s idxs} : Dependent.Proper (Tensor.eqfR ==> Tensor.eqfR ==> Tensor.eqfR) (@set_slice ri ro s idxs).
+  Proof.
+    induction idxs; cbn [set_slice]; repeat intro; eauto.
+    apply SliceIndexType.set_slice_Proper_dep; eauto.
+  Qed.
+  #[export] Instance set_slice_Proper {A ri ro idxs s R} : Proper (Tensor.eqfR R ==> Tensor.eqfR R ==> Tensor.eqfR R) (@set_slice A ri ro idxs s).
+  Proof. apply set_slice_Proper_dep. Qed.
 End SliceIndex.
 Export (hints) SliceIndex.
 

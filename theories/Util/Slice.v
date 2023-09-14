@@ -6,6 +6,8 @@ From NeuralNetInterp.Util Require Import ErrorT Arith.Classes PolymorphicOption.
 #[local] Set Universe Polymorphism.
 #[local] Unset Universe Minimization ToSet.
 #[local] Set Polymorphic Inductive Cumulativity.
+#[local] Open Scope bool_scope.
+#[local] Open Scope core_scope.
 Record Slice I := { start : option I ; stop : option I ; step : option I }.
 
 Module Concrete.
@@ -19,8 +21,7 @@ Module Concrete.
 
   Section with_ops.
     Context {I}
-      {modulo : has_mod I} {add : has_add I} {sub : has_sub I} {div : has_int_div I} {one : has_one I} {zero : has_zero I} {ltb : has_ltb I} {opp : has_opp I}.
-    Local Open Scope core_scope.
+      {modulo : has_mod I} {add : has_add I} {sub : has_sub I} {div : has_int_div I} {one : has_one I} {zero : has_zero I} {ltb : has_ltb I} {leb : has_leb I} {opp : has_opp I}.
     Definition normalize (s : Slice I) : Slice I
       := {| start := s.(start) mod s.(base_len)
          ; stop := let stop := if s.(step) <? 1 then s.(stop) else Some (Option.value s.(stop) s.(base_len)) in
@@ -38,6 +39,15 @@ Module Concrete.
 
     Definition length (s : Slice I) : I
       := raw_length (normalize s).
+
+    Definition mem (s : Slice I) (idx : I) : bool
+      := let idx_lt_stop
+           := match s.(stop) with
+              | None => true
+              | Some stop => idx <? stop
+              end in
+         (s.(start) <=? idx) && idx_lt_stop
+         && (((idx - s.(start)) mod s.(step)) =? 0).
   End with_ops.
 End Concrete.
 
@@ -66,6 +76,12 @@ Definition unconcretize {I} (s : Concrete.Slice I) : Slice I
      ; step := Some s.(Concrete.step) |}.
 #[global] Coercion unconcretize : Concrete.Slice >-> Slice.
 
+Definition mem {I} {modulo : has_mod I} {add : has_add I} {sub : has_sub I} {one : has_one I} {zero : has_zero I} {ltb : has_ltb I} {leb : has_leb I} (s : Slice I) (len : I) (idx : I) : bool
+  := match s with
+     | Build_Slice None None None => true
+     | _ => Concrete.mem (norm_concretize s len) idx
+     end.
+
 Definition invert_index {I} {modulo : has_mod I} {add : has_add I} {sub : has_sub I} {one : has_one I} {mul : has_mul I} {div : has_int_div I} {zero : has_zero I} {ltb : has_ltb I} (s : Slice I) (base_len : I) (idx : I) : I
   := let via_concretize _
        := let len := Concrete.length (concretize s base_len) in
@@ -92,6 +108,26 @@ Definition invert_index {I} {modulo : has_mod I} {add : has_add I} {sub : has_su
      | Build_Slice (Some _) (Some _) (Some _)
        => via_concretize tt
      end%core.
+
+Definition index_opt {I}
+  {add : has_add I} {sub : has_sub I}
+  {modulo : has_mod I} {int_div : has_int_div I}
+  {zero : has_zero I} {one : has_one I}
+  {ltb : has_ltb I} {leb : has_leb I}
+  (s : Slice I) (base_len : I) (idx : I) : option I
+  := if mem s base_len idx
+     then Some (let idx
+                  := match s.(start) with
+                     | None => idx
+                     | Some start => idx - (start mod base_len)
+                     end in
+                let idx
+                  := match s.(step) with
+                     | None => idx
+                     | Some step => idx // step
+                     end in
+                idx)
+     else None.
 
 Module Export SliceNotations.
   Declare Custom Entry slice.

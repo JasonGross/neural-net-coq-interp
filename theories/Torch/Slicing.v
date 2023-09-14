@@ -130,6 +130,40 @@ Module SliceIndex.
            => fun s A t idxs' (* adjoin idx as final index *)
               => @slice_idxs (Shape.hd s) A (fun idxs' => t (RawIndex.snoc idxs' (adjust_index_for (Shape.tl s) idx))) idxs'
          end.
+
+    Definition INVALID_BROADCAST_ONE_INDEX_IN_SET_SLICE : RawIndexType.
+    Proof. exact 0%core. Qed.
+
+    Definition set_slice {ris ros ri ro}
+      (transfer_shape_idxs : Shape ris -> Shape ros)
+      (set_slice_idxs : forall {s : Shape ris} {A}, tensor s A -> tensor (transfer_shape_idxs s) A -> tensor s A)
+      (idx : SliceIndexType ri ro)
+      : forall {s : Shape (ris +' ri)} {A}, tensor s A -> tensor (transfer_shape transfer_shape_idxs idx s) A -> tensor s A
+      := match idx in Slicing.SliceIndexType ri ro return forall (s : Shape (ris +' ri)) {A}, tensor s A -> tensor (transfer_shape transfer_shape_idxs idx s) A -> tensor s A with
+         | slice_index sl
+           => fun s A t_old t_new idxs' (* adjust slice at last index *)
+              => let idx := RawIndex.tl idxs' in
+                 match Slice.index_opt sl (Shape.tl s) idx with
+                 | Some idx_new
+                   => @set_slice_idxs (Shape.hd s) A (fun idxs' => t_old (RawIndex.snoc idxs' idx)) (fun idxs' => t_new (RawIndex.snoc idxs' idx_new)) (RawIndex.hd idxs')
+                 | None (* not in the slice *)
+                   => t_old idxs'
+                 end
+         (*| @slice_tensor_index s' sidx
+              => fun s t idxs' (* lookup index *)
+                 => let idx := RawIndex.tl idxs' in
+                    slice_idxs (Shape.hd s) (fun idxs' => t (RawIndex.snoc idxs' (adjust_index_for (Shape.tl s) (Tensor.raw_get sidx [idx])))) (RawIndex.hd idxs')*)
+         | broadcast_one_index
+           => fun s A t_old t_new idxs'
+              => @set_slice_idxs s A t_old (fun idxs' => t_new (RawIndex.snoc idxs' INVALID_BROADCAST_ONE_INDEX_IN_SET_SLICE)) idxs'
+         | single_index idx
+           => fun s A t_old t_new idxs'
+              => let idx' := RawIndex.tl idxs' in
+                 let idx := adjust_index_for (Shape.tl s) idx in
+                 if idx' =? idx
+                 then @set_slice_idxs (Shape.hd s) A (fun idxs' => t_old (RawIndex.snoc idxs' idx)) t_new (RawIndex.hd idxs')
+                 else t_old idxs'
+         end.
   End SliceIndexType.
   Notation IndexType := SliceIndexType.t.
   Notation SliceIndexType := SliceIndexType.t.
@@ -173,6 +207,14 @@ Module SliceIndex.
          => fun s => SliceIndexType.slice (transfer_shape idxs) (fun s A => slice idxs) idx
        end s.
 
+  Fixpoint set_slice {ri ro} {s : Shape ri} (idxs : t ri ro) {A} : tensor s A -> tensor (transfer_shape idxs s) A -> tensor s A
+    := match idxs in t ri ro return forall {s : Shape ri}, tensor s A -> tensor (transfer_shape idxs s) A -> tensor s A with
+       | [] => fun _s t_old t_new idxs' => t_new tt
+       | … => fun _s t_old t_new idxs' => t_new idxs'
+       | idxs ::' idx
+         => fun s => SliceIndexType.set_slice (transfer_shape idxs) (fun s A => set_slice idxs) idx
+       end s.
+
   Module Import SliceIndexNotations.
     Export SliceIndexNotations0.
     Notation "t .[ x , .. , y ]"
@@ -194,6 +236,27 @@ Module SliceIndex.
     Notation "t .[< i >]"
       := (SliceIndex.slice (snoc nil i) t%tensor)
            (at level 2, i custom fancy_slice at level 60, left associativity, format "t .[< i >]")
+        : tensor_scope.
+
+    Notation "t .[ x , .. , y ] <- v"
+      := (SliceIndex.set_slice (snoc .. (snoc nil x) .. y) t%raw_tensor v%raw_tensor)
+           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, no associativity, format "t .[ x ,  .. ,  y ]  <-  v")
+        : raw_tensor_scope.
+    Notation "t .[ x , .. , y ] <- v"
+      := (SliceIndex.set_slice (snoc .. (snoc nil x) .. y) t%tensor v%tensor)
+           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, no associativity, format "t .[ x ,  .. ,  y ]  <-  v")
+        : tensor_scope.
+    Notation "t .[ … , x , .. , y ] <- v"
+      := (SliceIndex.set_slice (snoc .. (snoc elipsis x) .. y) t%raw_tensor v%raw_tensor)
+           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, no associativity, format "t .[ … ,  x ,  .. ,  y ]  <-  v")
+        : raw_tensor_scope.
+    Notation "t .[ … , x , .. , y ] <- v"
+      := (SliceIndex.set_slice (snoc .. (snoc elipsis x) .. y) t%tensor v%tensor)
+           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, no associativity, format "t .[ … ,  x ,  .. ,  y ]  <-  v")
+        : tensor_scope.
+    Notation "t .[< i >] <- v"
+      := (SliceIndex.set_slice (snoc nil i) t%tensor v%tensor)
+           (at level 2, i custom fancy_slice at level 60, no associativity, format "t .[< i >]  <-  v")
         : tensor_scope.
   End SliceIndexNotations.
 End SliceIndex.
@@ -279,7 +342,18 @@ Module FancyIndex.
     {rb} {s_broadcast : Shape rb} {ri ro} {s : Shape ri} {A} (idxs : @t rb s_broadcast ri ro) (x : tensor s A)
     : tensor (transfer_shape idxs s) A
     := reshape_app_combine' (slice_ idxs x).
+(*
+  Definition set_slice_ {rb} {s_broadcast : Shape rb} {ri ro} {s : Shape ri} {A} (idxs : @t rb s_broadcast ri ro)
+    (t_old : tensor s A)
+    (t_new : tensor_dep (fun i => tensor (SliceIndex.transfer_shape i s) A) (broadcast idxs))
+    : tensor s A
+    := Tensor.fold_map_dep (fun i t_new => SliceIndex.set_slice i t_old t_new) (broadcast idxs) t_new.
 
+  Definition slice
+    {rb} {s_broadcast : Shape rb} {ri ro} {s : Shape ri} {A} (idxs : @t rb s_broadcast ri ro) (x : tensor s A)
+    : tensor (transfer_shape idxs s) A
+    := reshape_app_combine' (slice_ idxs x).
+*)
   Module Import FancyIndexNotations.
     Export FancyIndexNotations0.
     Declare Scope fancy_tensor_scope.
@@ -326,6 +400,19 @@ Eval cbn in  _.[slice:(1::1),:1].
 Eval cbn in  _.[slice:(1::1),slice:(1:)].
 Eval cbn in  _.[slice:(1::1),1].
 Eval cbn in  _.[slice:(1:-1:1), None, 0].
+Eval cbn in  _.[:-1] <- _.
+Eval cbn in  _.[:, None, 0] <- _.
+Eval cbn in  _.[:1, None, 0] <- _.
+Eval cbn in  _.[:-1:1, None, 0] <- _.
+Eval cbn in  _.[slice:(1:-1:1)] <- _.
+Eval cbn in  _.[slice:(1:-1:1),slice:(1:-1:1)] <- _.
+Eval cbn in  _.[slice:(1:-1)] <- _.
+Eval cbn in  _.[slice:(1:)] <- _.
+Eval cbn in  _.[slice:(1::1)] <- _.
+Eval cbn in  _.[slice:(1::1),:1] <- _.
+Eval cbn in  _.[slice:(1::1),slice:(1:)] <- _.
+Eval cbn in  _.[slice:(1::1),1] <- _.
+Eval cbn in  _.[slice:(1:-1:1), None, 0] <- _.
 Eval cbn in  _.[1:-1:1].
 Eval cbn in  _.[1:-1:1,1:-1:1].
 Eval cbn in  _.[1:-1].
@@ -335,4 +422,13 @@ Eval cbn in  _.[1::1,:1].
 Eval cbn in  _.[1::1,1:].
 Eval cbn in  _.[1::1,1].
 Eval cbn in  _.[1:-1:1, None, 0].
+Eval cbn in  _.[1:-1:1] <- _.
+Eval cbn in  _.[1:-1:1,1:-1:1] <- _.
+Eval cbn in  _.[1:-1] <- _.
+Eval cbn in  _.[1:] <- _.
+Eval cbn in  _.[1::1] <- _.
+Eval cbn in  _.[1::1,:1] <- _.
+Eval cbn in  _.[1::1,1:] <- _.
+Eval cbn in  _.[1::1,1] <- _.
+Eval cbn in  _.[1:-1:1, None, 0] <- _.
 *)

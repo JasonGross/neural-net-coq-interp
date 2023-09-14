@@ -463,6 +463,13 @@ Module RawIndex.
     (* eta expand to get around COQBUG(https://github.com/coq/coq/issues/17663) *)
     Definition leb : has_leb t := fun x y => Uint63.leb x y.
     Definition ltb : has_ltb t := fun x y => Uint63.ltb x y.
+
+    Definition fold {A B} (reduce : forall i : t, A -> B i -> A) (init : A) (f : forall i : int, B i) (s : ShapeType) : A
+      := with_state
+           init
+           for (i := 0;; i <? s;; i++) {{
+               update (fun v => reduce i v (f i))
+           }}.
   End RawIndexType.
 
   Include IndexGen.ExtendedMake RawIndexType.
@@ -579,6 +586,31 @@ Module RawIndex.
     rewrite IHr1; repeat split; try (now destruct r); try lia; [].
     Z.to_euclidean_division_equations; nia.
   Qed.
+
+  Fixpoint fold {r}
+    : forall {A B}
+             (reduce : forall (i : Index r), A -> B i -> A)
+             (init : A)
+             (f : forall i, B i),
+      Shape r -> A
+    := match r return forall {A B}
+                             (reduce : forall (i : Index r), A -> B i -> A)
+                             (init : A)
+                             (f : forall i, B i),
+           Shape r -> A with
+       | O
+         => fun A B reduce init f s
+            => reduce tt init (f tt)
+       | S r
+         => fun A B reduce init f s
+            => @fold
+                 r A (fun idxs => forall i, B (snoc idxs i))
+                 (fun idxs a b
+                  => RawIndexType.fold
+                       (B:=fun idx => B (snoc idxs idx))
+                       (fun idx => reduce (snoc idxs idx)) a b (Shape.tl s))
+                 init (fun _ _ => f _) (Shape.hd s)
+       end.
 End RawIndex.
 Notation RawIndexType := RawIndex.IndexType.
 Notation RawIndex := RawIndex.Index.
@@ -912,6 +944,8 @@ Definition map3 {r} {sA sB sC : Shape r} {A B C D} (f : A -> B -> C -> D) (tA : 
 Definition map_dep {r} {s : Shape r} {A B} (f : forall a : A, B a) (t : tensor s A) : tensor_dep B t
   := fun i => f (t i).
 
+Definition fold_map_dep {r} {s : Shape r} {A B C} (reduce : forall a : A, B a -> C -> C) (t : tensor s A) (fold_over : tensor_dep B t) (init : C) : C
+  := @RawIndex.fold r C _ (fun i c b => reduce (t i) b c) init fold_over s.
 
 Definition where_ {r} {sA sB sC : Shape r} {A} (condition : tensor sA bool) (input : tensor sB A) (other : tensor sC A) : tensor (Shape.broadcast3 sA sB sC) A
   := map3 Bool.where_ condition input other.

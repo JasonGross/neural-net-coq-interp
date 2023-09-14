@@ -50,6 +50,7 @@ theories/Torch/Tensor.v
 theories/Torch/Slicing/Instances.v
 theories/Torch/Tensor/Instances.v
 theories/Torch/Tensor/Proofs.v
+theories/TrainingComputations/interp_max_utils.v
 theories/TransformerLens/HookedTransformer.v
 theories/TransformerLens/HookedTransformer/Config.v
 theories/TransformerLens/HookedTransformer/Instances.v

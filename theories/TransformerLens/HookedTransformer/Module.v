@@ -671,6 +671,7 @@ End LayerNorm.
             map_dep map2 map2' map3
             ones tril to_bool
             Shape.tl Shape.hd Shape.snoc Shape.nil
+            item int_has_eqb raw_get Shape.broadcast2 Shape.map2
         ] in *;
       cbn beta iota delta [fst snd Primitive.fst Primitive.snd] in *.
     Ltac do_red _ :=
