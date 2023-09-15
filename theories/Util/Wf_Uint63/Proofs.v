@@ -128,7 +128,32 @@ Module Reduction.
       generalize dependent (((stop - start - 1) / step)%uint63); intros.
       lia. }
   Qed.
-
+(*
+  Lemma map_reduce_no_init_spec_count {A reduce start stop step0 f} (P : nat -> int -> _ -> Prop)
+    (step : int := if (step0 =? 0) then 1 else step0)
+    (Hinit : P 1 (start + step) (f start))
+    (Hstep : forall n i v, (n <? (if start + step <? stop then (1 + Z.to_nat ((stop - (start + step) - 1) // step : int)) else 0)) = true -> P (S n) i v -> (start + step <=? i) = true -> (i <? stop) = true -> i = start + step + step * Uint63.of_Z n -> P (S (S n)) (i + step) (reduce v (f i)))
+    : P (S (if start + step <? stop then (1 + Z.to_nat ((stop - (start + step) - 1) // step : int)) else 0))
+        (start + step + step * (if start + step <? stop then 1 + (stop - (start + step) - 1) // step else 0))
+        (@map_reduce_no_init A reduce start stop step0 f).
+  Proof.
+    apply (@map_reduce_no_init_spec_count'
+             A reduce start stop step0 f
+             (fun n i v => P n i v /\ (Nat.pred n <=? (if start + step <? stop then (1 + Z.to_nat ((i - (start + step)) // step : int)) else 0)) = true)).
+    all: intros; destruct_head'_and; split; auto.
+    all: cbn [Nat.pred] in *.
+    1: apply Hstep; auto.
+    all: cbv [Classes.leb Classes.ltb nat_has_ltb nat_has_leb int_has_ltb int_has_leb Classes.eqb int_has_eqb Classes.add int_has_add nat_has_add Classes.mul int_has_mul] in *.
+    all: repeat match goal with H : _ |- _ => progress fold step in H end.
+    all: break_innermost_match; try lia.
+    all: lazymatch goal with
+         | [ H : (?x <=? ?y)%nat = true |- (?x <? ?y)%nat = true ]
+           => assert (x = y \/ (x <? y) = true)%nat by lia;
+              destruct_head'_or; try assumption; []
+         | _ => idtac
+         end.
+    2: {
+  *)
   Lemma map_reduce_no_init_spec {A reduce start stop step0 f} (P : int -> _ -> Prop)
     (step : int := if (step0 =? 0) then 1 else step0)
     (Hinit : P (start + step) (f start))
@@ -419,6 +444,37 @@ Module Reduction.
     cbv [Classes.sub Classes.mul Classes.zero Classes.add Classes.ltb Classes.leb Classes.one Classes.int_div int_has_int_div int_has_sub int_has_ltb int_has_add int_has_mul int_has_leb] in *.
     break_match; break_innermost_match_hyps; auto.
     all: cbv [argmax_]; cbn [fst snd]; rewrite Hltb_max_compat; cbv [Classes.ltb]; break_innermost_match; try reflexivity.
+    all: rewrite IH; reflexivity.
+  Qed.
+
+  Lemma argmin_min_equiv
+    {A} {lebA : has_leb A}
+    {minA : has_min A}
+    {start stop step f}
+    (Hleb_min_compat : forall x y : A, Classes.min x y = if x <=? y then x else y)
+    : @min A minA start stop step f = f (@argmin A lebA start stop step f).
+  Proof.
+    cbv [min argmin].
+    cbv [map_reduce_no_init for_loop_lt Fix Classes.eqb int_has_eqb Classes.one Classes.zero int_has_one int_has_zero Classes.leb Classes.leb int_has_leb int_has_leb int_has_leb nat_has_zero nat_has_one Classes.add int_has_add] in *.
+    set (step' := if _ : bool then _ else step).
+    set (f' := fun (i : int) continue state => _) at 1.
+    set (wf := Acc_intro_generator _ _ _); clearbody wf.
+    set (start' := (start + step')%uint63) in *.
+    set (v := (start, f start)).
+    change (f start) with (snd v).
+    assert (Hv : snd v = f (fst v)) by reflexivity.
+    destruct v as [v fv]; cbn [snd fst] in *; subst.
+    replace start with (start' - step')%uint63 by (subst start'; lia).
+    clearbody start'; clear start; rename start' into start.
+    revert start wf v.
+    fix IH 2.
+    intros ? [wf]; intros; cbn [Fix_F]; cbv [Acc_inv].
+    unfold f' at 1.
+    set (wf' := wf _); specialize (fun y => IH _ (wf' y)); clearbody wf'; clear wf.
+    cbv [Monad.bind run_body LoopNotation.get LoopBody_Monad bind LoopNotation.set LoopNotation.update].
+    cbv [Classes.sub Classes.mul Classes.zero Classes.add Classes.leb Classes.leb Classes.one Classes.int_div int_has_int_div int_has_sub int_has_leb int_has_add int_has_mul int_has_leb] in *.
+    break_match; break_innermost_match_hyps; auto.
+    all: cbv [argmin_]; cbn [fst snd]; rewrite Hleb_min_compat; cbv [Classes.leb]; break_innermost_match; try reflexivity.
     all: rewrite IH; reflexivity.
   Qed.
 
