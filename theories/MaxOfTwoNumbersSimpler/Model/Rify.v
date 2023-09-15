@@ -30,7 +30,7 @@ Module Model.
     (logits1 := logits (use_checkpoint:=use_checkpoint1) tokens1)
     (logits2 := logits (use_checkpoint:=use_checkpoint2) tokens2)
     : Tensor.eqfR
-        (fun (x:binary_float prec emax) (y:R) => (abs ((x:R) - y) <=? (logit_rounding_error:R)) = true)
+        (fun (x:R) (y:binary_float prec emax) => (abs (x - (y:R)) <=? (logit_rounding_error:R)) = true)
         logits1 logits2.
   Proof.
     intro i.
@@ -64,10 +64,10 @@ Module Model.
       exact 1%positive.
       reflexivity. }
     let v := open_constr:(_) in
-    replace sum1 with v.
+    replace sum2 with v.
     2: {
       repeat match goal with H : _ |- _ => assert_fails constr_eq H default_nan; clear H end.
-      lazymatch (eval cbv [sum1] in sum1) with
+      lazymatch (eval cbv [sum2] in sum2) with
       | Wf_Uint63.Reduction.sum ?start ?stop ?step (fun i => ?mul (@?f i) (@?g i))
         => pose [seq (Binary.BSN2B _ _ default_nan (f (start + step * ((i:nat):PrimInt63.int))%core)) | i <- iota 0 (Z.to_nat (Uint63.to_Z ((stop - start) // step : PrimInt63.int))%core) ] as fs;
            pose [seq (Binary.BSN2B _ _ default_nan (g (start + step * ((i:nat):PrimInt63.int))%core)) | i <- iota 0 (Z.to_nat (Uint63.to_Z ((stop - start) // step : PrimInt63.int))%core) ] as gs;
@@ -75,16 +75,16 @@ Module Model.
       end.
       transitivity (Binary.B2BSN _ _ dotp).
       reflexivity.
-      subst sum1 dotp.
+      subst sum2 dotp.
       cbv [dotprodF].
       admit. }
     cbv beta.
     let v := open_constr:(_) in
-    replace sum2 with v.
+    replace sum1 with v.
     2: {
       repeat match goal with H : _ |- _ => clear H end.
       Print dotprodR.
-      lazymatch (eval cbv [sum2] in sum2) with
+      lazymatch (eval cbv [sum1] in sum1) with
       | Wf_Uint63.Reduction.sum ?start ?stop ?step (fun i => ?mul (@?f i) (@?g i))
         => pose [seq ((f (start + step * ((i:nat):PrimInt63.int))%core)) | i <- iota 0 (Z.to_nat (Uint63.to_Z ((stop - start) // step : PrimInt63.int))%core) ] as fs;
            pose [seq ((g (start + step * ((i:nat):PrimInt63.int))%core)) | i <- iota 0 (Z.to_nat (Uint63.to_Z ((stop - start) // step : PrimInt63.int))%core) ] as gs;
@@ -92,7 +92,7 @@ Module Model.
       end.
       transitivity dotp.
       reflexivity.
-      subst sum2 dotp.
+      subst sum1 dotp.
       cbv [dotprodR].
       admit. }
     cbv beta.
@@ -100,8 +100,8 @@ Module Model.
     apply Rle_bool_true.
     Set Printing Coercions.
     lazymatch goal with
-    | [ |- ?R (Rabs (?sub (?f (?plus ?x ?y)) (?plus' ?x' ?y'))) ?small ]
-      => cut (R (Rabs (sub (f x) x')) small);
+    | [ |- ?R (Rabs (?sub (?plus' ?x' ?y') (?f (?plus ?x ?y)))) ?small ]
+      => cut (R (Rabs (sub x' (f x))) small);
          [ generalize x x' small; replace y with (Prim2B 0); replace y' with R0 | ]
     end.
     (* https://github.com/VeriNum/LAProof/blob/main/accuracy_proofs/float_acc_lems.v
@@ -113,7 +113,7 @@ BPLUS_B2R_zero_r *)
     rewrite Binary.B2R_B2BSN.
     epose Rabs_triang.
     lazymatch goal with
-    | [ |- ?R (Rabs (?sub (?b2r (dotprodF ?x ?x')) ?y)) ?small ]
+    | [ |- ?R (Rabs (?sub ?y (?b2r (dotprodF ?x ?x')))) ?small ]
       => epose proof (@dotprod_forward_error _ Tdouble x x');
          destruct (@dotprod_mixed_error _ Tdouble x x')
     end.
@@ -201,7 +201,7 @@ BPLUS_B2R_zero_r *)
     (acc1 := acc_fn (use_checkpoint:=use_checkpoint1) logits1 tokens1)
     (acc2 := acc_fn (use_checkpoint:=use_checkpoint2) logits2 tokens2)
     : Tensor.eqfR
-        (fun (x:binary_float prec emax) (y:R) => (abs ((x:R) - y) <=? (total_rounding_error:R)) = true)
+        (fun (x:R) (y:binary_float prec emax) => (abs (x - (y:R)) <=? (total_rounding_error:R)) = true)
         acc1 acc2.
   Proof.
     intro i.
@@ -220,12 +220,13 @@ BPLUS_B2R_zero_r *)
     (acc1 := acc_fn (use_checkpoint:=use_checkpoint1) logits1 tokens1)
     (acc2 := acc_fn (use_checkpoint:=use_checkpoint2) logits2 tokens2)
     : Tensor.eqfR
-        (fun (x:binary_float prec emax) (y:R) => (abs ((x:R) - y) <=? (total_rounding_error:R)) = true)
+        (fun (x:R) (y:binary_float prec emax) => (abs (x - (y:R)) <=? (total_rounding_error:R)) = true)
         acc1 acc2.
   Proof.
     intro i.
     rewrite <- (acc_fn_equiv_bounded_no_checkpoint i).
-    do 2 f_equal.
+    apply f_equal2; [ | reflexivity ].
+    apply f_equal.
     apply f_equal2.
     all: repeat match goal with H := _ |- _ => subst H end.
     all: try apply f_equal.
@@ -247,7 +248,7 @@ BPLUS_B2R_zero_r *)
     (resid_err1 := Unembed.forward resid_postembed1)
     (resid_err2 := Unembed.forward resid_postembed2)
     : Tensor.eqfR
-        (fun (x:binary_float prec emax) (y:R) => (abs ((x:R) - y) <=? (residual_error_rounding_error:R)) = true)
+        (fun (x:R) (y:binary_float prec emax) => (abs (x - (y:R)) <=? (residual_error_rounding_error:R)) = true)
         resid_err1
         resid_err2.
   Proof.
@@ -265,13 +266,14 @@ BPLUS_B2R_zero_r *)
     (resid_err1 := Unembed.forward resid_postembed1)
     (resid_err2 := Unembed.forward resid_postembed2)
     : Tensor.eqfR
-        (fun (x:binary_float prec emax) (y:R) => (abs ((x:R) - y) <=? (residual_error_rounding_error:R)) = true)
+        (fun (x:R) (y:binary_float prec emax) => (abs (x - (y:R)) <=? (residual_error_rounding_error:R)) = true)
         resid_err1
         resid_err2.
   Proof.
     intro i.
     rewrite <- (all_tokens_residual_error_equiv_bounded_no_checkpoint i).
-    do 2 f_equal.
+    apply f_equal2; [ | reflexivity ].
+    apply f_equal.
     apply f_equal2.
     all: repeat match goal with H := _ |- _ => subst H end.
     all: try apply f_equal.
@@ -281,5 +283,19 @@ BPLUS_B2R_zero_r *)
     all: eapply logits_Proper_dep.
     all: try solve [ repeat intro; subst; constructor ].
     all: try now apply all_tokens_Proper.*)
+  Admitted.
+
+  Lemma logit_delta_equiv_bounded
+    {use_checkpoint1 use_checkpoint2}
+    (tokens1 := all_tokens (use_checkpoint:=use_checkpoint1))
+    (tokens2 := all_tokens (use_checkpoint:=use_checkpoint2))
+    (logits1 := HookedTransformer.logits (use_checkpoint:=use_checkpoint1) tokens1)
+    (logits2 := HookedTransformer.logits (use_checkpoint:=use_checkpoint2) tokens2)
+    (logit_delta1 := logit_delta (use_checkpoint:=use_checkpoint1) tokens1 logits1)
+    (logit_delta2 := logit_delta (use_checkpoint:=use_checkpoint2) tokens2 logits2)
+    : (fun (x:R) (y:binary_float prec emax) => (abs (x - (y:R)) <=? (logit_delta_rounding_error:R)) = true)
+        logit_delta1
+        logit_delta2.
+  Proof.
   Admitted.
 End Model.

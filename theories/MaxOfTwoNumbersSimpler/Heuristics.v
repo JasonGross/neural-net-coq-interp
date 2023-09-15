@@ -8,6 +8,7 @@ Import ListNotations.
 #[local] Set Warnings Append "-inexact-float".
 Definition total_rounding_error : float := 1e-5. (* XXX FIXME this is arbitrary and needs to be refined and proven *)
 Definition logit_rounding_error : float := 1e-5.
+Definition logit_delta_rounding_error : float := 1e-5.
 Definition residual_error_rounding_error : float := 1e-5.
 
 (*

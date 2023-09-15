@@ -27,8 +27,10 @@ theories/MaxOfTwoNumbersSimpler/Model/ExtraComputations.v
 theories/MaxOfTwoNumbersSimpler/Model/Flocqify.v
 theories/MaxOfTwoNumbersSimpler/Model/Instances.v
 theories/MaxOfTwoNumbersSimpler/Model/Rify.v
+theories/MaxOfTwoNumbersSimpler/Model/ExtraComputations/Flocqify.v
 theories/MaxOfTwoNumbersSimpler/Model/ExtraComputations/Instances.v
 theories/MaxOfTwoNumbersSimpler/Theorems/Attempt_01_BruteForce.v
+theories/MaxOfTwoNumbersSimpler/Theorems/Attempt_01b_logit_delta.v
 theories/MaxOfTwoNumbersSimpler/Theorems/Attempt_02_SplitAttention.v
 theories/MaxOfTwoNumbersUndertrainedSimpler/Heuristics.v
 theories/MaxOfTwoNumbersUndertrainedSimpler/Model.v
@@ -53,6 +55,7 @@ theories/Torch/Slicing/Instances.v
 theories/Torch/Tensor/Instances.v
 theories/Torch/Tensor/Proofs.v
 theories/TrainingComputations/interp_max_utils.v
+theories/TrainingComputations/interp_max_utils/Flocqify.v
 theories/TrainingComputations/interp_max_utils/Instances.v
 theories/TransformerLens/HookedTransformer.v
 theories/TransformerLens/HookedTransformer/Config.v

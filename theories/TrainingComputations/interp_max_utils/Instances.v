@@ -40,3 +40,5 @@ Module ModelComputationsInstances (cfg : Config) (Import Model : ModelSig cfg) (
         end.
   Qed.
 End ModelComputationsInstances.
+
+Module Type ModelComputationsInstancesSig (cfg : Config) (Model : ModelSig cfg) (ModelInstances : ModelInstancesSig cfg Model) (ModelComputations : ModelComputationsSig cfg Model) := Nop <+ ModelComputationsInstances cfg Model ModelInstances ModelComputations.

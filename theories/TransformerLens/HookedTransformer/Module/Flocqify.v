@@ -99,3 +99,5 @@ Module ModelFlocqify (cfg : Config) (Model : ModelSig cfg) (ModelInstances : Mod
   End HookedTransformer.
   Export (hints) HookedTransformer.
 End ModelFlocqify.
+
+Module Type ModelFlocqifySig (cfg : Config) (Model : ModelSig cfg) (ModelInstances : ModelInstancesSig cfg Model) := Nop <+ ModelFlocqify cfg Model ModelInstances.
