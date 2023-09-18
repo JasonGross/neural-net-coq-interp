@@ -1,6 +1,6 @@
 From Coq Require Import Zify ZifyUint63 Bool Uint63 ZArith Wellfounded Wf_Z Wf_nat Lia Setoid Morphisms.
 From NeuralNetInterp.Util Require Import Monad Notations Arith.Classes Arith.Instances Arith.Classes.Laws Arith.Instances.Laws Arith.Instances.Zify Default.
-From NeuralNetInterp.Util.Tactics Require Import BreakMatch DestructHead UniquePose.
+From NeuralNetInterp.Util.Tactics Require Import BreakMatch DestructHead UniquePose SpecializeBy.
 From NeuralNetInterp.Util Require Import Wf_Uint63.
 Import Arith.Classes Arith.Instances.Uint63.
 #[local] Open Scope core_scope.
@@ -293,229 +293,255 @@ Module Reduction.
   Definition in_bounds (start stop step i : int) : bool
     := ((start <=? i) && ((i =? start) || (i <? stop)) && (((i - start) mod step) =? 0)).
 
-  Definition in_bounds_alt (start stop step i : int)
-    := (exists n : nat,
-           (n <= Nat.pred (S (if start + step <? stop then (1 + Z.to_nat ((stop - (start + step) - 1) // step : int)) else 0)))
-           /\ i = start + step * Uint63.of_Z n).
+  Definition in_bounds_alt_at (start stop step i : int) (n : nat)
+    := (n <= (if start + step <? stop then (1 + Z.to_nat ((stop - (start + step) - 1) // step : int)) else 0))
+       /\ i = start + step * Uint63.of_Z n.
 
-  Lemma argmax_gen_spec {A} {ltbA : has_ltb A} {ltbA_trans : @Transitive A Classes.ltb} {ltbA_irref : @Irreflexive A Classes.ltb} {ltbA_total : Antisymmetric A (@eq A) (fun x y => negb (Classes.ltb x y))}
-    {start stop step0 f i v}
+  Definition in_bounds_alt (start stop step i : int)
+    := exists n : nat, in_bounds_alt_at start stop step i n.
+
+  #[local] Ltac t_argmaxmin_step_interesting_transitivity_reasoning _ :=
+    match goal with
+    | [ H : (?x <? ?y) = true \/ _, H' : (?y <? ?z) = true |- (?x <? ?z) = true \/ _ ]
+      => (* The main driver of the interesting bit of this lemma, the transitivity part *)
+        left; destruct H as [H|H]; [ change (is_true (x <? z)); etransitivity; eassumption | ]
+    | [ H : (?x <? ?y) = true, H' : ?x' = ?x |- (?x' <? ?y) = true ]
+      => rewrite H'
+    | [ H : (?x <? ?y) = false |- (?y <? ?x) = true \/ _ ]
+      => let H' := fresh in
+         destruct (y <? x) eqn:H';
+         [ left; reflexivity
+         | right;
+           let H'' := fresh in
+           assert (H'' : x = y)
+             by (now apply antisymmetry; first [ rewrite H | rewrite H' ]);
+           try first [ rewrite !H'' | rewrite <- !H'' ] ]
+    | [ H_asym : Asymmetric _, H : (?x <=? ?y) = false |- is_true (?y <=? ?x) ]
+      => let H' := fresh in
+         destruct (y <=? x) eqn:H';
+         [ reflexivity
+         | exfalso; apply (H_asym x y); cbv beta;
+           try first [ rewrite H | rewrite H' ] ]
+    | [ H : (?y <=? ?x) = false, H' : (?y <=? ?z) = true |- (?x <=? ?z) = true ]
+      => change (is_true (x <=? z)); etransitivity; [ clear H' | exact H' ]
+    | [ H : (?x <=? ?y) = true, H' : (?y <=? ?z) = true, H'' : (?x <=? ?z) = false |- _ ]
+      => cut (is_true (x <=? z));
+         [ now rewrite H''
+         | etransitivity; (exact H + exact H') ]
+    end.
+
+  #[local] Ltac t_argmaxmin_step _
+    := first [ progress destruct_head'_and
+             | progress destruct_head'_ex
+             | progress destruct_head' iff
+             | progress cbn [fst snd] in *
+             | progress subst
+             | progress intros
+             | progress break_innermost_match_hyps_step
+             | progress rewrite nat_N_Z in *
+             | progress rewrite Nat2Z.inj_succ in *
+             | progress specialize_by_assumption
+             | progress specialize_by lia
+             | reflexivity
+             | progress change (of_Z (Z.of_nat 0)) with 0%uint63 in *
+             | progress change PrimInt63.mul with (Classes.mul (A:=int)) in *
+             | t_argmaxmin_step_interesting_transitivity_reasoning ()
+             | match goal with
+               | [ H : context[Nat.iter 0] |- _ ] => cbn in *
+               | [ |- context[Nat.iter 0] ] => cbn in *
+               | [ H : (_, _) = (_, _) |- _ ] => inversion H; clear H
+               | [ H : forall i v, (_, _) = (i, v) -> _ |- _ ] => specialize (H _ _ eq_refl)
+               | [ H : forall x y z, _ = (x, y, z) -> _ |- _ ] => specialize (H _ _ _ eq_refl)
+               | [ H : ?x <= 0 |- _ ] => assert (x = 0); [ clear -H; generalize dependent x; cbv; intros; lia | clear H ]
+               | [ |- context[of_Z ?x] ] => change (of_Z x) with 0%uint63 in *
+               | [ |- context[(?x * 0%uint63)] ] => replace (x * 0%uint63) with 0%uint63 by (cbv [Classes.mul int_has_mul]; lia)
+               | [ |- context[(0%uint63 * ?x)] ] => replace (0%uint63 * x) with 0%uint63 by (cbv [Classes.mul int_has_mul]; lia)
+               | [ |- context[(?x + 0)%uint63] ] => replace (x + 0)%uint63 with x by lia
+               | [ H : context[(?x * 0%uint63)] |- _ ] => replace (x * 0%uint63) with 0%uint63 in * by (cbv [Classes.mul int_has_mul]; lia)
+               | [ H : context[(?x + 0%uint63)] |- _ ] => replace (x + 0%uint63) with x in * by (cbv [Classes.add int_has_add]; lia)
+               | [ |- context[of_Z (Z.succ ?x)] ] => replace (of_Z (Z.succ x)) with (1 + of_Z x)%uint63 by lia
+               | [ |- context[((1 + ?x)%uint63 * ?y)] ]
+                 => replace ((1 + x)%uint63 * y) with (y + x * y)%uint63
+                   by (cbv [Classes.add Classes.mul Classes.one int_has_add int_has_mul int_has_one]; generalize x y; clear; intros; nia)
+               | [ |- context[(?y * (1 + ?x)%uint63)] ]
+                 => replace (y * (1 + x)%uint63) with (y + x * y)%uint63
+                   by (cbv [Classes.add Classes.mul Classes.one int_has_add int_has_mul int_has_one]; generalize x y; clear; intros; nia)
+               | [ |- context[(?x + (?y + ?z')%uint63)] ]
+                 => replace (x + (y + z')%uint63) with (x + y + z') in *
+                     by (cbv [Classes.add Classes.mul int_has_add int_has_mul]; lia)
+               | [ |- (?x <? ?x) = true \/ _ ] => right
+               | [ |- (?x <=? ?x)%uint63 = true ] => clear; lia
+               | [ |- exists n : nat, n <= 0 /\ _ ] => exists 0
+               | [ H : context[let '(a, b) := ?x in _] |- _ ] => destruct x eqn:?
+               | [ |- exists n0, _ /\ ?start + ?step + of_Z (Z.of_nat ?n) * ?step = ?start + ?step * of_Z (Z.of_N (N.of_nat n0)) /\ _ ]
+                 => exists (S n)
+               | [ |- exists n0, _ /\ ?start + ?step * of_Z (Z.of_nat ?n) = ?start + ?step * of_Z (Z.of_N (N.of_nat n0)) /\ _ ]
+                 => exists n
+               | [ H : forall n0, _ /\ ?start + ?step + of_Z (Z.of_nat ?n) * ?step = ?start + ?step * of_Z (Z.of_N (N.of_nat n0)) -> _ |- _ ]
+                 => specialize (fun pf1 pf2 => H (S n) (conj pf1 pf2))
+               | [ H : forall n0, _ /\ ?start + ?step * of_Z (Z.of_nat ?n) = ?start + ?step * of_Z (Z.of_N (N.of_nat n0)) -> _ |- _ ]
+                 => specialize (fun pf1 pf2 => H n (conj pf1 pf2))
+               | [ H : forall n0, _ /\ ?start = ?start + ?step * of_Z (Z.of_N (N.of_nat n0)) -> _ |- _ ]
+                 => specialize (fun pf1 pf2 => H O (conj pf1 pf2))
+               | [ ltbA_irref : @Irreflexive ?A _, H : @Classes.ltb ?A ?ltbA ?x ?x = true \/ _ |- _ ]
+                 => destruct H as [H|H]; [ exfalso; eapply ltbA_irref, H | ]
+               | [ H : ?x <= S ?n, H' : ?x <= ?n -> _ |- _ ]
+                 => cut (x = S n \/ x <= n); [ clear H; intros [H|H] | lia ]
+               | [ |- (?x <=? ?x) = true ] => change (is_true (x <=? x)); generalize x; reflexivity
+               | [ |- (?x <=? ?x) = true ] => generalize x; cbv; clear; intros; lia
+               | [ H : S ?x <= ?x -> _ |- _ ] => clear H
+               | [ H : ?x = ?x |- _ ] => clear H
+               | [ H : (?x <=? ?x) = true |- _ ] => clear H
+               | [ H : ?x <= ?x |- _ ] => clear H
+               end
+             | apply conj; intros
+             | solve [ auto ]
+             | cbv [Classes.add Classes.mul int_has_add int_has_mul]; lia ].
+  #[local] Ltac saturate_argminmax_step _ :=
+    match goal with
+    | [ H : forall j n, _ -> _ \/ (?f j = ?f _ /\ _), H' : context[?f ?jv] |- _ ]
+      => unique pose proof (H jv)
+    | [ H : forall j n, _ -> _ \/ (?f j = ?f _ /\ _) |- context[?f ?jv] ]
+      => unique pose proof (H jv)
+    | [ H : forall j n, _ -> (?f _ <=? ?f j) = true /\ _, H' : context[?f ?jv] |- _ ]
+      => unique pose proof (H jv)
+    | [ H : forall j n, _ -> (?f _ <=? ?f j) = true /\ _ |- context[?f ?jv] ]
+      => unique pose proof (H jv)
+    end.
+
+  Lemma argmax_gen_spec_let {A} {ltbA : has_ltb A} {ltbA_trans : @Transitive A Classes.ltb} {ltbA_irref : @Irreflexive A Classes.ltb} {ltbA_total : Antisymmetric A (@eq A) (fun x y => negb (Classes.ltb x y))}
+    {start stop step0 f}
     (step : int := if (step0 =? 0) then 1 else step0)
-    : map_reduce_no_init (@argmax_ int A ltbA) start stop step0 (fun i : int => (i, f i)) = (i, v)
-      <-> (v = f i
-           /\ in_bounds_alt start stop step i
-           /\ forall j,
-              in_bounds_alt start stop step j
-              -> (((f j <? f i) = true)
-                  \/ (f j = f i /\ (i <=? j) = true))).
+    : let '(i, v) := map_reduce_no_init (@argmax_ int A ltbA) start stop step0 (fun i : int => (i, f i)) in
+      v = f i
+      /\ (exists n : nat,
+             (n <= Nat.pred (S (if start + step <? stop then (1 + Z.to_nat ((stop - (start + step) - 1) // step : int)) else 0)))
+             /\ (i = start + step * Uint63.of_Z n
+                 /\ forall j (n' : nat),
+                    ((n' <= Nat.pred (S (if start + step <? stop then (1 + Z.to_nat ((stop - (start + step) - 1) // step : int)) else 0)))
+                     /\ j = start + step * Uint63.of_Z n')
+                    -> (((f j <? f i) = true)
+                        \/ (f j = f i /\ (n <= n'))))).
   Proof.
     rewrite map_reduce_no_init_spec_eq_Nat_iter.
     cbv [in_bounds_alt argmax_]; cbn [Nat.pred snd fst]; fold step.
+    set (ni := Nat.iter _ _ _).
+    destruct ni as [[i v] ui] eqn:Hn; subst ni; cbn [fst].
+    let G := lazymatch goal with |- ?G => G end in
+    let n := lazymatch type of Hn with context[Nat.iter ?n] => n end in
+    cut (ui = start + step + of_Z n * step /\ G); [ easy | ].
+    revert i v ui Hn.
     break_innermost_match.
     2: cbn.
     1: let v := lazymatch goal with |- context[Nat.iter ?n] => n end in
        set (n := v).
-    1: revert i v; induction n as [|? IH]; intros *.
+    1: induction n as [|? IH]; intros *.
     all: try (rewrite Nat.iter_succ; break_match); destruct_head'_prod; cbn [fst snd] in *.
-    all: try solve [ repeat first [ progress destruct_head'_and
-                                  | progress destruct_head'_ex
-                                  | progress destruct_head' iff
-                                  | progress cbn [fst snd] in *
-                                  | progress subst
-                                  | progress intros
-                                  | match goal with
-                                    | [ H : context[Nat.iter 0] |- _ ] => cbn in *
-                                    | [ |- context[Nat.iter 0] ] => cbn in *
-                                    | [ H : (_, _) = (_, _) |- _ ] => inversion H; clear H
-                                    | [ H : forall i v, (_, _) = (i, v) -> _ |- _ ] => specialize (H _ _ eq_refl)
-                                    | [ H : ?x <= 0 |- _ ] => assert (x = 0); [ clear -H; generalize dependent x; cbv; intros; lia | clear H ]
-                                    | [ |- context[of_Z ?x] ] => change (of_Z x) with 0%uint63 in *
-                                    | [ |- context[(?x * 0)%uint63] ] => replace (x * 0)%uint63 with 0%uint63 by lia
-                                    | [ |- context[(?x + 0)%uint63] ] => replace (x + 0)%uint63 with x by lia
-                                    | [ |- (?x <? ?x) = true \/ _ ] => right
-                                    | [ |- (?x <=? ?x)%uint63 = true ] => clear; lia
-                                    | [ |- exists n : nat, n <= 0 /\ _ ] => exists 0
-                                    end
-                                  | apply conj; intros
-                                  | solve [ auto ] ] ].
-(*    etransitivity; [ etransitivity; [ | eapply IH ] | ].
-    2: {
-    all: repeat first [ progress destruct_head'_and
-                                  | progress destruct_head'_ex
-                      | progress destruct_head'_prod
-                                  | progress destruct_head' iff
-                                  | progress cbn [fst snd] in *
-                      | progress subst
-                      | progress intros
-                                  | match goal with
-                                    | [ H : context[Nat.iter 0] |- _ ] => cbn in *
-                                    | [ |- context[Nat.iter 0] ] => cbn in *
-                                    | [ H : (_, _) = (_, _) |- _ ] => inversion H; clear H
-                                    | [ H : forall i v, (_, _) = (i, v) -> _ |- _ ] => specialize (H _ _ eq_refl)
-                                    | [ H : ?x <= 0 |- _ ] => assert (x = 0); [ clear -H; generalize dependent x; cbv; intros; lia | clear H ]
-                                    | [ |- context[of_Z ?x] ] => change (of_Z x) with 0%uint63 in *
-                                    | [ |- context[(?x * 0)%uint63] ] => replace (x * 0)%uint63 with 0%uint63 by lia
-                                    | [ |- context[(?x + 0)%uint63] ] => replace (x + 0)%uint63 with x by lia
-                                    | [ |- (?x <? ?x) = true \/ _ ] => right
-                                    | [ |- (?x <=? ?x)%uint63 = true ] => clear; lia
-                                    | [ |- exists n : nat, n <= 0 /\ _ ] => exists 0
-                                    | [ H : forall i v, (_, _) = (i, v) <-> _ |- _ ]
-                                      => pose proof (proj1 (H _ _) eq_refl);
-                                         pose proof (fun i v => proj2 (H i v));
-                                         clear H
-                                    | [ H : forall i v, v = _ /\ _ -> _ |- _ ]
-                                      => specialize (fun i pf => H i _ (conj eq_refl pf))
-                                    end
-                                  | apply conj; intros
-                      | solve [ auto ] ].
+    all: repeat t_argmaxmin_step ().
+    all: repeat saturate_argminmax_step ().
+    all: repeat t_argmaxmin_step ().
+  Qed.
 
-    match goal with
-    end.
-    end.
-
-with
-
-    end.
-    6: right; split; try reflexivity
-                       try lia.
-    7:match goal with
-    end.
-        =>
-    7:  { Set Printing Coercions.
-          vm_compute of_Z.
-    7: { change (of_Z 0
-
-    all: subst.
-    all: repeat apply conj; intros.
-    all: auto.
-    7: {
-
-    2: { cbn; split; intro.
-    revert v i; cbv [in_bounds_alt].
-    rewrite map_
-    apply map_reduce_no_init_spec_count with (P:=fun n _ v => forall v' i', v = _ <-> _).
-    all: fold step.
-    all: intros; cbv [argmax_]; cbn [fst snd]; break_innermost_match; split; intros.
-    all: cbv [Classes.one Classes.zero Classes.add Classes.mul nat_has_one int_has_one int_has_add int_has_mul int_has_zero Nat.lt] in *.
-    all: repeat first [ progress subst
-                      | progress change (of_Z 0%nat) with 0%uint63 in *
-                      | progress intros
-                      | reflexivity
-                      | progress cbn [fst snd Nat.pred] in *
-                      | match goal with
-                        | [ H : (_, _) = (_, _) |- _ ] => inversion H; clear H
-                        | [ H : _ /\ _ |- _ ] => destruct H
-                        | [ H : ex _ |- _ ] => destruct H
-                        | [ H : ?x <= 0%nat |- _ ] => assert (x = 0%nat) by lia; subst; clear H
-                        | [ |- context[(?x * 0)%uint63] ] => replace (x * 0)%uint63 with 0%uint63 by lia
-                        | [ |- context[(?x + 0)%uint63] ] => replace (x + 0)%uint63 with x by lia
-                        | [ |- ?x = ?x /\ _ ] => split
-                        | [ |- 0%nat < 1%nat ] => lia
-                        | [ |- _ /\ ?x = ?x ] => split
-                        | [ |- (exists n, n <= 0%nat /\ _) /\ _ ] => split; [ exists 0%nat | ]
-                        | [ |- (?x <? ?x) = true \/ _ ] => right
-                        | [ |- (?x <=? ?x) = true ] => generalize x; cbv; clear; intros; lia
-                        | [ H : _ * _ |- _ ] => destruct H
-                        | [ H : forall v' i', (?i, ?v) = (i', v') <-> _ |- _ ]
-                          => pose proof (proj1 (H _ _) eq_refl);
-                             pose proof (fun v' i' => proj2 (H v' i'));
-                             clear H
-                        | [ H : forall v' i', v' = _ /\ _ -> _ |- _ ] => specialize (fun i' pf => H _ i' (conj eq_refl pf))
-                        | [ |- _ /\ _ ] => split
-                        | [ |- context[(?start + ?step + ?step * of_Z (Z.of_N (N.of_nat ?n')))%uint63] ]
-                          => replace (start + step + step * of_Z (Z.of_N (N.of_nat n')))%uint63
-                            with (start + step * of_Z (Z.of_N (N.of_nat (S n'))))%uint63 in *
-                            by lia
-                        | [ H : context[(?start + ?step + ?step * of_Z (Z.of_N (N.of_nat ?n')))%uint63] |- _ ]
-                          => replace (start + step + step * of_Z (Z.of_N (N.of_nat n')))%uint63
-                            with (start + step * of_Z (Z.of_N (N.of_nat (S n'))))%uint63 in *
-                            by lia
-                        | [ |- exists n, _ /\ (?start + ?step * of_Z (Z.of_N (N.of_nat ?n')) = ?start + ?step * of_Z (Z.of_N (N.of_nat n)))%uint63 ]
-                          => exists n'
-                        | [ H : forall j, ex _ -> (?f j <? ?f ?x) = true \/ _, H' : (?f ?x <? ?f ?y) = true |- (?f ?z <? ?f ?y) = true \/ _ ]
-                          => specialize (fun pf => H z (ex_intro _ _ (conj pf eq_refl)))
-                        | [ H : ?x <= ?y -> _, H' : ?x <= S ?y |- _ ]
-                          => is_var x; destruct (Nat.eq_decidable x (S y)); subst;
-                             [ clear H H'
-                             | assert (x <= y) by lia;
-                               clear H';
-                               specialize (H ltac:(assumption)) ]
-                        | [ H : ?x <= S ?n |- _ ]
-                          => is_var x;
-                             destruct (Nat.eq_dec x (S n)); subst;
-                             [ | assert (x <= n)%nat by lia ];
-                             clear H
-                        end
-                      | lia
-                      | match goal with
-                        | [ H : context[?x = true] |- _ ] => change (x = true) with (is_true x) in H
-                        | [ |- context[?x = true] ] => change (x = true) with (is_true x)
-                        | [ H : is_true (?x <? ?y), H' : is_true (?z <? ?x) \/ (?z = ?x /\ _) |- is_true (?z <? ?y) \/ _ ]
-                          => left; destruct H' as [?|[H' ?]]; [ etransitivity; eassumption | rewrite H'; assumption ]
-                        | [ H : forall j, (exists n0, n0 <= S ?n /\ @?A j n0 = @?B j n0) -> _ |- _ ]
-                          => pose proof (H _ (ex_intro _ (S n) (conj (@Nat.le_refl _) eq_refl)));
-                             let pf := fresh in
-                             pose proof (fun j (pf : exists n0, n0 <= n /\ A j n0 = B j n0)
-                                         => H j ltac:(let n0 := fresh in
-                                                      let H1 := fresh in
-                                                      let H2 := fresh in
-                                                      destruct pf as [n0 [H1 H2]];
-                                                      exists n0; split; [ apply le_S, H1 | apply H2 ]));
-                             clear H
-                        | [ H : forall i, ex _ /\ _ -> _, H' : forall j, ex _ -> _ |- _ ]
-                          => let H'' := fresh in
-                             pose proof ((fun pf => H _ (conj (ex_intro _ _ (conj pf eq_refl)) H')) ltac:(assumption)) as H'';
-                             lazymatch type of H'' with
-                             | (?x, _) = (?x, _) => fail
-                             | (?x, ?y) = (_, _)
-                               => inversion H''; clear H'';
-                                  generalize dependent x; intros; subst
-                             end
-                        | [ HIrr : Irreflexive _, HTrans : Transitive _, H : is_true (?x <? ?y) \/ _, H' : is_true (?y <? ?x) |- _ ]
-                          => destruct H as [H|H]; [ exfalso; clear -H H' HTrans HIrr; eapply HIrr, HTrans; eassumption | ]
-                        | [ H : (?x <? ?y) = false |- is_true (?y <? ?x) \/ _ ]
-                          => destruct (y <? x) eqn:?; [ left | right ]
-                        | [ HIrr : Irreflexive _, HTrans : Transitive _, H : is_true (?x <? ?y), H' : is_true (?y <? ?x) |- _ ]
-                          => exfalso; clear -H H' HTrans HIrr; eapply HIrr, HTrans; eassumption
-                        | [ HAnti : Antisymmetric _ eq _, H : (?x <? ?y) = false, H' : (?y <? ?x) = false |- _ ]
-                          => assert (x = y) by (eapply HAnti; rewrite ?H, ?H'; reflexivity);
-                             clear H H'
-                        end
-                      | congruence ].*)
-  Admitted.
-
-  (*
-  Lemma in_bounds_alt start stop step i
-    : in_bounds start stop step i = true
-      <-> (exists n : nat,
-              (n <= Nat.pred (S (if start + step <? stop then (1 + Z.to_nat ((stop - (start + step) - 1) // step : int)) else 0)))
-              /\ i = start + step * Uint63.of_Z n).
+  Lemma argmin_gen_spec_let {A} {lebA : has_leb A} {lebA_trans : @Transitive A Classes.leb} {lebA_refl : @Reflexive A Classes.leb} {lebA_total : @Asymmetric A (fun x y => negb (Classes.leb x y))}
+    {start stop step0 f}
+    (step : int := if (step0 =? 0) then 1 else step0)
+    : let '(i, v) := map_reduce_no_init (@argmin_ int A lebA) start stop step0 (fun i : int => (i, f i)) in
+      v = f i
+      /\ (exists n : nat,
+             (n <= Nat.pred (S (if start + step <? stop then (1 + Z.to_nat ((stop - (start + step) - 1) // step : int)) else 0)))
+             /\ (i = start + step * Uint63.of_Z n
+                 /\ forall j (n' : nat),
+                    ((n' <= Nat.pred (S (if start + step <? stop then (1 + Z.to_nat ((stop - (start + step) - 1) // step : int)) else 0)))
+                     /\ j = start + step * Uint63.of_Z n')
+                    -> (f i <=? f j) = true
+                       /\ ((f j <=? f i) = true
+                           -> n <= n'))).
   Proof.
-    destruct (start + step <? stop) eqn:Hlt.
-    all: cbv [in_bounds].
-    2: { split; [ intro H; exists 0%nat; split | intros [n H] ].
-         lia.
-         cbv.
-         assert (start
-         lia.
-    { cbv [in_bounds]; split; [ intro H | intros [n H] ].
-    { exists
+    rewrite map_reduce_no_init_spec_eq_Nat_iter.
+    cbv [in_bounds_alt argmin_]; cbn [Nat.pred snd fst]; fold step.
+    set (ni := Nat.iter _ _ _).
+    destruct ni as [[i v] ui] eqn:Hn; subst ni; cbn [fst].
+    let G := lazymatch goal with |- ?G => G end in
+    let n := lazymatch type of Hn with context[Nat.iter ?n] => n end in
+    cut (ui = start + step + of_Z n * step /\ G); [ easy | ].
+    revert i v ui Hn.
+    break_innermost_match.
+    2: cbn.
+    1: let v := lazymatch goal with |- context[Nat.iter ?n] => n end in
+       set (n := v).
+    1: induction n as [|? IH]; intros *.
+    all: try (rewrite Nat.iter_succ; break_match); destruct_head'_prod; cbn [fst snd] in *.
+    all: repeat t_argmaxmin_step ().
+    all: repeat saturate_argminmax_step ().
+    all: repeat t_argmaxmin_step ().
+  Qed.
 
-*)
-  Lemma argmax_spec {A} {ltbA : has_ltb A} {start stop step f v}
-    : @argmax A ltbA start stop step f = v
-      <-> (in_bounds start stop step v = true
-           /\ forall j,
-              in_bounds start stop step j = true
-              -> (((f j <? f v) = true)
-                  \/ (f j = f v /\ (v <=? j) = true))).
+  Lemma argmax_spec {A} {ltbA : has_ltb A} {ltbA_trans : @Transitive A Classes.ltb} {ltbA_irref : @Irreflexive A Classes.ltb} {ltbA_total : Antisymmetric A (@eq A) (fun x y => negb (Classes.ltb x y))}
+    {start stop step0 f v}
+    (step : int := if (step0 =? 0) then 1 else step0)
+    : @argmax A ltbA start stop step0 f = v
+      <-> (exists n,
+              in_bounds_alt_at start stop step v n
+              /\ forall j n',
+                in_bounds_alt_at start stop step j n'
+                -> (((f j <? f v) = true)
+                    \/ (f j = f v /\ n <= n'))).
   Proof.
     cbv [argmax].
-    destruct map_reduce_no_init eqn:H.
-    (*rewrite argmax_gen_spec in H.
-    destruct_head'_and; subst; destruct_head'_ex; destruct_head'_and; subst; cbn [fst snd].*)
-    (* XXX FIXME *)
-  Admitted.
+    generalize (@argmax_gen_spec_let A ltbA ltbA_trans ltbA_irref ltbA_total start stop step0 f).
+    cbv [in_bounds_alt_at].
+    destruct map_reduce_no_init.
+    cbn [Nat.pred fst].
+    fold step.
+    intros [? [n H]]; subst; split; intro H'; subst; [ exists n; repeat apply conj; now apply H | ].
+    repeat (destruct_head'_ex; destruct_head'_and; subst).
+    repeat match goal with
+           | [ H : forall j n, _ /\ _ -> _ |- _ ]
+             => specialize (fun n pf => H _ n (conj pf eq_refl))
+           end.
+    repeat match goal with
+           | [ n : nat, H : forall n' : nat, _ |- _ ] => unique pose proof (H n)
+           end.
+    specialize_by_assumption.
+    destruct_head'_or; destruct_head'_and.
+    all: lazymatch goal with
+         | [ Hirref : Irreflexive _, H : (?x <? ?x) = true |- _ ] => exfalso; eapply Hirref, H
+         | [ Hirref : Irreflexive _, H : (?x <? ?y) = true, H' : (?y <? ?x) = true |- _ ] => exfalso; eapply Hirref; refine (_ : is_true (x <? x)); etransitivity; (exact H + exact H')
+         | [ Hirref : Irreflexive _, H : (?x <? ?y) = true, H' : ?y = ?x |- _ ] => exfalso; rewrite H' in H; eapply Hirref, H
+         | [ Hirref : Irreflexive _, H : (?x <? ?y) = true, H' : ?x = ?y |- _ ] => exfalso; rewrite H' in H; eapply Hirref, H
+         | [ H : ?x <= ?y, H' : ?y <= ?x |- _ ] => assert (x = y) by (clear -H H'; lia); clear H H'; subst; try reflexivity
+         end.
+  Qed.
+
+  Lemma argmin_spec {A} {lebA : has_leb A} {lebA_trans : @Transitive A Classes.leb} {lebA_refl : @Reflexive A Classes.leb} {lebA_total : @Asymmetric A (fun x y => negb (Classes.leb x y))}
+    {start stop step0 f v}
+    (step : int := if (step0 =? 0) then 1 else step0)
+    : @argmin A lebA start stop step0 f = v
+      <-> (exists n,
+              in_bounds_alt_at start stop step v n
+              /\ forall j n',
+                in_bounds_alt_at start stop step j n'
+                -> ((f v <=? f j) = true)
+                   /\ (f j <=? f v -> n <= n')).
+  Proof.
+    cbv [argmin].
+    generalize (@argmin_gen_spec_let A lebA lebA_trans lebA_refl lebA_total start stop step0 f).
+    cbv [in_bounds_alt_at].
+    destruct map_reduce_no_init.
+    cbn [Nat.pred fst].
+    fold step.
+    intros [? [n H]]; subst; split; intro H'; subst; [ exists n; repeat apply conj; now apply H | ].
+    repeat (destruct_head'_ex; destruct_head'_and; subst).
+    repeat match goal with
+           | [ H : forall j n, _ /\ _ -> _ |- _ ]
+             => specialize (fun n pf => H _ n (conj pf eq_refl))
+           end.
+    repeat match goal with
+           | [ n : nat, H : forall n' : nat, _ |- _ ] => unique pose proof (H n)
+           end.
+    repeat (specialize_by_assumption; destruct_head'_and).
+    repeat f_equal; lia.
+  Qed.
 
   Lemma argmax_max_equiv
     {A} {ltbA : has_ltb A}
