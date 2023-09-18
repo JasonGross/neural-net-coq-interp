@@ -2,7 +2,7 @@ From Coq Require Import Zify PreOmega ZifyUint63 Qreals Lqa Lra Reals Floats Sin
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
 From NeuralNetInterp.Util.Tactics Require Import IsFloat IsUint63 BreakMatch DestructHead.
 From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Wf_Uint63.Instances Wf_Uint63.Proofs SolveProperEqRel Default.
-From NeuralNetInterp.Util.Arith Require Import Classes Instances Instances.Reals Classes.Laws Instances.Laws FloatArith.Definitions Reals.Definitions.
+From NeuralNetInterp.Util.Arith Require Import Classes Instances Instances.Reals Classes.Laws Instances.Laws FloatArith.Definitions Reals.Definitions Instances.Reals.Laws.
 From NeuralNetInterp.Torch Require Import Tensor.Instances Slicing.Instances Tensor.Proofs.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Instances.
 From NeuralNetInterp.MaxOfTwoNumbersUndertrainedSimpler Require Import Parameters Model Heuristics TheoremStatement Model.Instances Model.Flocqify Model.Rify.
@@ -439,19 +439,29 @@ Proof.
 
   subst pred_tokens.
   apply Reduction.argmax_spec.
+  exists (Z.to_nat (to_Z true_maximum)).
   split.
   { clear -Hbounds.
     subst true_maximum.
     specialize (Hbounds true_max_i).
-    cbv in *; break_innermost_match; break_innermost_match_hyps.
-    all: repeat match goal with H : _ |- _ => apply eqb_correct in H end.
-    all: subst.
-    all: cbv in *.
-    all: try reflexivity.
-    all: lia. }
+    cbv [Reduction.in_bounds_alt_at].
+    set (k := Z.to_nat _).
+    vm_compute Z.to_nat.
+    set (k' := of_Z _).
+    cbv -[k k'].
+    subst k k'.
+    vm_compute Z.of_N in Hbounds.
+    lia. }
 
-  cbv [Reduction.in_bounds].
-  intros j Hj.
+  cbv [Reduction.in_bounds_alt_at].
+  intros j n [Hn Hj].
+  assert (Hj' : j = n) by (subst; simpl; set (iv := of_Z _); clearbody iv; cbv; lia).
+  clear Hj.
+  vm_compute in Hn.
+  assert (Hn' : n = Z.to_nat (to_Z j))
+    by (subst j;
+        now rewrite of_Z_spec, nat_N_Z, Z.mod_small, Nat2Z.id by (split; lia)).
+  clear Hj'; subst n.
   assert (j = true_maximum \/ j <> true_maximum) by lia.
   destruct_head'_or; subst; [ right; split; try reflexivity; clearbody true_maximum; cbv; lia | ].
   left.

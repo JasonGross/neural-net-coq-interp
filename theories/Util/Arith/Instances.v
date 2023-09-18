@@ -1,4 +1,4 @@
-From Coq Require Import Reals List Floats PArray Sint63 Uint63 Arith PArith NArith ZArith QArith.
+From Coq Require Import QMicromega Reals List Floats PArray Sint63 Uint63 Arith PArith NArith ZArith QArith.
 From NeuralNetInterp.Util.Arith Require Import Classes FloatArith.Definitions QArith ZArith.
 Import ListNotations.
 Set Implicit Arguments.
@@ -139,6 +139,7 @@ Local Open Scope Q_scope.
 #[export] Hint Extern 10 (has_coer_from _ Z ?B) => check_unify_has_coer_from Q : typeclass_instances.
 #[export] Hint Extern 10 (has_coer_to _ ?A Q) => check_unify_has_coer_to Z : typeclass_instances.
 #[export] Instance Q_has_leb : has_leb Q := Qle_bool.
+#[export] Instance Q_has_ltb : has_ltb Q := Qlt_bool.
 #[export] Instance Q_has_eqb : has_eqb Q := Qeq_bool.
 #[export] Instance Q_has_opp : has_opp Q := Qopp.
 #[export] Instance Q_has_add : has_add Q := Qplus.
