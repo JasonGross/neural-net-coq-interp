@@ -42,7 +42,7 @@ Module ModelComputations (cfg : Config) (Import Model : ModelSig cfg).
            := PArray.maybe_checkpoint (correct_logits - predicted_logits) in
          let bigger_than_anything : A
            := Tensor.item (Tensor.max logits_above_correct) in
-         let logits_above_correct : tensor [cfg.d_vocab ^ cfg.n_ctx : N; cfg.n_ctx] A
+         let logits_above_correct : tensor [cfg.d_vocab ^ cfg.n_ctx : N; cfg.d_vocab_out] A
            := fun '(((tt, b), i) as idxs)
               => if i =? Tensor.item indices_of_max.[b,0]
                  then bigger_than_anything

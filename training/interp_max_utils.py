@@ -26,9 +26,9 @@ def logit_delta(model: HookedTransformer, renderer=None, histogram_all_incorrect
     Largest difference between logit(true_max) and logit(y) for y != true_max.
     Complexity: O(d_vocab^n_ctx * fwd_pass)
     fwd_pass = (n_ctx^2 * d_vocab * d_model^2) + (n_ctx * d_vocab * d_model^2)
-    todo fix complexity. 
+    todo fix complexity.
     """
-    
+
     all_tokens = compute_all_tokens(model=model)
     predicted_logits = model(all_tokens)[:,-1,:].detach().cpu()
 
@@ -48,7 +48,6 @@ def logit_delta(model: HookedTransformer, renderer=None, histogram_all_incorrect
     if return_summary:
         return summarize(min_incorrect_logit, name='min(correct logit - incorrect logit)', renderer=renderer, histogram=True)
 
-    else: 
+    else:
         return min_incorrect_logit.min().item()
 # In[ ]:
-
