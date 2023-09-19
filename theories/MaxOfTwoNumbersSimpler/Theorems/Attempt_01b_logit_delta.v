@@ -410,12 +410,38 @@ Proof.
          destruct Hv as [n Hv];
          unshelve (let pf := open_constr:(_) in
                    specialize (H' iv' n pf));
-         [
+         [ subst iv'
          | cbv [Classes.leb R_has_leb is_true] in H';
            rewrite !Rle_bool_iff in H';
            etransitivity; [ eassumption | apply H' ] ]
        | clear H ]
   end.
+  shelve.
+  subst logits_above_correct0; cbv beta in *.
+  break_innermost_match_hyps; cbv [Classes.eqb int_has_eqb] in *.
+  { lia. }
+  exfalso.
+  clear bigger_than_anything.
+  specialize_step i'.
+  specialize_step i'.
+  specialize_step i'.
+  specialize_step i'.
+  subst logits_above_correct; cbv beta in *.
+  subst correct_logits.
+  subst pred_tokens indices_of_max.
+  unshelve erewrite !@Reduction.argmax_max_equiv in *; try typeclasses eauto;
+    [ | now arg_equiv_side () .. ].
+  #[local] Ltac handle_argminmax_step _ :=
+    match goal with H : _ |- _ => handle_argminmax_in H end.
+  #[local] Ltac handle_argminmax _ := repeat handle_argminmax_step ().
+  handle_argminmax ().
+  setoid_rewrite Bool.andb_true_iff in Hbounds.
+  (*split_iff.
+  let H :=
+  handle_argminmax_in H;
+         let H' := lazymatch goal with H' : ex _ |- _ => H' end in
+         destruct H' as [? [? H']];*)
+
 (*  subst pred_tokens.
   2: {
          unshelve (let pf := open_constr:(_) in
