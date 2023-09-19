@@ -410,13 +410,12 @@ Proof.
          destruct Hv as [n Hv];
          unshelve (let pf := open_constr:(_) in
                    specialize (H' iv' n pf));
-         [ subst iv'
+         [ subst iv'; now apply Hv
          | cbv [Classes.leb R_has_leb is_true] in H';
            rewrite !Rle_bool_iff in H';
            etransitivity; [ eassumption | apply H' ] ]
        | clear H ]
   end.
-  shelve.
   subst logits_above_correct0; cbv beta in *.
   break_innermost_match_hyps; cbv [Classes.eqb int_has_eqb] in *.
   { lia. }
