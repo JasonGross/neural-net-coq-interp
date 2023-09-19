@@ -105,6 +105,7 @@ theories/Util/Arith/Instances/Reals.v
 theories/Util/Arith/Instances/Zify.v
 theories/Util/Arith/Instances/Reals/Laws.v
 theories/Util/Arith/Reals/Definitions.v
+theories/Util/Arith/Reals/Instances.v
 theories/Util/Arith/Reals/Proofs.v
 theories/Util/Classes/Morphisms/Dependent.v
 theories/Util/Classes/PrimitiveRelationPairs/Dependent.v

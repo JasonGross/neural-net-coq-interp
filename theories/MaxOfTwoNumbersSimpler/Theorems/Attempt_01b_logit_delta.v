@@ -1,8 +1,8 @@
 From Coq Require Import Field Zify PreOmega ZifyUint63 Qreals Lqa Lra Reals Floats Sint63 Uint63 QArith Lia List PArray Derive.
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
-From NeuralNetInterp.Util.Tactics Require Import IsFloat IsUint63 BreakMatch DestructHead Head.
+From NeuralNetInterp.Util.Tactics Require Import IsFloat IsUint63 BreakMatch DestructHead Head UniquePose.
 From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Wf_Uint63.Instances Wf_Uint63.Proofs SolveProperEqRel Default.
-From NeuralNetInterp.Util.Arith Require Import Classes Instances Instances.Reals Classes.Laws Instances.Laws FloatArith.Definitions Reals.Definitions.
+From NeuralNetInterp.Util.Arith Require Import Classes Instances Instances.Reals Classes.Laws Instances.Laws FloatArith.Definitions Reals.Definitions Instances.Reals.Laws Reals.Proofs Reals.Instances.
 From NeuralNetInterp.Torch Require Import Tensor.Instances Slicing.Instances Tensor.Proofs.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Instances.
 From NeuralNetInterp.MaxOfTwoNumbersSimpler Require Import Parameters Model Heuristics TheoremStatement Model.Instances Model.ExtraComputations Model.ExtraComputations.Flocqify Model.ExtraComputations.Instances Model.Flocqify Model.Rify.
@@ -11,6 +11,7 @@ Import LoopNotation.
 From NeuralNetInterp.MaxOfTwoNumbersSimpler.Computed Require Import logit_delta.
 
 From NeuralNetInterp.Util.Arith Require Import Flocq.Hints.Prim2B.
+Import Instances.Uint63.
 Local Open Scope uint63_scope.
 Local Open Scope core_scope.
 
@@ -67,8 +68,24 @@ Ltac specialize_step i' :=
   match goal with
   | [ |- context[?f i'] ] => is_var f; specialize_step_with f i'
   | [ H := context[?f i'] |- _ ] => is_var f; specialize_step_with f i'
+  | [ H : context[?f i'] |- _ ] => is_var f; specialize_step_with f i'
   end.
 
+#[local] Ltac saturate_mod_pos_bound _ :=
+  repeat match goal with
+    | [ |- context[(?x mod ?y)%Z] ] => unique pose proof (Z.mod_pos_bound x y ltac:(cbv -[Z.lt]; clear; lia))
+    | [ H : context[(?x mod ?y)%Z] |- _ ] => unique pose proof (Z.mod_pos_bound x y ltac:(cbv -[Z.lt]; clear; lia))
+    end.
+
+#[local] Ltac rewrite_mod_mod_small_by_lia _ :=
+  repeat match goal with
+    | [ H : (0 <= ?x mod ?y < ?y)%Z |- context[((?x mod ?y) mod ?z)%Z] ]
+      => rewrite (Z.mod_small (x mod y)%Z z)
+        by (revert H; generalize (x mod y)%Z; clear; cbv -[Z.le Z.lt]; lia)
+    | [ H : (0 <= ?x mod ?y < ?y)%Z, H' : context[((?x mod ?y) mod ?z)%Z] |- _ ]
+      => rewrite (Z.mod_small (x mod y)%Z z) in H'
+          by (revert H; generalize (x mod y)%Z; clear; cbv -[Z.le Z.lt]; lia)
+    end.
 
 Theorem good_accuracy : TheoremStatement.Accuracy.best (* (abs (real_accuracy - expected_accuracy) <? error)%float = true *).
 Proof.
@@ -292,11 +309,249 @@ Proof.
   repeat specialize_step i'.
   do 4 (set (k := of_Z _) in *; vm_compute in k; let kv := (eval cbv delta [k] in k) in is_uint63  kv; subst k).
   vm_compute Uint63.max in *.
+  change pred_logits with (predicted_logits i') in *; clear pred_logits.
+  repeat match goal with
+         | [ H := fun x (_ : ?T) => @?f x |- _ ]
+           => let H' := fresh in
+              rename H into H';
+              pose f as H;
+              change (fun x (_ : T) => H x) in (value of H');
+              subst H'; cbv beta in *
+         end.
+  change true_maximum with (indices_of_max i'); clear true_maximum.
+  destruct_head'_and.
+  #[local] Ltac arg_equiv_side _ :=
+    cbv [Classes.max Classes.min Classes.ltb Classes.leb Classes.eqb
+           has_default_max_leb has_default_min_leb
+           Uint63.max Uint63.min
+           R_has_leb R_has_ltb int_has_leb int_has_ltb];
+    clear; intros; break_innermost_match;
+    rewrite <- ?not_true_iff_false, ?Rle_bool_iff, ?Rlt_bool_iff in *;
+    try lia; try lra.
+  #[local] Ltac handle_argminmax_in H :=
+    match type of H with
+    | context[@Reduction.argmax ?A ?ltbA ?start ?stop ?step ?f]
+      => let am := fresh "v" in
+         let Hv := fresh in
+         remember (@Reduction.argmax A ltbA start stop step f) as am eqn:Hv in *;
+         symmetry in Hv;
+         apply Reduction.argmax_spec in Hv
+    | context[@Reduction.argmin ?A ?lebA ?start ?stop ?step ?f]
+      => let am := fresh "v" in
+         let Hv := fresh in
+         remember (@Reduction.argmin A lebA start stop step f) as am eqn:Hv in *;
+         symmetry in Hv;
+         apply Reduction.argmin_spec in Hv
+    end;
+    change (1%uint63 =? 0) with false in *;
+    cbv beta iota in *.
+  lazymatch goal with
+  | [ H : ?lower <= Reduction.min _ _ _ (fun i => min_incorrect_logit _) |- _ ]
+    => assert (lower <= min_incorrect_logit i');
+       [ erewrite !@Reduction.argmin_min_equiv in *; try typeclasses eauto;
+         [ | now arg_equiv_side () .. ];
+         handle_argminmax_in H;
+         let H' := lazymatch goal with H' : ex _ |- _ => H' end in
+         destruct H' as [? [? H']];
+         unshelve (let pf := open_constr:(_) in
+                   specialize (H' i' (Z.to_nat (Uint63.to_Z i')) pf));
+         [ cbv [Reduction.in_bounds_alt_at]; clear;
+           rewrite ?nat_N_Z, ?Z2Nat.id, ?of_to_Z by lia;
+           cbv [Classes.add Classes.mul int_has_add int_has_mul];
+           match goal with
+           | [ |- context[?v] ]
+             => lazymatch type of v with
+                | Z => idtac
+                | nat => idtac
+                | int => idtac
+                | N => idtac
+                end;
+                lazymatch v with context[i'] => fail | context[if _ then _ else _] => idtac end;
+                let v' := (eval vm_compute in v) in
+                progress change v with v'
+           end;
+           try lia
+         | cbv [Classes.leb R_has_leb is_true] in H';
+           rewrite !Rle_bool_iff in H';
+           etransitivity; [ eassumption | etransitivity; [ apply H' | apply Req_le, f_equal, f_equal ] ];
+           subst i';
+           rewrite ?of_Z_spec;
+           saturate_mod_pos_bound ();
+           rewrite_mod_mod_small_by_lia ();
+           try reflexivity ]
+       | clear H ]
+  end.
+  all: [ > ].
+  match goal with H : Reduction.min _ _ _ _ <= _ |- _ => clear H end.
+  move min_incorrect_logit at bottom.
+  cbv [inject_int] in *.
+  specialize_step i'.
+  specialize_step i'.
+  set (i'' := (i' mod _)%uint63) in *.
+  assert (i' = i'') by (clear; subst i' i''; nia).
+  clearbody i''; subst i''.
+  move indices_of_max at bottom.
+  subst min_incorrect_logit.
+  lazymatch goal with
+  | [ H : ?lower <= Reduction.min _ _ _ (fun i => ?f _) |- ?iv = indices_of_max i' ]
+    => assert (lower <= f iv);
+       [ erewrite !@Reduction.argmin_min_equiv in *; try typeclasses eauto;
+         [ | now arg_equiv_side () .. ];
+         handle_argminmax_in H;
+         let H' := lazymatch goal with H' : ex _ |- _ => H' end in
+         destruct H' as [? [? H']];
+         let Hv := fresh in
+         let iv' := fresh iv in
+         remember iv as iv' eqn:Hv in *;
+         subst iv;
+         handle_argminmax_in Hv;
+         let Hv := lazymatch goal with H : ex _ |- _ => H end in
+         let n := fresh in
+         destruct Hv as [n Hv];
+         unshelve (let pf := open_constr:(_) in
+                   specialize (H' iv' n pf));
+         [
+         | cbv [Classes.leb R_has_leb is_true] in H';
+           rewrite !Rle_bool_iff in H';
+           etransitivity; [ eassumption | apply H' ] ]
+       | clear H ]
+  end.
+(*  subst pred_tokens.
+  2: {
+         unshelve (let pf := open_constr:(_) in
+                   specialize (H' i' (Z.to_nat (Uint63.to_Z i')) pf));
+         [ cbv [Reduction.in_bounds_alt_at]; clear;
+           rewrite ?nat_N_Z, ?Z2Nat.id, ?of_to_Z by lia;
+           cbv [Classes.add Classes.mul int_has_add int_has_mul];
+           match goal with
+           | [ |- context[?v] ]
+             => lazymatch type of v with
+                | Z => idtac
+                | nat => idtac
+                | int => idtac
+                | N => idtac
+                end;
+                lazymatch v with context[i'] => fail | context[if _ then _ else _] => idtac end;
+                let v' := (eval vm_compute in v) in
+                progress change v with v'
+           end;
+           try lia
+         | cbv [Classes.leb R_has_leb is_true] in H';
+           rewrite !Rle_bool_iff in H';
+           etransitivity; [ eassumption | etransitivity; [ apply H' | apply Req_le, f_equal, f_equal ] ];
+           subst i';
+           rewrite ?of_Z_spec;
+           saturate_mod_pos_bound ();
+           rewrite_mod_mod_small_by_lia ();
+           try reflexivity ]
+       | clear H ]
+  end.
+
+  erewrite !@Reduction.argmin_min_equiv in *; try typeclasses eauto;
+    [ | now arg_equiv_side () .. ].
+  subst min
+  specialize_step i'.
+
+  .
+
+   lia.
+   lia.
+   cbv -Classes.
+  clear.
+  cbv -[Z.to_nat
+  2: {
+       2: {
+
+       Search Z.le Z.lt Z.modulo.
+       pose Z.mod_bound_pos
+    Set Printing Coercions.
+
+       Search (to_Z (of_Z _)).
+       rewrite to_of_Z
+    Search Rle eq. lazymatch goal with
+    | [
+
+    1.
+  |
+
+
   subst true_maximum.
-  erewrite Reduction.argmax_max_equiv by reflexivity.
+  unshelve erewrite !@Reduction.argmax_max_equiv; try typeclasses eauto; [ | now arg_equiv_side () .. ].
+  set (true_maximum := Reduction.argmax _ _ _ _).
+  (*
+  subst min_incorrect_logit; cbv beta in *.
+  subst indices_of_max correct_logits logits_above_correct logits_above_correct0; cbv beta in *. *)
+  repeat match goal with
+         | [ H := ?v |- _ ]
+           => let Hv := fresh "H" H in
+              let H' := fresh H in
+              rename H into H';
+              remember H' as H eqn:Hv in *;
+              assert_succeeds (clear H' Hv); subst H'
+         end.
+  unshelve erewrite !@Reduction.argmax_max_equiv, !@Reduction.argmin_min_equiv in *; cbv [IndexType]; try typeclasses eauto; shelve_unifiable; cbv beta iota in *.
+  (*progress unshelve erewrite ?@Reduction.argmax_max_equiv, ?@Reduction.argmin_min_equiv in *.*)
+  all: cbv [IndexType]; try typeclasses eauto; shelve_unifiable; cbv beta iota in *.
+  all: [ >
+       | solve [ cbv [Classes.max Classes.min Classes.ltb Classes.leb Classes.eqb
+                        has_default_max_leb has_default_min_leb
+                        Uint63.max Uint63.min
+                        R_has_leb R_has_ltb int_has_leb int_has_ltb];
+                 clear; intros; break_innermost_match;
+                 rewrite <- ?not_true_iff_false, ?Rle_bool_iff, ?Rlt_bool_iff in *;
+                 try lia; try lra ] .. ].
+  repeat first [ match goal with
+                 | [ H : context[@Reduction.argmax ?A ?ltbA ?start ?stop ?step ?f] |- _ ]
+                   => let am := fresh "v" in
+                      let Hv := fresh in
+                      remember (@Reduction.argmax A ltbA start stop step f) as am eqn:Hv in *;
+                      symmetry in Hv;
+                      apply Reduction.argmax_spec in Hv
+                 | [ H : context[@Reduction.argmin ?A ?lebA ?start ?stop ?step ?f] |- _ ]
+                   => let am := fresh "v" in
+                      let Hv := fresh in
+                      remember (@Reduction.argmin A lebA start stop step f) as am eqn:Hv in *;
+                      symmetry in Hv;
+                      apply Reduction.argmin_spec in Hv
+                 (*| [ H : context[if ?b then _ else _] |- _ ]
+                   => let bv := (eval vm_compute in b) in
+                      is_constructor bv;
+                      progress change b with bv in * *)
+                 end
+               | progress change (1%uint63 =? 0) with false in *
+               | progress cbv beta iota in *
+               | progress destruct_head'_ex
+               | progress destruct_head'_and
+               | match goal with
+                 | [ H : ?x = ?y, H' : context[?y] |- _ ] => rewrite <- H in H'
+                 | [ H : ?x = ?y |- _ ] => is_var x; is_var y; subst y
+                 end ].
+  move pred_tokens at bottom.
+  Set Printing Coercions.
+  match goal with
+      end.
+  rewrite <- Hbigger_than_anything in *.
+  match goal with
+  end.
+       lazymatch bv with true => idtac | false => idtac end
+  Set Printing All.
+  exact _.
+       remember (@Reduction.argmax A ltbA start stop step f
+    => epose proof (Reduction.argmax_spec (A:=A) (ltbA:=ltbA) (start:=start) (stop:=stop) (step0:=step) (f:=f))
+  end.
+  erewrite Reduction.argmax_max_equiv in Hbigger_than_anything.
+
+
+  match goal with
+  | [ |-
+  move all
+
+  Set Printing Coercions.
+  Search of_Z to_Z.
+  repeat match goal with
+         | [
   move all_tokens at bottom.
   move i' at bottom.
-  change pred_logits with (predicted_logits i') in *; clear pred_logits.
   move predicted_logits at bottom.
 
 (*
@@ -1785,5 +2040,5 @@ Proof.
     lazymatch (eval cbv [H] in H) with
     | fun i : RawIndexType
 *)
-*)*)*)*)*)
+*)*)*)*)*)*)
 Abort.

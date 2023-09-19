@@ -250,6 +250,7 @@ Module Sint63.
   #[export] Instance int_ltb_Asymmetric : Asymmetric (ltb (A:=int)) | 10.
   Proof. cbv [ltb int_has_ltb is_true]; intros ??; rewrite !ltb_spec; lia. Qed.
 End Sint63.
+Export (hints) Sint63.
 
 Module Uint63.
   Import Instances.Uint63 ZifyUint63.
@@ -274,6 +275,7 @@ Module Uint63.
   #[export] Instance int_ltb_Asymmetric : Asymmetric (ltb (A:=int)) | 10.
   Proof. cbv [ltb int_has_ltb is_true]; intros ???; lia. Qed.
 End Uint63.
+Export (hints) Uint63.
 
 #[export] Instance R_add_0_l : LeftId (@eq R) add 0 := Rplus_0_l.
 #[export] Instance R_add_0_r : RightId (@eq R) add 0 := Rplus_0_r.
