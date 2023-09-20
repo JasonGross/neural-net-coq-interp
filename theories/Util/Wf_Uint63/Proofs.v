@@ -2,6 +2,7 @@ From Coq Require Import Zify ZifyUint63 Bool Uint63 ZArith Wellfounded Wf_Z Wf_n
 From NeuralNetInterp.Util Require Import Monad Notations Arith.Classes Arith.Instances Arith.Classes.Laws Arith.Instances.Laws Arith.Instances.Zify Default.
 From NeuralNetInterp.Util.Tactics Require Import BreakMatch DestructHead UniquePose SpecializeBy.
 From NeuralNetInterp.Util Require Import Wf_Uint63.
+From NeuralNetInterp.Util.Compat Require Import PeanoNat.
 Import Arith.Classes Arith.Instances.Uint63.
 #[local] Open Scope core_scope.
 #[local] Coercion is_true : bool >-> Sortclass.
