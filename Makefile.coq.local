@@ -15,5 +15,10 @@ theorem-statements: $(filter theories/%/TheoremStatement.vo,$(VFILES:.v=.$(VO)))
 .PHONY: utils
 utils: $(filter-out $(addsuffix %,$(dir $(wildcard theories/*/TheoremStatement.v))),$(VFILES:.v=.$(VO)))
 
+EXTRA_COQ_CI_TARGETS := \
+	theories/Util/Wf_Uint63/Proofs.vo \
+	theories/Util/Wf_Uint63/Instances.vo \
+	#
+
 .PHONY: coq-ci-target
-coq-ci-target: models theorem-statements
+coq-ci-target: models theorem-statements $(EXTRA_COQ_CI_TARGETS)
