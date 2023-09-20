@@ -301,6 +301,70 @@ Module Reduction.
   Definition in_bounds_alt (start stop step i : int)
     := exists n : nat, in_bounds_alt_at start stop step i n.
 
+  Lemma in_bounds_alt_bounded start stop step i
+    : in_bounds_alt start stop step i
+      -> if (start + step <? stop)
+         then (let maxn : nat := 1 + Z.to_nat ((stop - (start + step) - 1) // step : int) in
+               ((start <=? i) = true /\ (i <=? start + step * Uint63.of_Z maxn) = true)
+               \/ (((wB <=? (maxn:Z))
+                    || (wB <=? Uint63.to_Z step * (maxn:Z))
+                    || (wB <=? Uint63.to_Z start + Uint63.to_Z (step * Uint63.of_Z maxn))) = true))
+            else i = start.
+  Proof.
+    cbv [in_bounds_alt in_bounds_alt_at].
+    break_innermost_match; intros [n H]; destruct_head'_and; subst.
+    all: cbv [Classes.add Classes.sub Classes.one Classes.mul Classes.int_div Classes.leb Classes.ltb
+                int_has_add int_has_sub int_has_one int_has_mul int_has_int_div int_has_leb int_has_ltb
+                nat_has_add nat_has_one
+                Z_has_leb Z_has_add Z_has_mul] in *.
+    all: repeat first [ progress subst
+                      | match goal with
+                        | [ H : ?n <= 0 |- _ ] => assert (n = 0%nat) by lia; clear H
+                        end
+                      | progress destruct_head'_and
+                      | progress change (N.of_nat 0) with 0%N
+                      | progress change (Z.of_N 0) with 0%Z
+                      | progress change (of_Z 0) with 0%uint63
+                      | progress change (Z.of_nat 1) with 1%Z in *
+                      | rewrite !nat_N_Z in *
+                      | rewrite !Nat2Z.inj_add in *
+                      | rewrite !Z2Nat.id in * by nia
+                      | match goal with
+                        | [ |- ?A \/ ?b = true ] => destruct b eqn:?; first [ right; reflexivity | left ]
+                        | [ H : ?n <= ?x |- _ ]
+                          => assert (Z.of_nat n <= Z.of_nat x)%Z by lia; clear H
+                        end
+                      | rewrite !Bool.orb_false_iff in *
+                      | lia ].
+    set (k := (1 + _)%Z) in *.
+    assert (1 <= k)%Z by (clear; subst k; nia).
+    clearbody k.
+    assert ((wB <=? Z.of_nat n) = false)%Z by lia.
+    assert ((wB <=? Uint63.to_Z step * Z.of_nat n) = false)%Z by nia.
+    assert ((wB <=? Uint63.to_Z start + Uint63.to_Z step * k) = false -> (wB <=? Uint63.to_Z start + Uint63.to_Z step * Z.of_nat n) = false)%Z by nia.
+    cbv [wB] in *.
+    vm_compute Z.pow in *.
+    repeat match goal with
+           | [ H : (?wB <=? ?k)%Z = false |- _ ]
+             => unique assert (k mod wB = k)%Z by (apply Z.mod_small; lia)
+           | [ H : ?A -> (?wB <=? ?k)%Z = false |- _ ]
+             => unique assert (A -> k mod wB = k)%Z by (let pf := fresh in intro pf; specialize (H pf); lia)
+           end.
+    #[local] Ltac zify_convert_to_euclidean_division_equations_flag ::= constr:(false).
+    zify.
+    generalize dependent (to_Z start); clear start; intro start; intros.
+    generalize dependent (to_Z step); clear step; intro step; intros.
+    generalize dependent (to_Z stop); clear stop; intro stop; intros.
+    repeat first [ progress specialize_by_assumption
+                 | match goal with
+                   | [ H : (?x mod ?y = ?x)%Z, H' : context[(?x mod ?y)%Z] |- _ ] => rewrite H in H'
+                   | [ H : (?x mod ?y = ?x)%Z |- context[(?x mod ?y)%Z] ] => rewrite H
+                   end
+                 | progress specialize_by lia ].
+    nia.
+    #[local] Ltac zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
+  Qed.
+
   #[local] Ltac t_argmaxmin_step_interesting_transitivity_reasoning _ :=
     match goal with
     | [ H : (?x <? ?y) = true \/ _, H' : (?y <? ?z) = true |- (?x <? ?z) = true \/ _ ]
