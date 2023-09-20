@@ -1,6 +1,6 @@
 From Coq Require Import Field Zify PreOmega ZifyUint63 Qreals Lqa Lra Reals Floats Sint63 Uint63 QArith Lia List PArray Derive.
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
-From NeuralNetInterp.Util.Tactics Require Import IsFloat IsUint63 BreakMatch DestructHead Head UniquePose.
+From NeuralNetInterp.Util.Tactics Require Import IsFloat IsUint63 BreakMatch DestructHead Head UniquePose SplitInContext.
 From NeuralNetInterp.Util Require Import Pointed Wf_Uint63 Wf_Uint63.Instances Wf_Uint63.Proofs SolveProperEqRel Default.
 From NeuralNetInterp.Util.Arith Require Import Classes Instances Instances.Reals Classes.Laws Instances.Laws FloatArith.Definitions Reals.Definitions Instances.Reals.Laws Reals.Proofs Reals.Instances.
 From NeuralNetInterp.Torch Require Import Tensor.Instances Slicing.Instances Tensor.Proofs.
@@ -86,6 +86,36 @@ Ltac specialize_step i' :=
       => rewrite (Z.mod_small (x mod y)%Z z) in H'
           by (revert H; generalize (x mod y)%Z; clear; cbv -[Z.le Z.lt]; lia)
     end.
+
+#[local] Ltac arg_equiv_side _ :=
+  cbv [Classes.max Classes.min Classes.ltb Classes.leb Classes.eqb
+         has_default_max_leb has_default_min_leb
+         Uint63.max Uint63.min
+         R_has_leb R_has_ltb int_has_leb int_has_ltb];
+  clear; intros; break_innermost_match;
+  rewrite <- ?not_true_iff_false, ?Rle_bool_iff, ?Rlt_bool_iff in *;
+  try lia; try lra.
+#[local] Ltac handle_argminmax_in H :=
+  match type of H with
+  | context[@Reduction.argmax ?A ?ltbA ?start ?stop ?step ?f]
+    => let am := fresh "v" in
+       let Hv := fresh in
+       remember (@Reduction.argmax A ltbA start stop step f) as am eqn:Hv in *;
+       symmetry in Hv;
+       apply Reduction.argmax_spec in Hv
+  | context[@Reduction.argmin ?A ?lebA ?start ?stop ?step ?f]
+    => let am := fresh "v" in
+       let Hv := fresh in
+       remember (@Reduction.argmin A lebA start stop step f) as am eqn:Hv in *;
+       symmetry in Hv;
+       apply Reduction.argmin_spec in Hv
+  end;
+  change (1%uint63 =? 0) with false in *;
+  cbv beta iota in *.
+#[local] Ltac handle_argminmax_step _ :=
+  match goal with H : _ |- _ => handle_argminmax_in H end.
+#[local] Ltac handle_argminmax _ := repeat handle_argminmax_step ().
+
 
 Theorem good_accuracy : TheoremStatement.Accuracy.best (* (abs (real_accuracy - expected_accuracy) <? error)%float = true *).
 Proof.
@@ -320,31 +350,6 @@ Proof.
          end.
   change true_maximum with (indices_of_max i'); clear true_maximum.
   destruct_head'_and.
-  #[local] Ltac arg_equiv_side _ :=
-    cbv [Classes.max Classes.min Classes.ltb Classes.leb Classes.eqb
-           has_default_max_leb has_default_min_leb
-           Uint63.max Uint63.min
-           R_has_leb R_has_ltb int_has_leb int_has_ltb];
-    clear; intros; break_innermost_match;
-    rewrite <- ?not_true_iff_false, ?Rle_bool_iff, ?Rlt_bool_iff in *;
-    try lia; try lra.
-  #[local] Ltac handle_argminmax_in H :=
-    match type of H with
-    | context[@Reduction.argmax ?A ?ltbA ?start ?stop ?step ?f]
-      => let am := fresh "v" in
-         let Hv := fresh in
-         remember (@Reduction.argmax A ltbA start stop step f) as am eqn:Hv in *;
-         symmetry in Hv;
-         apply Reduction.argmax_spec in Hv
-    | context[@Reduction.argmin ?A ?lebA ?start ?stop ?step ?f]
-      => let am := fresh "v" in
-         let Hv := fresh in
-         remember (@Reduction.argmin A lebA start stop step f) as am eqn:Hv in *;
-         symmetry in Hv;
-         apply Reduction.argmin_spec in Hv
-    end;
-    change (1%uint63 =? 0) with false in *;
-    cbv beta iota in *.
   lazymatch goal with
   | [ H : ?lower <= Reduction.min _ _ _ (fun i => min_incorrect_logit _) |- _ ]
     => assert (lower <= min_incorrect_logit i');
@@ -430,11 +435,11 @@ Proof.
   subst pred_tokens indices_of_max.
   unshelve erewrite !@Reduction.argmax_max_equiv in *; try typeclasses eauto;
     [ | now arg_equiv_side () .. ].
-  #[local] Ltac handle_argminmax_step _ :=
-    match goal with H : _ |- _ => handle_argminmax_in H end.
-  #[local] Ltac handle_argminmax _ := repeat handle_argminmax_step ().
   handle_argminmax ().
   setoid_rewrite Bool.andb_true_iff in Hbounds.
+  split_and.
+  destruct_head'_ex; destruct_head'_and.
+
   (*split_iff.
   let H :=
   handle_argminmax_in H;
