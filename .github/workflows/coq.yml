@@ -105,15 +105,7 @@ jobs:
           git config --global --add safe.directory "*"
           echo '::group::install dependencies'
           if [ ! -z "${{ matrix.env.OPAM_DEPS }}" ]; then
-             opam install -y -v ${{ matrix.env.OPAM_DEPS }} || (
-                echo '::endgroup::';
-                for dep in ${{ matrix.env.OPAM_DEPS }}; do
-                   echo "group::opam install $dep";
-                   opam install -y -v "$dep";
-                   echo '::endgroup::';
-                done;
-                echo '::group::install dependencies'
-             )
+             opam install -y -v ${{ matrix.env.OPAM_DEPS }}
           fi
           echo '::endgroup::'
           echo '::group::install LAProof'
