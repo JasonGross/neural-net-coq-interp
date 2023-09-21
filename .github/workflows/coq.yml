@@ -133,19 +133,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-        ref: 'tested'
-        fetch-depth: 0
     - run: pwd
-    - run: echo 'docker-build passed'
-      if: ${{ needs.docker-build.result == 'success' }}
-    - run: echo 'docker-build-native passed'
-      if: ${{ needs.docker-build-native.result == 'success' }}
-    - run: echo 'docker-build failed' && false
-      if: ${{ needs.docker-build.result != 'success' }}
-    - run: echo 'docker-build-native failed' && false
-      if: ${{ needs.docker-build-native.result != 'success' }}
-    - run: git fetch origin main
+    - run: git fetch origin tested
     - run: git log --oneline --max-count=10
-    - run: git merge --ff-only remotes/origin/main
-    - run: git log --oneline --max-count=10
-    - run: git push
+    - run: git push origin main:tested
