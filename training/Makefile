@@ -8,14 +8,20 @@ CHECK_PY_FILES := \
 	#
 
 .PHONY: check
-check::
+check:
 
 define add_target
-$(1)::
-	$(2)
+# $(1) main target
+# $(2) intermediate target
+# $(3) recipe
+$(1): $(1)-$(2)
+
+.PHONY: $(1)-$(2)
+$(1)-$(2):
+	$(3)
 endef
 
-$(foreach f,$(CHECK_PY_FILES),$(eval $(call add_target,check,$(PYTHON) $(f))))
+$(foreach f,$(CHECK_PY_FILES),$(eval $(call add_target,check,$(f),$(PYTHON) $(f))))
 
 ANALYZE_PY_FILES := \
 	train_max_of_2.py \
@@ -23,9 +29,9 @@ ANALYZE_PY_FILES := \
 	#
 
 .PHONY: analyze
-analyze::
+analyze:
 
-$(foreach f,$(ANALYZE_PY_FILES),$(eval $(call add_target,analyze,$(PYTHON) $(f) --fail-if-cant-load)))
+$(foreach f,$(ANALYZE_PY_FILES),$(eval $(call add_target,analyze,$(f),$(PYTHON) $(f) --fail-if-cant-load)))
 
 BROKEN_PACKAGES_GREP_PATTERN:='^mkl'
 
