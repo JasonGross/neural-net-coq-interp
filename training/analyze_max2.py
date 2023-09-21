@@ -10,7 +10,6 @@ from einops import reduce, repeat, rearrange, einsum
 from pathlib import Path
 from IPython import get_ipython
 
-from coq_export_utils import strify
 from analysis_utils import line, summarize, plot_QK_cosine_similarity, \
     analyze_svd, calculate_OV_of_pos_embed, calculate_attn, calculate_attn_by_pos, \
     calculate_copying, calculate_copying_with_pos, calculate_embed_and_pos_embed_overlap, \
@@ -239,19 +238,26 @@ def slack(model):
     """
     Compute the minimum value of logit(x)-logit(y) when x > y.
     If this is >0, the model gets 100% accuracy.
+
+    Method: exhaustively search over gap 1 inputs, search over query token and get bounds for the rest.
     """
+    GAP = 2
 
     d_EU_PU = min_effect_of_EU_PU(model)
     d_score_coeff = find_d_score_coeff(model)
-    worst_case_attn_pattern = torch.zeros((model.cfg.d_vocab, model.cfg.n_ctx))
-    worst_case_attn_pattern[:, 0] = d_score_coeff
-    worst_case_attn_pattern = torch.softmax(worst_case_attn_pattern, dim=1)[0]
-    print(f"Worst case attention weight for x: {worst_case_attn_pattern.min().item():.3f}")
+    # worst_case_attn_pattern = torch.zeros((model.cfg.d_vocab, model.cfg.n_ctx))
+    # worst_case_attn_pattern[:, 0] = d_score_coeff
+    # worst_case_attn_pattern = torch.softmax(worst_case_attn_pattern, dim=1)[0]
+    # print(f"Worst case attention weight for x: {worst_case_attn_pattern.min().item():.3f}")
     d_EOVU_POVUx = find_d_EVOU_PVOUx(model)
     d_EOVU_POVUy_c1, d_EOVU_POVUy_c2 = find_d_EVOU_PVOUy(model)
 
     # d_attn_out_U_case_1 = sigmoid(d_score_coeff) * d_EOVU_POVUx + (1 - sigmoid(d_score_coeff)) * d_EOVU_POVUy_c1
-    d_attn_out_U_case_2 = sigmoid(d_score_coeff * 2) * d_EOVU_POVUx + (1 - sigmoid(d_score_coeff * 2)) * d_EOVU_POVUy_c2
+    # d_attn_out_U_case_2 = sigmoid(d_score_coeff * 2) * d_EOVU_POVUx + (1 - sigmoid(d_score_coeff * 2)) * d_EOVU_POVUy_c2
+    gap_worst_attn_scores = torch.zeros(model.cfg.d_vocab, model.cfg.n_ctx)
+    gap_worst_attn_scores[:, 0] = d_score_coeff * GAP # column 0 = attention paid to true max
+    gap_worst_attn_pattern = torch.softmax(gap_worst_attn_scores, dim=1)[:, 0] # (d_vocab,) because only first column matters.
+    d_attn_out_U_case_2 = gap_worst_attn_pattern * d_EOVU_POVUx + (1 - gap_worst_attn_pattern) * d_EOVU_POVUy_c2
 
     result = (d_EU_PU + d_attn_out_U_case_2).min().item() # min over query token
     min_logit_diff = logit_diff_on_gap_1_cases(model).min().item()

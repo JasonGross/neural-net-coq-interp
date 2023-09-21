@@ -27,66 +27,47 @@ from training_utils import compute_all_tokens, make_testset_trainset, make_gener
 import os, sys
 from importlib import reload
 
+from train_max_of_n import get_model
+
 
 # %%
 
 if __name__ == '__main__':
-    PTH_BASE_PATH = Path(os.getcwd())
-    PTH_BASE_PATH = PTH_BASE_PATH / 'trained-models'
-    # SIMPLER_MODEL_PTH_PATH = PTH_BASE_PATH / 'max-of-two-simpler.pth'
-    # SIMPLER_MODEL_PTH_PATH = PTH_BASE_PATH / 'max-of-n.pth'
-    SIMPLER_MODEL_PTH_PATH = PTH_BASE_PATH / 'max-of-n-2023-09-01_01-30-10.pth'
+    
+    TRAIN_IF_NECESSARY = False
+    model = get_model(train_if_necessary=TRAIN_IF_NECESSARY).to('cpu')
+# %%
 
-    # N_CTX = 2
-    N_CTX = 5
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-    SEED = 123
 
-    simpler_cfg = HookedTransformerConfig(
-        d_model=32,
-        n_layers=1,
-        n_heads=1,
-        d_head=32,
-        n_ctx=N_CTX,
-        d_vocab=64,
-        seed=SEED,
-        device=DEVICE,
-        attn_only=True,
-        normalization_type=None,
-    )
-    model = HookedTransformer(simpler_cfg, move_to_device=True)
-
-    cached_data = torch.load(SIMPLER_MODEL_PTH_PATH)
-    model.load_state_dict(cached_data['model'])
 # %%
 
 # Accuracy of model
 
-dataset = large_data_gen(n_digits=64, sequence_length=N_CTX, batch_size=128, context="test", device=DEVICE)
+# dataset = large_data_gen(n_digits=64, sequence_length=N_CTX, batch_size=128, context="test", device=DEVICE)
 
 # %%
-# Test accuracy of model and get wrong examples
-accs = []
-for i in tqdm.tqdm(range(3000)):
-    batch = dataset.__next__()
-    logits = model(batch)
-    acc_batch = acc_fn(logits, batch, return_per_token=True)
-    acc = acc_batch.mean().item()
-    if acc < 1:
-        # print out wrong examples
-        wrong_indices = torch.where(acc_batch == 0)[0]
-        # print(f"Wrong indices: {wrong_indices}")
-        last_logits = logits[:, -1, :]
-        model_output = torch.argmax(last_logits, dim=1)
-        correct_answers = torch.max(batch, dim=1)[0]
-        # Model logit on correct answers
-        correct_logits = last_logits[torch.arange(len(logits)), correct_answers]
-        model_output_logits = last_logits[torch.arange(len(logits)), model_output]
-        logit_diff = correct_logits - model_output_logits
-        print(f"Logit diff: {logit_diff[wrong_indices].detach().cpu().numpy()}")
-        print(f"Wrong examples: {batch[wrong_indices].cpu().numpy()}, {model_output[wrong_indices].cpu().numpy()}")
-    accs.append(acc) 
-print(f"Accuracy: {np.mean(accs)}")
+# # Test accuracy of model and get wrong examples
+# accs = []
+# for i in tqdm.tqdm(range(3000)):
+#     batch = dataset.__next__()
+#     logits = model(batch)
+#     acc_batch = acc_fn(logits, batch, return_per_token=True)
+#     acc = acc_batch.mean().item()
+#     if acc < 1:
+#         # print out wrong examples
+#         wrong_indices = torch.where(acc_batch == 0)[0]
+#         # print(f"Wrong indices: {wrong_indices}")
+#         last_logits = logits[:, -1, :]
+#         model_output = torch.argmax(last_logits, dim=1)
+#         correct_answers = torch.max(batch, dim=1)[0]
+#         # Model logit on correct answers
+#         correct_logits = last_logits[torch.arange(len(logits)), correct_answers]
+#         model_output_logits = last_logits[torch.arange(len(logits)), model_output]
+#         logit_diff = correct_logits - model_output_logits
+#         print(f"Logit diff: {logit_diff[wrong_indices].detach().cpu().numpy()}")
+#         print(f"Wrong examples: {batch[wrong_indices].cpu().numpy()}, {model_output[wrong_indices].cpu().numpy()}")
+#     accs.append(acc) 
+# print(f"Accuracy: {np.mean(accs)}")
 
 # %%
 
@@ -109,7 +90,7 @@ def find_d_score_coeff(model) -> float:
     points = []
     # We have two cases, x in position 0 and x in position 1.
     last_resid = (W_E + W_pos[-1]) # (d_vocab, d_model). Rows = possible residual streams.
-    key_tok_resid = (W_E + W_pos[:, None, :]) # (n_ctx, d_model, d_vocab). Dim 1 = possible residual streams.
+    key_tok_resid = (W_E + W_pos[:, None, :]) # (n_ctx, d_model, d_vocab). Dim 1 = possible residual streams.    
     q = last_resid @ W_Q[0, 0, :, :] # (d_vocab, d_model).
     print(key_tok_resid.shape)
     print(W_K.shape)
@@ -210,4 +191,195 @@ plt.imshow(pattern[-1:, :])
 for (j, i), label in np.ndenumerate(pattern[-1:, :]):
     plt.text(i, j, f'{label:.3f}', ha='center', va='center')
 # %%
-HookedTransformer
+
+"""
+O(n^3) proof for max of n
+
+Case 1:
+    All numbers other than max are at most max - gap, so we only care about OV on true max
+    - Bound EU and PU effects
+    - Bound attention on non-max tokens
+    - Bound logit effect of attending to non-max tokens
+
+Case 2a:
+    Some numbers i st max - gap < i <= max, and query is max
+    - For every query token qt:
+        - For each i, get the max attention paid to i and logit effect of attending to i
+
+Case 2b:
+    Some numbers i st max - gap < i <= max, and query is not max
+    - Get max positional effect on attn for every query token (qt,)
+    - For every i, j, qt < j, get max wrong-direction attn effect of query token (qt, i, j)
+    - Combine above two steps to get max wrong attention to i when max is j
+    - OV analysis to get badness of max wrong attention to i when max is j
+    - TODO Convexity argument says worst case is when every non-max token is equal,
+      so we can just look at worst i for every j
+
+TODO are there any tokens i that copy to j>i more than i? If so we need to worry about duplicates of max
+"""
+
+"""
+O(n^2 * gap^(n_ctx - 2) * inference) proof for max of n
+
+Cases 1, 2a from above
+
+Case 2b:
+    Run model on all n^2 * (gap+1)^(n_ctx - 2) sequences where we have some
+    numbers i st max - gap < i <= max, and query is not max, treating all non-query numbers less than
+    max - gap as the worst case.
+    e.g. we have "17, 17, small, 18, 10"
+"""
+ # %%
+def find_d_EVOU_PVOUx(model) -> float:
+    """
+    When x is maximum, the minimum logit effect of copying the correct residual stream.
+
+    Complexity: O(d_vocab * d_model^2 + d_vocab^2 * d_model + ...)
+    """
+    W_E, W_pos, W_V, W_O, W_U = model.W_E, model.W_pos, model.W_V, model.W_O, model.W_U
+    d_model, n_ctx, d_vocab = model.cfg.d_model, model.cfg.n_ctx, model.cfg.d_vocab
+    assert W_E.shape == (d_vocab, d_model)
+    assert W_pos.shape == (n_ctx, d_model)
+    assert W_V.shape == (1, 1, d_model, d_model)
+    assert W_O.shape == (1, 1, d_model, d_model)
+    assert W_U.shape == (d_model, d_vocab)
+
+    EVOU = W_E @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (d_vocab, d_vocab). EVOU[i, j] is how copying i affects j.
+    PVOU = W_pos @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (n_ctx, d_vocab)
+
+    # Worst case over all x of (effect on x - effect on y) where y != x. (could do y < x)
+    EVOU_without_diag = EVOU - EVOU.diag().diag() * EVOU.max()
+    min_EVOU_effect = (EVOU.diag() - EVOU_without_diag.max(dim=1).values)
+
+    # Worst case over all positions of (effect on x - effect on y) where y <= x.
+    PVOU_cummax = PVOU.cummax(dim=1).values # (n_ctx, d_vocab)
+    min_PVOU_effect = (PVOU - PVOU_cummax).min(dim=0).values # (d_vocab,)
+
+    # To improve this bound we take into account x-dependence of EVOU and PVOU.
+    result = (min_EVOU_effect + min_PVOU_effect).min()
+    print(f"Correct copying effect from:")
+    print(f"EVOU: {min_EVOU_effect.min().item():.2f}, PVOU: {min_PVOU_effect.min().item():.2f}")
+    print(f"Total: {result.item():.2f}")
+    return result
+
+if __name__ == '__main__':
+    find_d_EVOU_PVOUx(model)
+    
+# %%
+def min_effect_of_EU_PU(model) -> torch.Tensor:
+    """
+    Calculate the maximum negative effect of the EU and PU paths on the output.
+    Complexity: O(d_vocab^2 * n_ctx * d_model)
+    Return shape: (q_token,)
+    """
+    W_E, W_pos, W_U = model.W_E, model.W_pos, model.W_U
+    d_model, n_ctx, d_vocab = model.cfg.d_model, model.cfg.n_ctx, model.cfg.d_vocab
+    assert W_E.shape == (d_vocab, d_model)
+    assert W_pos.shape == (n_ctx, d_model)
+    assert W_U.shape == (d_model, d_vocab)
+
+    # The logit effect of token x and position p is given by the vector:
+    #   logits(x, p) = (W_E[x] + W_pos[p]) @ W_U
+    max_logit_deltas = torch.zeros((d_vocab, n_ctx))
+    for x in range(d_vocab): # query token
+        for p in range(n_ctx):
+            logit_deltas = (W_E[x] + W_pos[p]) @ W_U # (d_vocab,)
+            max_logit_deltas[x, p] = logit_deltas.max() - logit_deltas.min()
+
+    result = -max_logit_deltas.max(dim=1).values # (q_token,)
+    print(f"EU and PU paths have min effect of {result.min():.2f}")
+    return result
+
+if __name__ == '__main__':
+    eu_pu = min_effect_of_EU_PU(model)
+    
+# %%
+def find_d_EVOU_PVOUy(model) -> float:
+    """
+    When x is maximum, the minimum logit effect of copying the incorrect residual stream.
+    Basically the max amount that copying y increases z more than x where z < x and y < x.
+    """
+    W_E, W_pos, W_V, W_O, W_U = model.W_E, model.W_pos, model.W_V, model.W_O, model.W_U
+    d_model, n_ctx, d_vocab = model.cfg.d_model, model.cfg.n_ctx, model.cfg.d_vocab
+    assert W_E.shape == (d_vocab, d_model)
+    assert W_pos.shape == (n_ctx, d_model)
+    assert W_V.shape == (1, 1, d_model, d_model)
+    assert W_O.shape == (1, 1, d_model, d_model)
+    assert W_U.shape == (d_model, d_vocab)
+
+    EVOU = W_E @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (d_vocab, d_vocab). EVOU[i, j] is how copying i affects j.
+    EVOU.names = ('qtok', 'ktok')
+    PVOU = W_pos @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (n_ctx, d_vocab)
+
+    # Our reasoning is simpler than for find_d_EVOU_PVOUx: just the largest logit delta from each query token
+    EVOU_neg_range = -EVOU.max(dim='ktok').values + EVOU.min(dim='ktok').values # (d_vocab,) for each query token
+    # Case 1: y = x - 1 e.g. 37, 38. We want EVOU[37, 38] - max_j EVOU[37, j].
+    # EVOU_delta_case_1 = torch.diff(EVOU, dim=1).min(dim='ktok').values # (d_vocab,)
+    EVOU_y_yp1 = torch.cat((EVOU.rename(None).diag(1), torch.tensor((1000,)))) # (d_vocab,)
+    EVOU_y_smaller = EVOU.cummax(dim='ktok').values.diagonal() # (d_vocab,)
+    EVOU_delta_case_1 = (EVOU_y_yp1[:, None] - EVOU_y_smaller) # (d_vocab, d_vocab)
+
+    # Worst case over all positions of (effect on x - effect on y) where y <= x.
+    PVOU_cummax_reverse = PVOU.flip(dims=(1,)).cummax(dim=1).values.flip(dims=(1,))
+    min_PVOU_effect_case_2 = (PVOU - PVOU_cummax_reverse).min(dim=0).values # (d_vocab,): qtok
+    
+
+    result_case_1 = (EVOU_delta_case_1 + min_PVOU_effect_case_2).min()
+    result_case_2 = (EVOU_neg_range + min_PVOU_effect_case_2).min()
+    print(f"Incorrect copying effect:")
+    print(f"Case 1: {result_case_1.item():.2f}, Case 2: {result_case_2.item():.2f}")
+    # result_case_1, result_case_2
+    return result_case_1, result_case_2
+
+if __name__ == '__main__':
+    find_d_EVOU_PVOUy(model)
+    
+# %%    
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+def slack(model, biggap=None, smallgap=None):
+    """
+    Compute the minimum value of logit(x)-logit(y) when x > y.
+    If this is >0, the model gets 100% accuracy.
+    """
+    if biggap is None: 
+        for biggap in range(1, model.cfg.d_vocab):
+            print(f"Big Gap {biggap}:")
+            gaps, currslack = slack(model, biggap = biggap, smallgap = smallgap)
+            if currslack > 0: 
+                return gaps, currslack
+        return (None, smallgap), float('-inf')
+    
+    if smallgap is None:
+        for smallgap in range(1, biggap):
+            print(f"Small Gap {smallgap}:")
+            gaps, currslack = slack(model, biggap = biggap, smallgap = smallgap)
+            if currslack > 0: 
+                return gaps, currslack
+        return (biggap, None), float('-inf')
+            
+    d_EU_PU = min_effect_of_EU_PU(model)
+    d_score_coeff = find_d_score_coeff(model)
+    d_EOVU_POVUx = find_d_EVOU_PVOUx(model)
+    d_EOVU_POVUy_c1, d_EOVU_POVUy_c2 = find_d_EVOU_PVOUy(model)
+
+    # d_attn_out_U_case_1 = sigmoid(d_score_coeff) * d_EOVU_POVUx + (1 - sigmoid(d_score_coeff)) * d_EOVU_POVUy_c1
+    # d_attn_out_U_case_2 = sigmoid(d_score_coeff * 2) * d_EOVU_POVUx + (1 - sigmoid(d_score_coeff * 2)) * d_EOVU_POVUy_c2
+    gap_worst_attn_scores = torch.zeros(model.cfg.d_vocab, model.cfg.n_ctx)
+    gap_worst_attn_scores[:, 1] = -d_score_coeff * smallgap# column 0 = attention paid to true max
+    gap_worst_attn_scores[:, 2:] = -d_score_coeff * biggap
+    gap_worst_attn_pattern = torch.softmax(gap_worst_attn_scores, dim=1)[:, 0] # (d_vocab,) because only first column matters.
+    d_attn_out_U_case_2 = gap_worst_attn_pattern * d_EOVU_POVUx + (1 - gap_worst_attn_pattern) * d_EOVU_POVUy_c2
+
+    result = (d_EU_PU + d_attn_out_U_case_2).min().item() # min over query token
+    #min_logit_diff = logit_diff_on_gap_1_cases(model).min().item()
+    #print(f"Min logit diff on gap 1: {min_logit_diff:.2f}")
+    #result = min(result, min_logit_diff)
+    print(f"Model slack for case 1 on small gap {smallgap}, big gap {biggap}: {result:.2f}")
+    #print(f"Model {'is' if result > 0 else 'is not'} proven 100% accurate.")
+    return (biggap, smallgap), result
+    
+if __name__ == '__main__':
+    slack(model)
+# %%
