@@ -16,9 +16,9 @@ theorem-statements: $(filter theories/%/TheoremStatement.vo,$(VFILES:.v=.$(VO)))
 utils: $(filter-out $(addsuffix %,$(dir $(wildcard theories/*/TheoremStatement.v))),$(VFILES:.v=.$(VO)))
 
 EXTRA_COQ_CI_TARGETS := \
-	theories/Util/Wf_Uint63/Proofs.vo \
 	theories/Util/Wf_Uint63/Instances.vo \
 	#
+#	theories/Util/Wf_Uint63/Proofs.vo # this one seems to loop on master :-(
 
 .PHONY: coq-ci-target
 coq-ci-target: models theorem-statements $(EXTRA_COQ_CI_TARGETS)
