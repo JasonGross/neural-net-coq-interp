@@ -365,6 +365,73 @@ Module Reduction.
     #[local] Ltac zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
   Qed.
 
+  Lemma in_bounds_alt_at_step1_small_iff (start stop i : int) n
+    (Hsmall : ((start + 1 <? stop) && (stop <? Uint63.of_Z (wB - 1)) && (start <? Uint63.of_Z (wB - 1))) = true)
+    : in_bounds_alt_at start stop 1 i n
+      <-> (((start <=? i) = true /\ (i <? stop) = true) /\ n = Z.to_nat (Uint63.to_Z (i - start))).
+  Proof.
+    pose proof (fun H => @in_bounds_alt_bounded start stop 1 i (ex_intro _ n H)) as H'.
+    cbv [in_bounds_alt_at] in *.
+    change 1%uint63 with (1 : int) in *.
+    progress change (to_Z 1%core) with (1:Z) in *.
+    progress change PrimInt63.mul with (Classes.mul (A:=int)) in *.
+    progress change Nat.add with (Classes.add (A:=nat)) in *.
+    cbv beta iota in *.
+    repeat match goal with
+           | [ H : context[?x // 1] |- _ ]
+             => replace (x // 1) with x in * by (generalize x; cbv; nia)
+           | [ H : context[1 * ?x] |- _ ]
+             => replace (1 * x) with x in * by (generalize x; cbv -[Z.mul]; nia)
+           end.
+    all: rewrite !nat_N_Z in *.
+    all: rewrite !Nat2Z.inj_add in *.
+    all: rewrite !Z2Nat.id in * by nia.
+    rewrite !Bool.andb_true_iff in Hsmall; destruct Hsmall as [[Hsmall1 Hsmall2] Hsmall3].
+    rewrite Hsmall1 in *; cbv beta iota in *.
+    clear H'.
+    cbv [Classes.ltb Classes.leb Classes.one Classes.add Classes.sub
+           int_has_ltb int_has_leb int_has_add int_has_sub int_has_one nat_has_add] in *.
+    #[local] Ltac zify_convert_to_euclidean_division_equations_flag ::= constr:(false).
+    zify.
+    generalize dependent (to_Z start); clear start; intro start; intros.
+    generalize dependent (to_Z stop); clear stop; intro stop; intros.
+    generalize dependent (to_Z i); clear i; intro i; intros.
+    specialize_by lia.
+    repeat (repeat match goal with
+              | [ H : context[(?x mod ?y)%Z] |- _ ]
+                => unique assert (0 <= x < y)%Z by lia;
+                   unique assert (x mod y = x)%Z by (apply Z.mod_small; lia)
+              | [ |- context[(?x mod ?y)%Z] ]
+                => unique assert (0 <= x < y)%Z by lia;
+                   unique assert (x mod y = x)%Z by (apply Z.mod_small; lia)
+              end;
+            repeat match goal with
+              | [ H : (?x mod ?y)%Z = ?x, H' : context[(?x mod ?y)%Z] |- _ ]
+                => rewrite H in H'
+              | [ H : (?x mod ?y)%Z = ?x |- context[(?x mod ?y)%Z] ]
+                => rewrite H
+              end;
+            specialize_by lia).
+    split; intros; repeat (destruct_head'_and; destruct_head'_or); subst.
+    all: repeat (repeat match goal with
+                   | [ H : context[(?x mod ?y)%Z] |- _ ]
+                     => unique assert (0 <= x < y)%Z by lia;
+                        unique assert (x mod y = x)%Z by (apply Z.mod_small; lia)
+                   | [ |- context[(?x mod ?y)%Z] ]
+                     => unique assert (0 <= x < y)%Z by lia;
+                        unique assert (x mod y = x)%Z by (apply Z.mod_small; lia)
+                   end;
+                 repeat match goal with
+                   | [ H : (?x mod ?y)%Z = ?x, H' : context[(?x mod ?y)%Z] |- _ ]
+                     => rewrite H in H'
+                   | [ H : (?x mod ?y)%Z = ?x |- context[(?x mod ?y)%Z] ]
+                     => rewrite H
+                   end;
+                 specialize_by lia).
+    all: lia.
+    #[local] Ltac zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
+  Qed.
+
   #[local] Ltac t_argmaxmin_step_interesting_transitivity_reasoning _ :=
     match goal with
     | [ H : (?x <? ?y) = true \/ _, H' : (?y <? ?z) = true |- (?x <? ?z) = true \/ _ ]
