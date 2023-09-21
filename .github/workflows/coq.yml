@@ -53,7 +53,17 @@ jobs:
           git config --global --add safe.directory "*"
           startGroup 'install dependencies'
           opam update
-          opam install -y -v ${{ matrix.env.OPAM_DEPS }}
+          opam install -y -v ${{ matrix.env.OPAM_DEPS }} || {
+             RV=$?;
+             endGroup;
+             for dep in ${{ matrix.env.OPAM_DEPS }}; do
+                startGroup "opam install $dep";
+                opam install -y -v "$dep";
+                endGroup;
+             done;
+             startGroup 'install dependencies';
+             exit $RV;
+          }
           endGroup
           startGroup 'install LAProof'
           if [ ! -z "${{ matrix.env.LAPROOF }}" ]; then
