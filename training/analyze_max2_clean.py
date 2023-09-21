@@ -110,7 +110,7 @@ def find_d_score_coeff(model) -> float:
     # print(f"{key_tok_resid.shape=}")
     # print(f"{W_K.shape=}")
     k = einsum(key_tok_resid, W_K[0, 0, :, :], 'n_ctx d_vocab d_model, d_model d_model_k -> n_ctx d_model_k d_vocab')
-    # k = key_tok_resid @ W_K[0, 0, :, :] # (n_ctx, d_model, d_vocab). 
+    # k = key_tok_resid @ W_K[0, 0, :, :] # (n_ctx, d_model, d_vocab).
     x_scores = einsum(q, k, 'd_vocab_q d_model, n_ctx d_model d_vocab_k -> n_ctx d_vocab_q d_vocab_k')
     # print(f"{x_scores.shape=}")
     score_coeffs = torch.zeros((n_ctx - 1, d_vocab, d_vocab)) + 1000.
@@ -270,5 +270,5 @@ d_38_37 = all_attn_scores[-1, 38, 38] - all_attn_scores[0, 38, 37]
 
 # %%
 
-EVOU[37, 38] - EVOU[37, :].max()
+# EVOU[37, 38] - EVOU[37, :].max()
 # %%

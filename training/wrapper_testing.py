@@ -56,4 +56,5 @@ if __name__ == '__main__':
     model.load_state_dict(cached_data['model'])
 # %%
 
-def HookedTransformerWrapper()
+def HookedTransformerWrapper():
+    pass

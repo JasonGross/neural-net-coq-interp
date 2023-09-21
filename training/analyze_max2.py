@@ -109,7 +109,7 @@ def find_d_score_coeff(model) -> float:
     # print(f"{key_tok_resid.shape=}")
     # print(f"{W_K.shape=}")
     k = einsum(key_tok_resid, W_K[0, 0, :, :], 'n_ctx d_vocab d_model, d_model d_model_k -> n_ctx d_model_k d_vocab')
-    # k = key_tok_resid @ W_K[0, 0, :, :] # (n_ctx, d_model, d_vocab). 
+    # k = key_tok_resid @ W_K[0, 0, :, :] # (n_ctx, d_model, d_vocab).
     x_scores = einsum(q, k, 'd_vocab_q d_model, n_ctx d_model d_vocab_k -> n_ctx d_vocab_q d_vocab_k')
     # print(f"{x_scores.shape=}")
     score_coeffs = torch.zeros((n_ctx - 1, d_vocab, d_vocab)) + 1000.
@@ -195,7 +195,7 @@ def find_d_EVOU_PVOUy(model) -> float:
     # Worst case over all positions of (effect on x - effect on y) where y <= x.
     PVOU_cummax_reverse = PVOU.flip(dims=(1,)).cummax(dim=1).values.flip(dims=(1,))
     min_PVOU_effect_case_2 = (PVOU - PVOU_cummax_reverse).min(dim=0).values # (d_vocab,): qtok
-    
+
 
     result_case_1 = (EVOU_delta_case_1 + min_PVOU_effect_case_2).min()
     result_case_2 = (EVOU_neg_range + min_PVOU_effect_case_2).min()
@@ -270,20 +270,20 @@ if __name__ == '__main__':
     slack(model)
 
 # %%
-# Bar graph of d_attn_out_U_case_1
-plt.bar(range(64), d_attn_out_U_case_1.detach().numpy())
-print(f"argmin={d_attn_out_U_case_1.argmin().item()}")
-plt.show()
+# # Bar graph of d_attn_out_U_case_1
+# plt.bar(range(64), d_attn_out_U_case_1.detach().numpy())
+# print(f"argmin={d_attn_out_U_case_1.argmin().item()}")
+# plt.show()
 # %%
-# Bar graph of d_attn_out_U_case_2
-plt.bar(range(64), d_attn_out_U_case_2.detach().numpy())
-print(f"argmin={d_attn_out_U_case_2.argmin().item()}")
-plt.show()
+# # Bar graph of d_attn_out_U_case_2
+# plt.bar(range(64), d_attn_out_U_case_2.detach().numpy())
+# print(f"argmin={d_attn_out_U_case_2.argmin().item()}")
+# plt.show()
 # %%
-# Bar graph of d_score_coeff
-plt.bar(range(64), d_score_coeff.detach().numpy())
-print(f"argmin={d_score_coeff.argmin().item()}")
-plt.show()
+# # Bar graph of d_score_coeff
+# plt.bar(range(64), d_score_coeff.detach().numpy())
+# print(f"argmin={d_score_coeff.argmin().item()}")
+# plt.show()
 # %%
 
 score_coeff
