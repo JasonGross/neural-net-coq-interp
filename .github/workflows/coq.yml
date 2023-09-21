@@ -126,8 +126,8 @@ jobs:
 
   update-tested:
     name: Update tested
-    needs: [docker-build, docker-build-native]
     if: github.ref == 'refs/heads/main'
+    needs: [docker-build, docker-build-native]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -136,6 +136,14 @@ jobs:
         ref: 'tested'
         fetch-depth: 0
     - run: pwd
+    - run: echo 'docker-build passed'
+      if: ${{ needs.docker-build.result == 'success' }}
+    - run: echo 'docker-build-native passed'
+      if: ${{ needs.docker-build-native.result == 'success' }}
+    - run: echo 'docker-build failed' && false
+      if: ${{ needs.docker-build.result != 'success' }}
+    - run: echo 'docker-build-native failed' && false
+      if: ${{ needs.docker-build-native.result != 'success' }}
     - run: git fetch origin main
     - run: git log --oneline --max-count=10
     - run: git merge --ff-only remotes/origin/main

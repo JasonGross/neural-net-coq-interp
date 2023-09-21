@@ -1,6 +1,5 @@
 From Coq Require Import QMicromega ZifyUint63 Zify PreOmega Lia Lra Lqa Reals List Floats PArray Sint63 Uint63 Arith PArith NArith ZArith QArith.
-From Flocq.Core Require Import Raux.
-From NeuralNetInterp.Util.Arith Require Import Instances Classes Classes.Laws FloatArith.Definitions QArith ZArith Reals.Definitions.
+From NeuralNetInterp.Util.Arith Require Import Instances Classes Classes.Laws FloatArith.Definitions QArith ZArith.
 Import ListNotations.
 Set Implicit Arguments.
 
