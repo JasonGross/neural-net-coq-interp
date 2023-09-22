@@ -147,8 +147,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        submodules: recursive
+        fetch-depth: 0
     - run: pwd
     - run: git fetch origin tested
     - run: git log --oneline --max-count=10
-    - run: git push origin main:tested
+    - run: git log origin/tested --oneline --max-count=10
+    - run: git log origin/main --oneline --max-count=10
+    - run: git push origin HEAD:tested
