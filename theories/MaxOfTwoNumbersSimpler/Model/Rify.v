@@ -1,8 +1,9 @@
-From Coq Require Import Reals ZArith.
+From Coq Require Import Reals ZArith Lra.
 From Coq.Floats Require Import Floats.
 From Flocq.Core Require Import Raux Generic_fmt Zaux FLX.
 From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
-From NeuralNetInterp.Util.Tactics Require Import Head.
+From Coquelicot Require Import Rcomplements.
+From NeuralNetInterp.Util.Tactics Require Import Head BreakMatch.
 From NeuralNetInterp.Torch Require Import Tensor Tensor.Instances.
 From NeuralNetInterp.MaxOfTwoNumbersSimpler Require Import Parameters Model Model.Instances Model.Flocqify Model.ExtraComputations Heuristics.
 From mathcomp.analysis Require Import Rstruct.
@@ -53,6 +54,8 @@ Module Model.
     cbv [coer_tensor Tensor.map coer coer_trans coer_binary_float_R coer_float_binary_float].
     destruct u.
     revert i1 i0 i.
+    Print logits.
+    Print HookedTransformer.HookedTransformer.logits.
     #[local] Open Scope core_scope.
     intros i1 i0 i.
     set (sum1 := Wf_Uint63.Reduction.sum _ _ _ _).
@@ -98,6 +101,8 @@ Module Model.
     cbv beta.
     vm_compute Z.to_nat.
     apply Rle_bool_true.
+    set (z := cfg.b_U _) in *.
+    replace z with 0%float.
     Set Printing Coercions.
     lazymatch goal with
     | [ |- ?R (Rabs (?sub (?plus' ?x' ?y') (?f (?plus ?x ?y)))) ?small ]
@@ -106,10 +111,16 @@ Module Model.
     end.
     (* https://github.com/VeriNum/LAProof/blob/main/accuracy_proofs/float_acc_lems.v
 BPLUS_B2R_zero_r *)
-    admit.
-    admit.
-    admit.
-    admit.
+    { vm_compute Prim2B.
+      cbv [Bplus].
+      cbv [B2R].
+      intros *; rewrite !Rabs_le_between; break_innermost_match; try lra. }
+    all: try reflexivity.
+    2: { cbv [z cfg.b_U].
+         clear.
+         let arr := lazymatch goal with |- context[PArray.get ?arr] => arr end in
+         symmetry; refine (@PArray.get_make _ 0%float (PArray.length arr) _). }
+    clear z.
     rewrite Binary.B2R_B2BSN.
     epose Rabs_triang.
     lazymatch goal with
