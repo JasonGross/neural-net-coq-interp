@@ -72,7 +72,7 @@ def EU_PU(model: HookedTransformer, renderer=None, pos: int = -1) -> torch.Tenso
     return result
 
 # In[ ]:
-def find_min_d_score(model: HookedTransformer, min_gap: int = 1, reduce_over_query=False) -> Union[float, torch.Tensor]:
+def find_min_d_attention_score(model: HookedTransformer, min_gap: int = 1, reduce_over_query=False) -> Union[float, torch.Tensor]:
     """
     If input tokens are x, y, with x - y > min_gap, the minimum value of
     score(x) - score(y).
