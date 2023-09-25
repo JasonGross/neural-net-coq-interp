@@ -216,3 +216,5 @@ def EU_PU_PVOU(model: HookedTransformer, attention_post_softmax: torch.Tensor) -
     assert result.shape == (batch, d_vocab, d_vocab_out), f"result.shape = {result.shape} != {(batch, d_vocab, d_vocab_out)} = (batch, d_vocab, d_vocab_out)"
 
     return result
+
+# TODO: compute copying for both worst-case and hsuristic
