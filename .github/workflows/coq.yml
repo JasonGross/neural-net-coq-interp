@@ -50,10 +50,10 @@ jobs:
           sudo chmod -R a=u .
           # Work around https://github.com/actions/checkout/issues/766
           git config --global --add safe.directory "*"
-          echo '::group::install dependencies'
+          startGroup 'install dependencies'
           opam install -y -v ${{ matrix.env.OPAM_DEPS }}
-          echo '::endgroup::'
-          echo '::group::install LAProof'
+          endGroup
+          startGroup 'install LAProof'
           if [ ! -z "${{ matrix.env.LAPROOF }}" ]; then
              git clone https://github.com/VeriNum/LAProof.git
              pushd LAProof
@@ -64,11 +64,13 @@ jobs:
              make install
              popd
           fi
-          echo '::endgroup::'
+          endGroup
+          startGroup 'make'
           make pretty-timed -j2 TGTS="${{ matrix.env.TGTS }}"
           if [ ! -z "${{ matrix.env.INSTALL_TGTS }}" ]; then
              make ${{ matrix.env.INSTALL_TGTS }}
           fi
+          endGroup
           make print-pretty-timed
 
   docker-build-native:
@@ -103,12 +105,12 @@ jobs:
           sudo chmod -R a=u .
           # Work around https://github.com/actions/checkout/issues/766
           git config --global --add safe.directory "*"
-          echo '::group::install dependencies'
+          startGroup 'install dependencies'
           if [ ! -z "${{ matrix.env.OPAM_DEPS }}" ]; then
              opam install -y -v ${{ matrix.env.OPAM_DEPS }}
           fi
-          echo '::endgroup::'
-          echo '::group::install LAProof'
+          endGroup
+          startGroup 'install LAProof'
           if [ ! -z "${{ matrix.env.LAPROOF }}" ]; then
              git clone https://github.com/VeriNum/LAProof.git
              pushd LAProof
@@ -119,8 +121,10 @@ jobs:
              make install
              popd
           fi
-          echo '::endgroup::'
+          endGroup
+          startGroup 'make'
           make pretty-timed -j2 TGTS="${{ matrix.env.TGTS }}"
+          endGroup
           make print-pretty-timed
 
 
