@@ -1,6 +1,9 @@
 # NOTE that this file is synchronized with theories/TrainingComputations/interp_max_utils.v
 # In[ ]:
 from typing import Any, Dict, Optional, Union
+from torchtyping import TensorType
+from enum import Enum, verify, UNIQUE, CONTINUOUS
+import enum
 import einops
 from fancy_einsum import einsum
 import matplotlib.pyplot as plt
@@ -57,7 +60,7 @@ def logit_delta(model: HookedTransformer, renderer=None, histogram_all_incorrect
 
 
 # In[ ]:
-def EU_PU(model: HookedTransformer, renderer=None, pos: int = -1) -> torch.Tensor:
+def EU_PU(model: HookedTransformer, renderer=None, pos: int = -1) -> TensorType["d_vocab_q", "d_vocab_out"]:
     """
     Calculates logits from just the EU and PU paths in position pos.
     Complexity: O(d_vocab^2 * d_model)
@@ -75,7 +78,7 @@ def EU_PU(model: HookedTransformer, renderer=None, pos: int = -1) -> torch.Tenso
     return result
 
 # In[ ]:
-def all_attention_scores(model: HookedTransformer) -> torch.Tensor:
+def all_attention_scores(model: HookedTransformer) -> TensorType["n_ctx_k", "d_vocab_q", "d_vocab_k"]:
     """
     Returns pre-softmax attention of shape (n_ctx_k, d_vocab_q, d_vocab_k)
     Complexity: O(d_vocab * d_head^2 * d_model * n_ctx)
@@ -102,7 +105,7 @@ def all_attention_scores(model: HookedTransformer) -> torch.Tensor:
     return x_scores
 
 # In[ ]:
-def all_EVOU(model: HookedTransformer) -> torch.Tensor:
+def all_EVOU(model: HookedTransformer) -> TensorType["d_vocab", "d_vocab_out"]:
     """
     Returns all OV results, ignoring position, of shape (d_vocab, d_vocab_out)
     Complexity: O(d_vocab * (d_model^2 * d_head + d_head^2 * d_model + d_model^2 * d_vocab_out)) ~ O(d_vocab^2 * d_model^2)
@@ -120,7 +123,7 @@ def all_EVOU(model: HookedTransformer) -> torch.Tensor:
 
 
 # In[ ]:
-def all_PVOU(model: HookedTransformer) -> torch.Tensor:
+def all_PVOU(model: HookedTransformer) -> TensorType["n_ctx", "d_vocab_out"]:
     """
     Returns all OV results, position only, of shape (n_ctx, d_vocab_out)
     Complexity: O(n_ctx * (d_model^2 * d_head + d_head^2 * d_model + d_model^2 * d_vocab_out)) ~ O(n_ctx * d_vocab * d_model^2)
@@ -138,7 +141,7 @@ def all_PVOU(model: HookedTransformer) -> torch.Tensor:
 
 
 # In[ ]:
-def find_all_d_attention_scores(model: HookedTransformer, min_gap: int = 1) -> torch.Tensor:
+def find_all_d_attention_scores(model: HookedTransformer, min_gap: int = 1) -> Union[TensorType["d_vocab_q", "d_vocab_k"], TensorType["d_vocab_q", "n_ctx_max", "n_ctx_non_max", "d_vocab_k_max", "d_vocab_k_nonmax"]]:
     """
     If input tokens are x, y, with x - y > min_gap, the minimum values of
     score(x) - score(y).
@@ -180,7 +183,7 @@ def find_all_d_attention_scores(model: HookedTransformer, min_gap: int = 1) -> t
 
 
 # In[ ]:
-def find_min_d_attention_score(model: HookedTransformer, min_gap: int = 1, reduce_over_query=False) -> Union[float, torch.Tensor]:
+def find_min_d_attention_score(model: HookedTransformer, min_gap: int = 1, reduce_over_query=False) -> Union[float, TensorType["d_vocab_q"]]:
     """
     If input tokens are x, y, with x - y > min_gap, the minimum value of
     score(x) - score(y).
@@ -196,7 +199,7 @@ def find_min_d_attention_score(model: HookedTransformer, min_gap: int = 1, reduc
     return scores
 
 # In[ ]:
-def EU_PU_PVOU(model: HookedTransformer, attention_post_softmax: torch.Tensor) -> torch.Tensor:
+def EU_PU_PVOU(model: HookedTransformer, attention_post_softmax: TensorType["batch", "n_ctx"]) -> TensorType["btach", "d_vocab_q", "d_vocab_out"]:
     """
     Calculates logits from EU, PU, and the positional part of the OV path for a given batch of attentions
     attention_post_softmax: (batch, n_ctx)
@@ -217,4 +220,27 @@ def EU_PU_PVOU(model: HookedTransformer, attention_post_softmax: torch.Tensor) -
 
     return result
 
-# TODO: compute copying for both worst-case and hsuristic
+# In[ ]:
+@verify(UNIQUE, CONTINUOUS)
+class TokenType(Enum):
+    EXACT = enum.auto() # max, or within gap
+    BELOW_GAP = enum.auto()
+
+# In[ ]:
+def compute_heuristic_independence_attention_copying(model: HookedTransformer, min_gap: int = 1) -> Dict[int, TensorType["batch", "d_vocab_out"]]:
+    """
+    Assuming that attention paid to the non-max tokens is independent of the copying behavior on non-max tokens which are at least min_gap away, computes the logit outputs, grouped by gap
+    Returns: Dict[gap, Tensor[batch, d_vocab_out]]
+    Complexity:
+    """
+    n_ctx, d_vocab, d_vocab_out, d_model = model.cfg.n_ctx, model.cfg.d_vocab, model.cfg.d_vocab_out, model.cfg.d_model
+
+    all_tokens = compute_all_tokens(model=model)
+    assert all_tokens.shape == (d_vocab**n_ctx, n_ctx), f"all_tokens.shape = {all_tokens.shape} != {(d_vocab**n_ctx, n_ctx)} = (d_vocab**n_ctx, n_ctx)"
+    predicted_logits, cache = model.run_with_cache(all_tokens)
+    predicted_logits = predicted_logits[:,-1,:].detach().cpu()
+    assert predicted_logits.shape == (d_vocab**n_ctx, d_vocab_out), f"predicted_logits.shape = {predicted_logits.shape} != {(d_vocab**n_ctx, d_vocab_out)} = (d_vocab**n_ctx, d_vocab_out)"
+
+    return cache
+
+# In[ ]:
