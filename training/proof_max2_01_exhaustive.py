@@ -1,8 +1,10 @@
 # %%
 from max_of_n import acc_fn, loss_fn
 from interp_max_utils import logit_delta
+from interp_max_utils_heuristic import compute_heuristic_independence_attention_copying
 from training_utils import compute_all_tokens
 from train_max_of_2 import get_model
+from tqdm.auto import tqdm
 
 
 # %%
@@ -10,7 +12,7 @@ from train_max_of_2 import get_model
 if __name__ == '__main__':
     TRAIN_IF_NECESSARY = False
     model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
-    
+
 # %%
 
 if __name__ == '__main__':
@@ -20,7 +22,19 @@ if __name__ == '__main__':
     print(f"accuracy is {acc_fn(predicted_logits, all_tokens)}")
     print(f"loss (mean log(Pr(true max))) is {loss_fn(predicted_logits, all_tokens)}")
     print(f"loss (mean log(Pr(true max))) is {loss_fn(predicted_logits, all_tokens).item().hex()}")
-    
+
+# %%
+
+# if __name__ == '__main__':
+#     results = compute_heuristic_independence_attention_copying(model, tqdm=tqdm)
+# # %%
+# # count how many things are <= 0
+# [((r <= 0).sum(), r.shape) for r in results]
+# sum((r <= 0).sum() for r in results) / sum(r.shape[0] for r in results) * 4096
+
+# %%
+
+
 # # %%
 
 # def min_effect_of_EU_PU(model) -> float:

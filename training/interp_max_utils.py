@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional, Union
 from torchtyping import TensorType
 from enum import Enum, verify, UNIQUE, CONTINUOUS
 import enum
-import einops
+import itertools
 from fancy_einsum import einsum
 import matplotlib.pyplot as plt
 import numpy as np
@@ -199,21 +199,21 @@ def find_min_d_attention_score(model: HookedTransformer, min_gap: int = 1, reduc
     return scores
 
 # In[ ]:
-def EU_PU_PVOU(model: HookedTransformer, attention_post_softmax: TensorType["batch", "n_ctx"]) -> TensorType["btach", "d_vocab_q", "d_vocab_out"]:
+def EU_PU_PVOU(model: HookedTransformer, attention_pattern: TensorType["batch", "n_ctx"]) -> TensorType["batch", "d_vocab_q", "d_vocab_out"]:
     """
     Calculates logits from EU, PU, and the positional part of the OV path for a given batch of attentions
-    attention_post_softmax: (batch, n_ctx)
+    attention_pattern: (batch, n_ctx) # post softmax
     Returns: (batch, d_vocab_q, d_vocab_out)
     Complexity: O(d_vocab^2 * d_model + d_vocab^2 * d_model^2 + batch * n_ctx * d_vocab_out + batch * d_vocab^2)
     """
     n_ctx, d_vocab, d_vocab_out = model.cfg.n_ctx, model.cfg.d_vocab, model.cfg.d_vocab_out
-    batch, _ = attention_post_softmax.shape
-    assert attention_post_softmax.shape == (batch, n_ctx), f"attention_post_softmax.shape = {attention_post_softmax.shape} != {(batch, n_ctx)} = (batch, n_ctx)"
+    batch, _ = attention_pattern.shape
+    assert attention_pattern.shape == (batch, n_ctx), f"attention_post_softmax.shape = {attention_pattern.shape} != {(batch, n_ctx)} = (batch, n_ctx)"
     EUPU = EU_PU(model)
     assert EUPU.shape == (d_vocab, d_vocab_out), f"EUPU.shape = {EUPU.shape} != {(d_vocab, d_vocab_out)} = (d_vocab, d_vocab_out)"
     PVOU = all_PVOU(model)
     assert PVOU.shape == (n_ctx, d_vocab_out), f"PVOU.shape = {PVOU.shape} != {(n_ctx, d_vocab_out)} = (n_ctx, d_vocab_out)"
-    PVOU_scaled = attention_post_softmax @ PVOU
+    PVOU_scaled = attention_pattern @ PVOU
     assert PVOU_scaled.shape == (batch, d_vocab_out), f"PVOU_scaled.shape = {PVOU_scaled.shape} != {(batch, d_vocab_out)} = (batch, d_vocab_out)"
     result = EUPU[None, :, :] + PVOU_scaled[:, None, :]
     assert result.shape == (batch, d_vocab, d_vocab_out), f"result.shape = {result.shape} != {(batch, d_vocab, d_vocab_out)} = (batch, d_vocab, d_vocab_out)"
@@ -221,26 +221,8 @@ def EU_PU_PVOU(model: HookedTransformer, attention_post_softmax: TensorType["bat
     return result
 
 # In[ ]:
-@verify(UNIQUE, CONTINUOUS)
-class TokenType(Enum):
-    EXACT = enum.auto() # max, or within gap
-    BELOW_GAP = enum.auto()
+# @verify(UNIQUE, CONTINUOUS)
+# class TokenType(Enum):
+#     EXACT = enum.auto() # max, or within gap
+#     BELOW_GAP = enum.auto()
 
-# In[ ]:
-def compute_heuristic_independence_attention_copying(model: HookedTransformer, min_gap: int = 1) -> Dict[int, TensorType["batch", "d_vocab_out"]]:
-    """
-    Assuming that attention paid to the non-max tokens is independent of the copying behavior on non-max tokens which are at least min_gap away, computes the logit outputs, grouped by gap
-    Returns: Dict[gap, Tensor[batch, d_vocab_out]]
-    Complexity:
-    """
-    n_ctx, d_vocab, d_vocab_out, d_model = model.cfg.n_ctx, model.cfg.d_vocab, model.cfg.d_vocab_out, model.cfg.d_model
-
-    all_tokens = compute_all_tokens(model=model)
-    assert all_tokens.shape == (d_vocab**n_ctx, n_ctx), f"all_tokens.shape = {all_tokens.shape} != {(d_vocab**n_ctx, n_ctx)} = (d_vocab**n_ctx, n_ctx)"
-    predicted_logits, cache = model.run_with_cache(all_tokens)
-    predicted_logits = predicted_logits[:,-1,:].detach().cpu()
-    assert predicted_logits.shape == (d_vocab**n_ctx, d_vocab_out), f"predicted_logits.shape = {predicted_logits.shape} != {(d_vocab**n_ctx, d_vocab_out)} = (d_vocab**n_ctx, d_vocab_out)"
-
-    return cache
-
-# In[ ]:
