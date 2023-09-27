@@ -135,30 +135,3 @@ def print_independence_attention_copying_stats(model: HookedTransformer, min_gap
                 print(f"Gap {gap}:")
                 print(f"We expect that in {gap_bad_result_rate}% of cases ({gap_bad_result_rate * gap_real_total_count} out of {gap_real_total_count}), the model will return an incorrect result")
                 print(f"The worst-case logit gap is {-result_for_gap.max()}")
-
-# %%
-# In[ ]:
-# In[ ]:
-#
-# %%
-from max_of_n import acc_fn, loss_fn
-from interp_max_utils import logit_delta
-from training_utils import compute_all_tokens
-from train_max_of_2 import get_model
-from tqdm.auto import tqdm
-
-
-# %%
-
-if __name__ == '__main__':
-    TRAIN_IF_NECESSARY = False
-    model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
-
-# %%
-if __name__ == '__main__':
-    results = compute_heuristic_independence_attention_copying(model, tqdm=tqdm)
-    gc.collect()
-# %%
-if __name__ == '__main__':
-    print_independence_attention_copying_stats(model, tqdm=tqdm, results=results)
-# %%

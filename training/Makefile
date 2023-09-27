@@ -6,7 +6,7 @@ CHECK_PY_FILES := \
 	coq_export_utils.py \
 	training_utils.py \
 	interp_max_utils.py \
-	# interp_max_utils_heuristic.py \
+	interp_max_utils_heuristic.py \
 	#
 
 .PHONY: check
@@ -31,6 +31,7 @@ ANALYZE_PY_FILES := \
 	#
 
 ANALYZE_BIG_PY_FILES := \
+	heuristic_max2_01_attention_independence.py \
 	#
 
 .PHONY: analyze
