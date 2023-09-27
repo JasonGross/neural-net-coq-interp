@@ -5,6 +5,8 @@ CHECK_PY_FILES := \
 	analysis_utils.py \
 	coq_export_utils.py \
 	training_utils.py \
+	interp_max_utils.py \
+	# interp_max_utils_heuristic.py \
 	#
 
 .PHONY: check
@@ -28,10 +30,20 @@ ANALYZE_PY_FILES := \
 	proof_max2_01_exhaustive.py \
 	#
 
+ANALYZE_BIG_PY_FILES := \
+	#
+
 .PHONY: analyze
 analyze:
 
+.PHONY: analyze-only-big
+analyze-only-big:
+
+.PHONY: analyze-big
+analyze-big: analyze analyze-only-big
+
 $(foreach f,$(ANALYZE_PY_FILES),$(eval $(call add_target,analyze,$(f),$(PYTHON) $(f) --fail-if-cant-load)))
+$(foreach f,$(ANALYZE_BIG_PY_FILES),$(eval $(call add_target,analyze-only-big,$(f),$(PYTHON) $(f) --fail-if-cant-load)))
 
 BROKEN_PACKAGES_GREP_PATTERN:='^mkl'
 
