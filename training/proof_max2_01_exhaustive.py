@@ -1,7 +1,6 @@
 # %%
 from max_of_n import acc_fn, loss_fn
-from interp_max_utils import logit_delta
-from interp_max_utils_heuristic import compute_heuristic_independence_attention_copying
+from interp_max_utils import logit_delta, complexity_of
 from training_utils import compute_all_tokens
 from train_max_of_2 import get_model
 from tqdm.auto import tqdm
@@ -17,6 +16,7 @@ if __name__ == '__main__':
 
 if __name__ == '__main__':
     print(f"minimum difference between the true_max logit and any other logit is {logit_delta(model)}")
+    print(f"Complexity is:\n{complexity_of(logit_delta)}")
     all_tokens = compute_all_tokens(model=model)
     predicted_logits = model(all_tokens).detach().cpu()
     print(f"accuracy is {acc_fn(predicted_logits, all_tokens)}")

@@ -15,38 +15,38 @@ from transformer_lens import HookedTransformer
 import transformer_lens.utils as utils
 import plotly.express as px
 from analysis_utils import summarize
-from training_utils import compute_all_tokens
+from training_utils import compute_all_tokens, generate_all_sequences
 import math
 
 # In[ ]:
+def complexity_of(f):
+    lines = (line.split(':') for line in f.__doc__.split('\n'))
+    lines = (line for line in lines if line[0].lower().strip().startswith('complexity'))
+    lines = (':'.join(line[1:]).strip() if line[0].lower().strip() == 'complexity' else ':'.join(line).strip()[len('complexity'):].strip()
+             for line in lines)
+    return '\n'.join(lines)
+
+# In[ ]:
 @torch.no_grad()
-def logit_delta(model: HookedTransformer, renderer=None, histogram_all_incorrect_logit_differences=False, return_summary=False) -> Union[float, Dict[str, Any]]:
+def logit_delta_of_results(all_tokens: TensorType["batch", "n_ctx"], predicted_logits: TensorType["batch", "d_vocab_out"], renderer=None, histogram_all_incorrect_logit_differences: bool = False, return_summary: bool = False) -> Union[float, Dict[str, Any]]:
     """
     Largest difference between logit(true_max) and logit(y) for y != true_max.
-    Complexity: O(d_vocab^n_ctx * fwd_pass)
-    fwd_pass = O(n_ctx * d_model + n_ctx * d_model + n_ctx * d_model^2 * d_hidden * 2 + n_ctx * d_hidden^2 + n_ctx * d_model^2 * d_hidden + n_ctx * d_hidden^2 * d_model + n_ctx * d_model + n_ctx * d_model^2 * d_vocab)
-    n_ctx^2 * d_vocab * d_model^2) + (n_ctx * d_vocab * d_model^2)
-    todo fix complexity.
     """
-    n_ctx, d_vocab, d_vocab_out, d_model = model.cfg.n_ctx, model.cfg.d_vocab, model.cfg.d_vocab_out, model.cfg.d_model
-
-    all_tokens = compute_all_tokens(model=model)
-    assert all_tokens.shape == (d_vocab**n_ctx, n_ctx), f"all_tokens.shape = {all_tokens.shape} != {(d_vocab**n_ctx, n_ctx)} = (d_vocab**n_ctx, n_ctx)"
-    predicted_logits = model(all_tokens)[:,-1,:].detach().cpu()
-    assert predicted_logits.shape == (d_vocab**n_ctx, d_vocab_out), f"predicted_logits.shape = {predicted_logits.shape} != {(d_vocab**n_ctx, d_vocab_out)} = (d_vocab**n_ctx, d_vocab_out)"
+    (batch, n_ctx), (_batch, d_vocab_out) = all_tokens.shape, predicted_logits.shape
+    assert predicted_logits.shape == (batch, d_vocab_out), f"predicted_logits.shape = {predicted_logits.shape} != {(batch, d_vocab_out)} = (batch, d_vocab_out)"
 
     # Extract statistics for each row
     # Use values in all_tokens as indices to gather correct logits
     indices_of_max = all_tokens.max(dim=-1, keepdim=True).values
-    assert indices_of_max.shape == (d_vocab**n_ctx, 1), f"indices_of_max.shape = {indices_of_max.shape} != {(d_vocab**n_ctx, 1)} = (d_vocab**n_ctx, 1)"
+    assert indices_of_max.shape == (batch, 1), f"indices_of_max.shape = {indices_of_max.shape} != {(batch, 1)} = (batch, 1)"
     correct_logits = torch.gather(predicted_logits, -1, indices_of_max)
-    assert correct_logits.shape == (d_vocab**n_ctx, 1), f"correct_logits.shape = {correct_logits.shape} != {(d_vocab**n_ctx, 1)} = (d_vocab**n_ctx, 1)"
+    assert correct_logits.shape == (batch, 1), f"correct_logits.shape = {correct_logits.shape} != {(batch, 1)} = (batch, 1)"
     logits_above_correct = correct_logits - predicted_logits
-    assert logits_above_correct.shape == (d_vocab**n_ctx, d_vocab_out), f"logits_above_correct.shape = {logits_above_correct.shape} != {(d_vocab**n_ctx, d_vocab_out)} = (d_vocab**n_ctx, d_vocab_out)"
+    assert logits_above_correct.shape == (batch, d_vocab_out), f"logits_above_correct.shape = {logits_above_correct.shape} != {(batch, d_vocab_out)} = (batch, d_vocab_out)"
     # replace correct logit indices with large number so that they don't get picked up by the min
     logits_above_correct[torch.arange(logits_above_correct.shape[0]), indices_of_max.squeeze()] = float('inf')
     min_incorrect_logit = logits_above_correct.min(dim=-1).values
-    assert min_incorrect_logit.shape == (d_vocab**n_ctx,), f"min_incorrect_logit.shape = {min_incorrect_logit.shape} != {(d_vocab**n_ctx,)} = (d_vocab**n_ctx,)"
+    assert min_incorrect_logit.shape == (batch,), f"min_incorrect_logit.shape = {min_incorrect_logit.shape} != {(batch,)} = (batch,)"
 
     if histogram_all_incorrect_logit_differences:
         all_incorrect_logits = logits_above_correct[logits_above_correct != float('inf')]
@@ -58,6 +58,76 @@ def logit_delta(model: HookedTransformer, renderer=None, histogram_all_incorrect
     else:
         return min_incorrect_logit.min().item()
 
+
+# In[ ]:
+@torch.no_grad()
+def logit_delta(model: HookedTransformer, renderer=None, histogram_all_incorrect_logit_differences: bool = False, return_summary: bool = False) -> Union[float, Dict[str, Any]]:
+    """
+    Largest difference between logit(true_max) and logit(y) for y != true_max.
+    Complexity: O(d_vocab^n_ctx * fwd_pass)
+    Complexity: fwd_pass = O(n_ctx * d_model + n_ctx * d_model + n_ctx * d_model^2 * d_hidden * 2 + n_ctx * d_hidden^2 + n_ctx * d_model^2 * d_hidden + n_ctx * d_hidden^2 * d_model + n_ctx * d_model + n_ctx * d_model^2 * d_vocab)
+    Complexity: n_ctx^2 * d_vocab * d_model^2) + (n_ctx * d_vocab * d_model^2)
+    todo fix complexity.
+    """
+    n_ctx, d_vocab, d_vocab_out, d_model = model.cfg.n_ctx, model.cfg.d_vocab, model.cfg.d_vocab_out, model.cfg.d_model
+
+    all_tokens = compute_all_tokens(model=model)
+    assert all_tokens.shape == (d_vocab**n_ctx, n_ctx), f"all_tokens.shape = {all_tokens.shape} != {(d_vocab**n_ctx, n_ctx)} = (d_vocab**n_ctx, n_ctx)"
+    predicted_logits = model(all_tokens)[:,-1,:].detach().cpu()
+    assert predicted_logits.shape == (d_vocab**n_ctx, d_vocab_out), f"predicted_logits.shape = {predicted_logits.shape} != {(d_vocab**n_ctx, d_vocab_out)} = (d_vocab**n_ctx, d_vocab_out)"
+
+    return logit_delta_of_results(all_tokens=all_tokens, predicted_logits=predicted_logits, renderer=renderer, histogram_all_incorrect_logit_differences=histogram_all_incorrect_logit_differences, return_summary=return_summary)
+
+# In[ ]:
+@torch.no_grad()
+def all_tokens_small_gap(model: HookedTransformer, max_min_gap: int = 1) -> TensorType["batch", "n_ctx"]:
+    """
+    All sequences of tokens with the constraint that some token z in the sequence satisfies true_max - max_min_gap <= z < true_max
+    Complexity: O(d_vocab ^ (n_ctx - 1) * (max_min_gap * 2 + 1))
+    """
+    n_ctx, d_vocab = model.cfg.n_ctx, model.cfg.d_vocab
+
+    all_tokens_after_start = generate_all_sequences(n_digits=d_vocab, sequence_length=n_ctx - 1)
+    all_tokens_after_start_max = all_tokens_after_start.max(dim=-1, keepdim=True).values
+    all_tokens_after_start_max_minf = all_tokens_after_start_max.clone()
+    all_tokens_after_start_max_minf[all_tokens_after_start_max_minf == all_tokens_after_start_max] = -max_min_gap - 1
+    all_tokens_after_start_second_max = all_tokens_after_start_max_minf.max(dim=-1, keepdim=True).values
+    first_token_max = all_tokens_after_start_max + max_min_gap + 1
+    gap_already_present = all_tokens_after_start_second_max >= all_tokens_after_start_max - max_min_gap
+    first_token_upper_min = all_tokens_after_start_max + gap_already_present.long()
+    first_token_min = torch.zeros_like(first_token_max)
+    first_token_min[~gap_already_present] = all_tokens_after_start_max[~gap_already_present] - max_min_gap
+    first_token_min[first_token_min < 0] = 0
+    first_token_max[first_token_max >= d_vocab] = d_vocab
+    first_token_upper_min[first_token_upper_min >= d_vocab] = d_vocab
+    assert first_token_max.shape == (d_vocab**(n_ctx - 1), 1), f"first_token_max.shape = {first_token_max.shape} != {(d_vocab**(n_ctx - 1), 1)} = (d_vocab**(n_ctx - 1), 1)"
+    assert first_token_upper_min.shape == (d_vocab**(n_ctx - 1), 1), f"first_token_upper_min.shape = {first_token_upper_min.shape} != {(n_ctx, 1)} = (d_vocab**(n_ctx - 1), 1)"
+    assert all_tokens_after_start_max.shape == (d_vocab**(n_ctx - 1), 1), f"all_tokens_after_start_max.shape = {all_tokens_after_start_max.shape} != {(d_vocab**(n_ctx - 1), 1)} = (d_vocab**(n_ctx - 1), 1)"
+    assert first_token_min.shape == (d_vocab**(n_ctx - 1), 1), f"first_token_min.shape = {first_token_min.shape} != {(d_vocab**(n_ctx - 1), 1)} = (d_vocab**(n_ctx - 1), 1)"
+    first_token_max, first_token_upper_min, all_tokens_after_start_max, first_token_min = first_token_max[:, 0], first_token_upper_min[:, 0], all_tokens_after_start_max[:, 0], first_token_min[:, 0]
+    first_token_ranges = [torch.cat([torch.arange(lower, mid), torch.arange(lower_big, upper)]) for lower, mid, lower_big, upper in zip(first_token_min, all_tokens_after_start_max, first_token_upper_min, first_token_max)]
+    all_tokens_with_small_gap = torch.cat([torch.cartesian_prod(first_tokens, *rest_tokens[:, None]) for first_tokens, rest_tokens in zip(first_token_ranges, all_tokens_after_start)])
+
+    return all_tokens_with_small_gap
+
+# In[ ]:
+@torch.no_grad()
+def logit_delta_small_gap_exhaustive(model: HookedTransformer, max_min_gap: int = 1, renderer=None, histogram_all_incorrect_logit_differences: bool = False, return_summary: bool = False) -> Union[float, Dict[str, Any]]:
+    """
+    Largest difference between logit(true_max) and logit(y) for y != true_max, with the constraint that some token z in the sequence satisfies true_max - max_min_gap <= z < true_max
+    Complexity: O(d_vocab ^ (n_ctx - 1) * (max_min_gap * 2 + 1) * fwd_pass)
+    Complexity: fwd_pass = O(n_ctx * d_model + n_ctx * d_model + n_ctx * d_model^2 * d_hidden * 2 + n_ctx * d_hidden^2 + n_ctx * d_model^2 * d_hidden + n_ctx * d_hidden^2 * d_model + n_ctx * d_model + n_ctx * d_model^2 * d_vocab)
+    Complexity: n_ctx^2 * d_vocab * d_model^2) + (n_ctx * d_vocab * d_model^2)
+    todo fix complexity.
+    """
+    n_ctx, d_vocab, d_vocab_out, d_model = model.cfg.n_ctx, model.cfg.d_vocab, model.cfg.d_vocab_out, model.cfg.d_model
+
+    all_tokens = all_tokens_small_gap(model, max_min_gap=max_min_gap)
+    assert len(all_tokens.shape) == 2 and all_tokens.shape[1] == n_ctx, f"all_tokens.shape = {all_tokens.shape} != (_, {n_ctx}) = (_, n_ctx)"
+    predicted_logits = model(all_tokens)[:,-1,:].detach().cpu()
+    assert len(predicted_logits.shape) == 2 and predicted_logits.shape[1] == d_vocab_out, f"predicted_logits.shape = {predicted_logits.shape} != (_, {d_vocab_out}) = (_, d_vocab_out)"
+
+    return logit_delta_of_results(all_tokens=all_tokens, predicted_logits=predicted_logits, renderer=renderer, histogram_all_incorrect_logit_differences=histogram_all_incorrect_logit_differences, return_summary=return_summary)
 
 # In[ ]:
 @torch.no_grad()
@@ -232,3 +302,5 @@ def EU_PU_PVOU(model: HookedTransformer, attention_pattern: TensorType["batch", 
 # class TokenType(Enum):
 #     EXACT = enum.auto() # max, or within gap
 #     BELOW_GAP = enum.auto()
+
+# In[ ]:

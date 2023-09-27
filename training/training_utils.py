@@ -62,7 +62,7 @@ def get_pth_base_path(save_in_google_drive: bool = False, create: bool = True) -
 
 # In[ ]:
 
-def generate_all_sequences(n_digits, sequence_length=2):
+def generate_all_sequences(n_digits: int, sequence_length: int = 2):
   data = list(itertools.product(range(n_digits), repeat=sequence_length))
   data = torch.tensor(data)
   return data
