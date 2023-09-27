@@ -19,7 +19,7 @@ from training_utils import compute_all_tokens
 import math
 
 # In[ ]:
-
+@torch.no_grad()
 def logit_delta(model: HookedTransformer, renderer=None, histogram_all_incorrect_logit_differences=False, return_summary=False) -> Union[float, Dict[str, Any]]:
     """
     Largest difference between logit(true_max) and logit(y) for y != true_max.
@@ -60,6 +60,7 @@ def logit_delta(model: HookedTransformer, renderer=None, histogram_all_incorrect
 
 
 # In[ ]:
+@torch.no_grad()
 def EU_PU(model: HookedTransformer, renderer=None, pos: int = -1) -> TensorType["d_vocab_q", "d_vocab_out"]:
     """
     Calculates logits from just the EU and PU paths in position pos.
@@ -78,6 +79,7 @@ def EU_PU(model: HookedTransformer, renderer=None, pos: int = -1) -> TensorType[
     return result
 
 # In[ ]:
+@torch.no_grad()
 def all_attention_scores(model: HookedTransformer) -> TensorType["n_ctx_k", "d_vocab_q", "d_vocab_k"]:
     """
     Returns pre-softmax attention of shape (n_ctx_k, d_vocab_q, d_vocab_k)
@@ -105,6 +107,7 @@ def all_attention_scores(model: HookedTransformer) -> TensorType["n_ctx_k", "d_v
     return x_scores
 
 # In[ ]:
+@torch.no_grad()
 def all_EVOU(model: HookedTransformer) -> TensorType["d_vocab", "d_vocab_out"]:
     """
     Returns all OV results, ignoring position, of shape (d_vocab, d_vocab_out)
@@ -123,6 +126,7 @@ def all_EVOU(model: HookedTransformer) -> TensorType["d_vocab", "d_vocab_out"]:
 
 
 # In[ ]:
+@torch.no_grad()
 def all_PVOU(model: HookedTransformer) -> TensorType["n_ctx", "d_vocab_out"]:
     """
     Returns all OV results, position only, of shape (n_ctx, d_vocab_out)
@@ -141,6 +145,7 @@ def all_PVOU(model: HookedTransformer) -> TensorType["n_ctx", "d_vocab_out"]:
 
 
 # In[ ]:
+@torch.no_grad()
 def find_all_d_attention_scores(model: HookedTransformer, min_gap: int = 1) -> Union[TensorType["d_vocab_q", "d_vocab_k"], TensorType["d_vocab_q", "n_ctx_max", "n_ctx_non_max", "d_vocab_k_max", "d_vocab_k_nonmax"]]:
     """
     If input tokens are x, y, with x - y > min_gap, the minimum values of
@@ -183,6 +188,7 @@ def find_all_d_attention_scores(model: HookedTransformer, min_gap: int = 1) -> U
 
 
 # In[ ]:
+@torch.no_grad()
 def find_min_d_attention_score(model: HookedTransformer, min_gap: int = 1, reduce_over_query=False) -> Union[float, TensorType["d_vocab_q"]]:
     """
     If input tokens are x, y, with x - y > min_gap, the minimum value of
@@ -199,6 +205,7 @@ def find_min_d_attention_score(model: HookedTransformer, min_gap: int = 1, reduc
     return scores
 
 # In[ ]:
+@torch.no_grad()
 def EU_PU_PVOU(model: HookedTransformer, attention_pattern: TensorType["batch", "n_ctx"]) -> TensorType["batch", "d_vocab_q", "d_vocab_out"]:
     """
     Calculates logits from EU, PU, and the positional part of the OV path for a given batch of attentions
@@ -225,4 +232,3 @@ def EU_PU_PVOU(model: HookedTransformer, attention_pattern: TensorType["batch", 
 # class TokenType(Enum):
 #     EXACT = enum.auto() # max, or within gap
 #     BELOW_GAP = enum.auto()
-

@@ -18,6 +18,7 @@ def make_local_tqdm(tqdm):
         return tqdm
 
 # %%
+@torch.no_grad()
 def compute_heuristic_independence_attention_copying(model: HookedTransformer, min_gap: int = 1, tqdm=None) -> List[TensorType["batch"]]:
     """
     Assuming that attention paid to the non-max tokens is independent of the copying behavior on non-max tokens which are at least min_gap away, computes the logit outputs, grouped by gap
@@ -78,6 +79,7 @@ def compute_heuristic_independence_attention_copying(model: HookedTransformer, m
     gc.collect()
     return results
 # %%
+@torch.no_grad()
 def compute_loss_from_centered_results(results: Iterable[TensorType["batch", "d_vocab_minus_one"]], tqdm=None):
     local_tqdm = make_local_tqdm(tqdm)
     results = list(results)
@@ -95,6 +97,7 @@ def compute_loss_from_centered_results(results: Iterable[TensorType["batch", "d_
     # return -torch.cat(tuple(correct_log_probs)).mean()
 
 # %%
+@torch.no_grad()
 def print_independence_attention_copying_stats(model: HookedTransformer, min_gap: int = 1, tqdm=None, results: Optional[TensorType["batch"]]=None):
     if results is None: return print_independence_attention_copying_stats(model, min_gap=min_gap, tqdm=tqdm, results=compute_heuristic_independence_attention_copying(model, min_gap=min_gap, tqdm=tqdm))
     gc.collect()
