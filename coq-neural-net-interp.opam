@@ -12,6 +12,7 @@ build: [
 install: [make "install"]
 depends: [
   "coq" {>= "8.17~"}
+  "dune" {>= "3.0"}
   "coq-record-update"
   "coq-flocq"
   "coq-interval"
