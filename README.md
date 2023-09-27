@@ -24,11 +24,11 @@ dune build
 
 ### `nix`
 
-This can build `emacs` or `vscode` to choice of version with dependencies that does not interact with your machine's other installations of `emacs` or `vscode`. It'll do coq `8.18`, it'll take me 30-60 minutes to make a flag/option for `8.17` in the CLI, just ask. 
+This can build `emacs` or `vscode` to choice of version with dependencies that does not interact with your machine's other installations of `emacs` or `vscode`. It'll do coq `8.17`, it'll take me 30-60 minutes to make a flag/option for `8.18` in the CLI, just ask. 
 
 I'm less confident that the `vscode` build actually works, I last really test drove the nix code for that forever ago. 
 
-You'll need to [`nixpkgs.config.allowUnfree = true;`](https://nixos.wiki/wiki/Unfree_Software) (or whatever) 
+You'll need to [`nixpkgs.config.allowUnfree = true;`](https://nixos.wiki/wiki/Unfree_Software) (or whatever) for `VST`.  
 
 ``` sh
 # direnv, nix-direnv is the way I do emacs. Should be able to skip for vscode? 

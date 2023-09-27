@@ -6,7 +6,7 @@
 ; (setq doom-theme 'doom-manegarm)
 
 ;; This works because of `nix-direnv` '
-(custom-set-variables `(coq-prog-name "dune coq top"))
+(custom-set-variables `(coq-prog-name "coqtop"))
 (custom-set-variables '(coq-project-filename "_CoqProjectDune"))
 
 (add-hook `pdf-view-mode-hook `pdf-view-themed-minor-mode)
