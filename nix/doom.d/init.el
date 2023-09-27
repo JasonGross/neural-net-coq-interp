@@ -1,0 +1,24 @@
+(doom!
+ :completion
+ company
+ :ui
+ doom
+ doom-dashboard
+ doom-quit
+ hl_todo
+ :editor
+ (evil +everywhere)
+ :tools
+ direnv
+ magit
+ make
+ :emacs
+ dired
+ :lang
+ coq
+ ocaml
+ nix
+ markdown
+ latex
+ sh
+)

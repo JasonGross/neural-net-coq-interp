@@ -55,3 +55,5 @@ training/wandb/
 training/__pycache__/
 training/trained-models/
 training/artifacts/
+.direnv
+_build

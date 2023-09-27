@@ -1,0 +1,5 @@
+(include_subdirs qualified)
+(coq.theory
+ (name NeuralNetInterp)
+ (synopsis "Work in progress formalization of mechanistic interpretability arguments on tiny neural nets")
+ (package coq-neural-net-interp))
