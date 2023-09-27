@@ -21,7 +21,7 @@ def make_local_tqdm(tqdm):
 @torch.no_grad()
 def compute_heuristic_independence_attention_copying(model: HookedTransformer, min_gap: int = 1, tqdm=None) -> List[TensorType["batch"]]:
     """
-    Assuming that attention paid to the non-max tokens is independent of the copying behavior on non-max tokens which are at least min_gap away, computes the logit outputs, grouped by gap
+    Assuming that attention paid to the non-max tokens is independent of the copying behavior on non-max tokens which are at least min_gap away, and also these are independent of the attention pattern on positional embeddings, computes the logit outputs, grouped by gap
     Returns: List[Tensor[batch, d_vocab_out]] (indices are gap)
     Complexity:
     """
