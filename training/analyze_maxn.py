@@ -21,7 +21,7 @@ from analysis_utils import line, summarize, plot_QK_cosine_similarity, \
     plot_avg_qk_heatmap, plot_qk_heatmap, plot_qk_heatmaps_normed, plot_unembed_cosine_similarity
 from coq_export_utils import coq_export_params
 from max_of_n import acc_fn, loss_fn, train_model, large_data_gen
-from interp_max_utils import logit_delta
+from interp_max_utils import logit_delta, all_EVOU
 from training_utils import compute_all_tokens, make_testset_trainset, make_generator_from_data
 
 import os, sys
@@ -132,7 +132,7 @@ find_d_score_coeff(model)
 list(enumerate(model(torch.tensor([1, 1, 1, 18, 19]))[0, -1, :]))
 
 # %%
-calculate_copying(model)
+# calculate_copying(model)
 
 
 
@@ -382,4 +382,31 @@ def slack(model, biggap=None, smallgap=None):
     
 if __name__ == '__main__':
     slack(model)
+# %%
+
+# Get EVOU matrix (kt, ot)
+evou = all_EVOU(model).detach()
+sns.heatmap(evou)
+
+def kt_attn_reqd_to_flip(model):
+    evou = all_EVOU(model).detach()
+    d_vocab = evou.shape[0]
+    result = torch.zeros((d_vocab, d_vocab, d_vocab))
+    for mt in range(d_vocab):
+        for kt in range(d_vocab):
+            if kt == mt: continue
+            for ot in range(d_vocab):
+                mt_ot_delta = evou[mt, mt] - evou[mt, ot]
+                kt_ot_delta = evou[kt, mt] - evou[kt, ot]
+                result[mt, kt, ot] = kt_ot_delta / mt_ot_delta
+    return result
+# %%
+
+kt_numbers = kt_attn_reqd_to_flip(model)
+# %%
+
+sns.heatmap(kt_numbers[25, :, :])
+plt.title("Is it easy to flip 25?")
+plt.ylabel("kt")
+plt.xlabel("ot")
 # %%

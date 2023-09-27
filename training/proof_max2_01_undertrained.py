@@ -5,7 +5,7 @@ import numpy as np
 import transformer_lens
 from transformer_lens import HookedTransformer, HookedTransformerConfig
 import tqdm.auto as tqdm
-import circuitsvis as cv
+# import circuitsvis as cv
 from fancy_einsum import einsum
 from pathlib import Path
 from IPython import get_ipython
@@ -31,10 +31,10 @@ from undertrained_max2 import get_model
 # %%
 
 if __name__ == '__main__':
-    
+
     TRAIN_IF_NECESSARY = False
     model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
-    
+
 # %%
 
 if __name__ == '__main__':
@@ -44,7 +44,7 @@ if __name__ == '__main__':
     print(f"accuracy is {acc_fn(predicted_logits, all_tokens)}")
     print(f"loss (mean log(Pr(true max))) is {loss_fn(predicted_logits, all_tokens)}")
     print(f"loss (mean log(Pr(true max))) is {loss_fn(predicted_logits, all_tokens).item().hex()}")
-    
+
 # %%
 
 def min_effect_of_EU_PU(model) -> float:
