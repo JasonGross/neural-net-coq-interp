@@ -57,9 +57,9 @@ def compute_heuristic_independence_attention_copying(model: HookedTransformer, m
         gap = true_max - input_seq[input_seq != true_max].max().item() if any(input_seq != true_max) else 0
         positional_impact = EU_PU_PVOU_logits[:,input_seq[-1],:]
         assert positional_impact.shape == (d_vocab**n_ctx, d_vocab_out), f"positional_impact.shape = {positional_impact.shape} != {(d_vocab**n_ctx, d_vocab_out)} = (d_vocab**n_ctx, d_vocab_out)"
-        positional_impact = positional_impact[:,true_max][:,None] - positional_impact
+        positional_impact = positional_impact - positional_impact[:,true_max][:,None]
         assert len(copying_behavior.shape) == 2 and copying_behavior.shape[1] == d_vocab_out, f"copying_behavior.shape = {copying_behavior.shape} != (_, {d_vocab_out}) = (_, d_vocab_out)"
-        copying_behavior = copying_behavior[:,true_max][:,None] - copying_behavior
+        copying_behavior = copying_behavior - copying_behavior[:,true_max][:,None]
         # remove the true_max column
         positional_impact = positional_impact[:,torch.arange(positional_impact.shape[1]) != true_max]
         copying_behavior = copying_behavior[:,torch.arange(copying_behavior.shape[1]) != true_max]
@@ -103,7 +103,7 @@ def print_independence_attention_copying_stats(model: HookedTransformer, min_gap
     gc.collect()
     d_vocab, n_ctx = model.cfg.d_vocab, model.cfg.n_ctx
     print(f"Assume that attention paid to the non-max tokens is independent of the copying behavior on non-max tokens which are at least {min_gap} away")
-    bad_result_count_per_gap = [(r.min(dim=-1).values <= 0).sum() for r in results]
+    bad_result_count_per_gap = [(r.max(dim=-1).values >= 0).sum() for r in results]
     bad_result_count = sum(bad_result_count_per_gap)
     total_count = sum(r.shape[0] for r in results)
     bad_result_rate = bad_result_count / total_count
@@ -117,7 +117,7 @@ def print_independence_attention_copying_stats(model: HookedTransformer, min_gap
     print(f"Then we expect that in {bad_result_rate}% of cases ({bad_result_rate * real_total_count} out of {real_total_count}), the model will return an incorrect result")
     print(f"(The true accuracy is {real_acc} (1 - acc = {1 - real_acc}), i.e., {int(np.round((1 - real_acc) * real_total_count))} wrong out of {real_total_count})")
     print(f"The best possible heuristic loss is {heuristic_loss} (true loss: {real_loss})")
-    print(f"The worst-case logit gap is {min(r.min() for r in results)}")
+    print(f"The worst-case logit gap is {-max(r.max() for r in results)}")
     all_tokens_gaps = all_tokens.max(dim=-1, keepdim=True).values - all_tokens
     # replace 0s with float('inf')
     all_tokens_gaps[all_tokens_gaps == 0] = d_vocab + 1
@@ -134,7 +134,7 @@ def print_independence_attention_copying_stats(model: HookedTransformer, min_gap
                 gap_real_total_count = (all_tokens_gaps == gap).sum().item()
                 print(f"Gap {gap}:")
                 print(f"We expect that in {gap_bad_result_rate}% of cases ({gap_bad_result_rate * gap_real_total_count} out of {gap_real_total_count}), the model will return an incorrect result")
-                print(f"The worst-case logit gap is {result_for_gap.min()}")
+                print(f"The worst-case logit gap is {-result_for_gap.max()}")
 
 # %%
 # In[ ]:
