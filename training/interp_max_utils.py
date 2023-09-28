@@ -28,7 +28,7 @@ def complexity_of(f):
 
 # In[ ]:
 @torch.no_grad()
-def logit_delta_of_results(all_tokens: TensorType["batch", "n_ctx"], predicted_logits: TensorType["batch", "d_vocab_out"], renderer=None, histogram_all_incorrect_logit_differences: bool = False, return_summary: bool = False) -> Union[float, Dict[str, Any]]:
+def logit_delta_of_results(all_tokens: TensorType["batch", "n_ctx"], predicted_logits: TensorType["batch", "d_vocab_out"], renderer=None, histogram_all_incorrect_logit_differences: bool = False, return_summary: bool = False, hist_args={}) -> Union[float, Dict[str, Any]]:
     """
     Largest difference between logit(true_max) and logit(y) for y != true_max.
     """
@@ -50,7 +50,7 @@ def logit_delta_of_results(all_tokens: TensorType["batch", "n_ctx"], predicted_l
 
     if histogram_all_incorrect_logit_differences:
         all_incorrect_logits = logits_above_correct[logits_above_correct != float('inf')]
-        summarize(all_incorrect_logits, name='all incorrect logit differences', histogram=True, renderer=renderer)
+        summarize(all_incorrect_logits, name='all incorrect logit differences', histogram=True, hist_args=hist_args, renderer=renderer)
 
     if return_summary:
         return summarize(min_incorrect_logit, name='min(correct logit - incorrect logit)', renderer=renderer, histogram=True)
@@ -61,7 +61,7 @@ def logit_delta_of_results(all_tokens: TensorType["batch", "n_ctx"], predicted_l
 
 # In[ ]:
 @torch.no_grad()
-def logit_delta(model: HookedTransformer, renderer=None, histogram_all_incorrect_logit_differences: bool = False, return_summary: bool = False) -> Union[float, Dict[str, Any]]:
+def logit_delta(model: HookedTransformer, renderer=None, histogram_all_incorrect_logit_differences: bool = False, return_summary: bool = False, hist_args={}) -> Union[float, Dict[str, Any]]:
     """
     Largest difference between logit(true_max) and logit(y) for y != true_max.
     Complexity: O(d_vocab^n_ctx * fwd_pass)
@@ -76,7 +76,7 @@ def logit_delta(model: HookedTransformer, renderer=None, histogram_all_incorrect
     predicted_logits = model(all_tokens)[:,-1,:].detach().cpu()
     assert predicted_logits.shape == (d_vocab**n_ctx, d_vocab_out), f"predicted_logits.shape = {predicted_logits.shape} != {(d_vocab**n_ctx, d_vocab_out)} = (d_vocab**n_ctx, d_vocab_out)"
 
-    return logit_delta_of_results(all_tokens=all_tokens, predicted_logits=predicted_logits, renderer=renderer, histogram_all_incorrect_logit_differences=histogram_all_incorrect_logit_differences, return_summary=return_summary)
+    return logit_delta_of_results(all_tokens=all_tokens, predicted_logits=predicted_logits, renderer=renderer, histogram_all_incorrect_logit_differences=histogram_all_incorrect_logit_differences, return_summary=return_summary, hist_args=hist_args)
 
 # In[ ]:
 @torch.no_grad()
@@ -112,7 +112,7 @@ def all_tokens_small_gap(model: HookedTransformer, max_min_gap: int = 1) -> Tens
 
 # In[ ]:
 @torch.no_grad()
-def logit_delta_small_gap_exhaustive(model: HookedTransformer, max_min_gap: int = 1, renderer=None, histogram_all_incorrect_logit_differences: bool = False, return_summary: bool = False) -> Union[float, Dict[str, Any]]:
+def logit_delta_small_gap_exhaustive(model: HookedTransformer, max_min_gap: int = 1, renderer=None, histogram_all_incorrect_logit_differences: bool = False, return_summary: bool = False, hist_args={}) -> Union[float, Dict[str, Any]]:
     """
     Largest difference between logit(true_max) and logit(y) for y != true_max, with the constraint that some token z in the sequence satisfies true_max - max_min_gap <= z < true_max
     Complexity: O(d_vocab ^ (n_ctx - 1) * (max_min_gap * 2 + 1) * fwd_pass)
@@ -127,7 +127,7 @@ def logit_delta_small_gap_exhaustive(model: HookedTransformer, max_min_gap: int 
     predicted_logits = model(all_tokens)[:,-1,:].detach().cpu()
     assert len(predicted_logits.shape) == 2 and predicted_logits.shape[1] == d_vocab_out, f"predicted_logits.shape = {predicted_logits.shape} != (_, {d_vocab_out}) = (_, d_vocab_out)"
 
-    return logit_delta_of_results(all_tokens=all_tokens, predicted_logits=predicted_logits, renderer=renderer, histogram_all_incorrect_logit_differences=histogram_all_incorrect_logit_differences, return_summary=return_summary)
+    return logit_delta_of_results(all_tokens=all_tokens, predicted_logits=predicted_logits, renderer=renderer, histogram_all_incorrect_logit_differences=histogram_all_incorrect_logit_differences, return_summary=return_summary, hist_args=hist_args)
 
 # In[ ]:
 @torch.no_grad()
@@ -304,3 +304,14 @@ def EU_PU_PVOU(model: HookedTransformer, attention_pattern: TensorType["batch", 
 #     BELOW_GAP = enum.auto()
 
 # In[ ]:
+def worst_PVOU_for(model: HookedTransformer, query_tok: int, max_tok: int, non_max_output_tok: int,
+                   PVOU: Optional[TensorType["n_ctx", "d_vocab_out"]] = None,
+                   attention_scores: Optional[TensorType["n_ctx_k", "d_vocab_q", "d_vocab_k"]] = None) -> TensorType["d_vocab_out"]:
+    """
+    """
+    assert max_tok >= query_tok, f"max_tok = {max_tok} < {query_tok} = query_tok"
+    n_ctx, d_vocab_out, d_vocab = model.cfg.n_ctx, model.cfg.d_vocab_out, model.cfg.d_vocab
+    if PVOU is None: PVOU = all_PVOU(model)
+    assert PVOU.shape == (n_ctx, d_vocab_out), f"PVOU.shape = {PVOU.shape} != {(n_ctx, d_vocab_out)} = (n_ctx, d_vocab_out)"
+    if attention_scores is None: attention_scores = all_attention_scores(model)
+    assert attention_scores.shape == (n_ctx, d_vocab, d_vocab), f"attention_scores.shape = {attention_scores.shape} != {(n_ctx, d_vocab, d_vocab)} = (n_ctx, d_vocab, d_vocab)"

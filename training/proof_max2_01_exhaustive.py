@@ -15,7 +15,8 @@ if __name__ == '__main__':
 # %%
 
 if __name__ == '__main__':
-    print(f"minimum difference between the true_max logit and any other logit is {logit_delta(model)}")
+    # logit_delta(model, histogram_all_incorrect_logit_differences=True, renderer='png', hist_args=[{}, {'cumulative': True, 'histnorm': 'probability'}])
+    print(f"minimum difference between the true_max logit and any other logit is {logit_delta(model)}") #, histogram_all_incorrect_logit_differences=True, renderer='png')}")
     print(f"Complexity is:\n{complexity_of(logit_delta)}")
     all_tokens = compute_all_tokens(model=model)
     predicted_logits = model(all_tokens).detach().cpu()

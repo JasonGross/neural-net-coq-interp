@@ -80,10 +80,10 @@ def compute_heuristic_independence_attention_copying(model: HookedTransformer, m
     return results
 # %%
 @torch.no_grad()
-def compute_loss_from_centered_results(results: Iterable[TensorType["batch", "d_vocab_minus_one"]], tqdm=None):
+def compute_loss_from_centered_results(results: Iterable[TensorType["batch", "d_vocab_minus_one"]], tqdm=None, total_count: Optional[int] = None):
     local_tqdm = make_local_tqdm(tqdm)
     results = list(results)
-    total_count = sum(result.shape[0] for result in results)
+    if total_count is None: total_count = sum(result.shape[0] for result in results)
     res = 0
     for result in local_tqdm(results):
         # result.to('cuda' if torch.cuda.is_available() else 'cpu')
@@ -124,14 +124,24 @@ def print_independence_attention_copying_stats(model: HookedTransformer, min_gap
     all_tokens_gaps = all_tokens_gaps.min(dim=-1).values
     # replace inf with 0
     all_tokens_gaps[all_tokens_gaps == d_vocab + 1] = 0
+    bad_gap_loss_contrib = 0
+    good_gap_loss_contrib = 0
     if bad_result_count > 0:
         print("Broken out by gap:")
         for gap, result_for_gap in enumerate(results):
+            print(f"Gap {gap}:")
+            print(f"Loss on gap {gap} is {compute_loss_from_centered_results([result_for_gap], tqdm=None)}")
+            loss_contrib = compute_loss_from_centered_results([result_for_gap], tqdm=None, total_count=total_count)
+            print(f"Loss contribution on gap {gap} is {loss_contrib}")
             if bad_result_count_per_gap[gap] > 0:
                 gap_bad_result_count = bad_result_count_per_gap[gap]
                 gap_total_count = result_for_gap.shape[0]
                 gap_bad_result_rate = gap_bad_result_count / gap_total_count
                 gap_real_total_count = (all_tokens_gaps == gap).sum().item()
-                print(f"Gap {gap}:")
                 print(f"We expect that in {gap_bad_result_rate}% of cases ({gap_bad_result_rate * gap_real_total_count} out of {gap_real_total_count}), the model will return an incorrect result")
                 print(f"The worst-case logit gap is {-result_for_gap.max()}")
+                bad_gap_loss_contrib += loss_contrib
+            else:
+                good_gap_loss_contrib += loss_contrib
+    print(f"Bad gap loss contribution is {bad_gap_loss_contrib}")
+    print(f"Good gap loss contribution is {good_gap_loss_contrib}")
