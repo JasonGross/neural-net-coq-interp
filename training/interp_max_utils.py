@@ -80,6 +80,19 @@ def logit_delta(model: HookedTransformer, renderer=None, histogram_all_incorrect
 
 # In[ ]:
 @torch.no_grad()
+def compute_gap(all_tokens: TensorType["batch", "n_ctx"]) -> TensorType["batch"]:
+    """
+    computes the gap between the max token and the second max token in each row of all_tokens
+    """
+    maxv = all_tokens.max(dim=-1, keepdim=True).values
+    all_but_maxv = all_tokens.clone()
+    all_but_maxv[all_but_maxv == maxv] = -all_tokens.max().item()
+    second_maxv = all_but_maxv.max(dim=-1, keepdim=True).values
+    second_maxv[second_maxv < 0] = maxv[second_maxv < 0]
+    return (maxv - second_maxv)[:, 0]
+
+# In[ ]:
+@torch.no_grad()
 def all_tokens_small_gap(model: HookedTransformer, max_min_gap: int = 1) -> TensorType["batch", "n_ctx"]:
     """
     All sequences of tokens with the constraint that some token z in the sequence satisfies true_max - max_min_gap <= z < true_max
@@ -89,7 +102,7 @@ def all_tokens_small_gap(model: HookedTransformer, max_min_gap: int = 1) -> Tens
 
     all_tokens_after_start = generate_all_sequences(n_digits=d_vocab, sequence_length=n_ctx - 1)
     all_tokens_after_start_max = all_tokens_after_start.max(dim=-1, keepdim=True).values
-    all_tokens_after_start_max_minf = all_tokens_after_start_max.clone()
+    all_tokens_after_start_max_minf = all_tokens_after_start.clone()
     all_tokens_after_start_max_minf[all_tokens_after_start_max_minf == all_tokens_after_start_max] = -max_min_gap - 1
     all_tokens_after_start_second_max = all_tokens_after_start_max_minf.max(dim=-1, keepdim=True).values
     first_token_max = all_tokens_after_start_max + max_min_gap + 1
@@ -128,6 +141,27 @@ def logit_delta_small_gap_exhaustive(model: HookedTransformer, max_min_gap: int 
     assert len(predicted_logits.shape) == 2 and predicted_logits.shape[1] == d_vocab_out, f"predicted_logits.shape = {predicted_logits.shape} != (_, {d_vocab_out}) = (_, d_vocab_out)"
 
     return logit_delta_of_results(all_tokens=all_tokens, predicted_logits=predicted_logits, renderer=renderer, histogram_all_incorrect_logit_differences=histogram_all_incorrect_logit_differences, return_summary=return_summary, hist_args=hist_args)
+
+# In[ ]:
+@torch.no_grad()
+def logit_delta_by_gap(model: HookedTransformer, renderer=None, histogram_all_incorrect_logit_differences: bool = False, return_summary: bool = False, hist_args={}) -> Dict[int, Union[float, Dict[str, Any]]]:
+    """
+    Largest difference between logit(true_max) and logit(y) for y != true_max, with the constraint that all non-max tokens in the sequence are strictly more than gap away from the true max, indexed by gap
+    Complexity: O(d_vocab ^ n_ctx * fwd_pass)
+    Complexity: fwd_pass = O(n_ctx * d_model + n_ctx * d_model + n_ctx * d_model^2 * d_hidden * 2 + n_ctx * d_hidden^2 + n_ctx * d_model^2 * d_hidden + n_ctx * d_hidden^2 * d_model + n_ctx * d_model + n_ctx * d_model^2 * d_vocab)
+    Complexity: n_ctx^2 * d_vocab * d_model^2) + (n_ctx * d_vocab * d_model^2)
+    todo fix complexity.
+    """
+    n_ctx, d_vocab, d_vocab_out, d_model = model.cfg.n_ctx, model.cfg.d_vocab, model.cfg.d_vocab_out, model.cfg.d_model
+
+    all_tokens = compute_all_tokens(model=model)
+    assert all_tokens.shape == (d_vocab**n_ctx, n_ctx), f"all_tokens.shape = {all_tokens.shape} != {(d_vocab**n_ctx, n_ctx)} = (d_vocab**n_ctx, n_ctx)"
+    predicted_logits = model(all_tokens)[:,-1,:].detach().cpu()
+    assert predicted_logits.shape == (all_tokens.shape[0], d_vocab_out), f"predicted_logits.shape = {predicted_logits.shape} != {(all_tokens.shape[0], d_vocab_out)} = (all_tokens.shape[0], d_vocab_out)"
+    gaps = compute_gap(all_tokens)
+    assert gaps.shape == (all_tokens.shape[0],), f"gaps.shape = {gaps.shape} != {(all_tokens.shape[0],)} = (all_tokens.shape[0],)"
+    return {gap: logit_delta_of_results(all_tokens=all_tokens[gaps == gap, :], predicted_logits=predicted_logits[gaps == gap, :], renderer=renderer, histogram_all_incorrect_logit_differences=histogram_all_incorrect_logit_differences, return_summary=return_summary, hist_args=hist_args)
+            for gap in range(d_vocab)}
 
 # In[ ]:
 @torch.no_grad()

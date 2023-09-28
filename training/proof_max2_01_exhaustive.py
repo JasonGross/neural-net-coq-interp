@@ -1,6 +1,7 @@
 # %%
 from max_of_n import acc_fn, loss_fn
 from interp_max_utils import logit_delta, complexity_of
+from interp_max_utils import logit_delta_large_gap_exhaustive
 from training_utils import compute_all_tokens
 from train_max_of_2 import get_model
 from tqdm.auto import tqdm
@@ -16,6 +17,7 @@ if __name__ == '__main__':
 
 if __name__ == '__main__':
     # logit_delta(model, histogram_all_incorrect_logit_differences=True, renderer='png', hist_args=[{}, {'cumulative': True, 'histnorm': 'probability'}])
+    # logit_delta_large_gap_exhaustive(model, min_gap=1, histogram_all_incorrect_logit_differences=True, renderer='png', hist_args=[{}, {'cumulative': True, 'histnorm': 'probability'}])
     print(f"minimum difference between the true_max logit and any other logit is {logit_delta(model)}") #, histogram_all_incorrect_logit_differences=True, renderer='png')}")
     print(f"Complexity is:\n{complexity_of(logit_delta)}")
     all_tokens = compute_all_tokens(model=model)
