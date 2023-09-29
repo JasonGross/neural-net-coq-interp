@@ -2,6 +2,7 @@
 import math
 from interp_max_utils import EU_PU_PVOU, all_EVOU
 from max_of_n import acc_fn, loss_fn
+from analysis_utils import make_local_tqdm
 from training_utils import compute_all_tokens
 import torch
 from einops import rearrange
@@ -10,13 +11,6 @@ from transformer_lens import HookedTransformer
 from typing import Iterable, List, Optional
 import numpy as np
 import gc
-# %%
-def make_local_tqdm(tqdm):
-    if tqdm is None:
-        return lambda arg, **kwargs: arg
-    else:
-        return tqdm
-
 # %%
 @torch.no_grad()
 def compute_heuristic_independence_attention_copying(model: HookedTransformer, min_gap: int = 1, tqdm=None) -> List[TensorType["batch"]]:

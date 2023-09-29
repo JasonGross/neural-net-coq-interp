@@ -5,6 +5,7 @@ from torchtyping import TensorType
 from enum import Enum, verify, UNIQUE, CONTINUOUS
 import enum
 import itertools
+from analysis_utils import make_local_tqdm
 from fancy_einsum import einsum
 import matplotlib.pyplot as plt
 import numpy as np
@@ -338,14 +339,80 @@ def EU_PU_PVOU(model: HookedTransformer, attention_pattern: TensorType["batch", 
 #     BELOW_GAP = enum.auto()
 
 # In[ ]:
+@torch.no_grad()
 def worst_PVOU_for(model: HookedTransformer, query_tok: int, max_tok: int, non_max_output_tok: int,
                    PVOU: Optional[TensorType["n_ctx", "d_vocab_out"]] = None,
-                   attention_scores: Optional[TensorType["n_ctx_k", "d_vocab_q", "d_vocab_k"]] = None) -> TensorType["d_vocab_out"]:
+                   attention_score_map: Optional[TensorType["n_ctx_k", "d_vocab_q", "d_vocab_k"]] = None,
+                   optimize_max_query_comparison=True) -> TensorType["d_vocab_out"]:
     """
+    Returns the PVOU with the worst (largest) value of PVOU[non_max_output_tok] - PVOU[max_tok], across all possible attention scalings for the query token and for token values <= max_tok.
+    Complexity: O(PVOU + attention_score_map + n_ctx^2)
+    Complexity: ~ O(n_ctx * d_vocab * d_model^2 (from PVOU) + d_vocab * d_head^2 * d_model * n_ctx (from attention_score_map) + n_ctx * log(n_ctx) (sorting) + n_ctx^2)
+    Complexity: (for n_ctx=2) O(POVU + attention_score_map + n_ctx)
+    N.B. Clever caching could reduce n_ctx^2 to n_ctx, leaving n_ctx log(n_ctx) from sorting as the dominant factor
+    N.B. If optimize_max_query_comparison is set, and n_ctx is 2, then whenever query_tok != max_tok we know exactly what the sequence is and can just compute the attention
     """
     assert max_tok >= query_tok, f"max_tok = {max_tok} < {query_tok} = query_tok"
     n_ctx, d_vocab_out, d_vocab = model.cfg.n_ctx, model.cfg.d_vocab_out, model.cfg.d_vocab
     if PVOU is None: PVOU = all_PVOU(model)
     assert PVOU.shape == (n_ctx, d_vocab_out), f"PVOU.shape = {PVOU.shape} != {(n_ctx, d_vocab_out)} = (n_ctx, d_vocab_out)"
-    if attention_scores is None: attention_scores = all_attention_scores(model)
-    assert attention_scores.shape == (n_ctx, d_vocab, d_vocab), f"attention_scores.shape = {attention_scores.shape} != {(n_ctx, d_vocab, d_vocab)} = (n_ctx, d_vocab, d_vocab)"
+    if attention_score_map is None: attention_score_map = all_attention_scores(model)
+    assert attention_score_map.shape == (n_ctx, d_vocab, d_vocab), f"attention_scores.shape = {attention_score_map.shape} != {(n_ctx, d_vocab, d_vocab)} = (n_ctx, d_vocab, d_vocab)"
+    worst_attention_score = torch.zeros((n_ctx,))
+    worst_attention_score[-1] = attention_score_map[-1, query_tok, query_tok]
+    if n_ctx == 2 and optimize_max_query_comparison and query_tok != max_tok:
+        worst_attention_score[0] = attention_score_map[0, query_tok, max_tok]
+    else:
+        # compute the min and max attention scores for each position and query token where the key token is <= max_tok
+        min_attention_scores, max_attention_scores = attention_score_map[:-1, query_tok, :max_tok+1].min(dim=-1).values, attention_score_map[:-1, query_tok, :max_tok+1].max(dim=-1).values
+        assert min_attention_scores.shape == (n_ctx-1,), f"min_attention_scores.shape = {min_attention_scores.shape} != {(n_ctx-1,)} = (n_ctx-1,)"
+        assert max_attention_scores.shape == (n_ctx-1,), f"max_attention_scores.shape = {max_attention_scores.shape} != {(n_ctx-1,)} = (n_ctx-1,)"
+        worst_attention_score[:-1] = min_attention_scores
+        d_PVOU = PVOU[:, non_max_output_tok] - PVOU[:, max_tok]
+        assert d_PVOU.shape == (n_ctx,), f"d_PVOU.shape = {d_PVOU.shape} != {(n_ctx,)} = (n_ctx,)"
+        # sort d_PVOU in descending order
+        _, d_PVOU_idxs = d_PVOU[:-1].sort(descending=True)
+        for i in d_PVOU_idxs:
+            # compare d_PVOU weighted by softmax of worst_attention_score for worst_attention_score[i] in (min_attention_scores[i], max_attention_scores[i])
+            # set worst_attention_score[i] to whichever one is worse (more positive)
+            # print(d_PVOU.shape, worst_attention_score.softmax(dim=-1).shape)
+            min_d_PVOU = worst_attention_score.softmax(dim=-1) @ d_PVOU
+            worst_attention_score[i] = max_attention_scores[i]
+            max_d_PVOU = worst_attention_score.softmax(dim=-1) @ d_PVOU
+            if min_d_PVOU > max_d_PVOU: worst_attention_score[i] = min_attention_scores[i]
+            # print(i, min_attention_scores[i], worst_attention_score[i], max_attention_scores[i], min_d_PVOU, max_d_PVOU, d_PVOU[i])
+    # return the PVOU for the worst_attention_score
+    return worst_attention_score.softmax(dim=-1) @ PVOU
+
+# In[ ]:
+@torch.no_grad()
+def worst_PVOU_gap_for(model: HookedTransformer, query_tok: int, max_tok: int, non_max_output_tok: int,
+                       PVOU: Optional[TensorType["n_ctx", "d_vocab_out"]] = None,
+                       attention_score_map: Optional[TensorType["n_ctx_k", "d_vocab_q", "d_vocab_k"]] = None) -> float:
+    worst_PVOU = worst_PVOU_for(model, query_tok, max_tok, non_max_output_tok, PVOU=PVOU, attention_score_map=attention_score_map)
+    return worst_PVOU[non_max_output_tok] - worst_PVOU[max_tok]
+
+# In[ ]:
+@torch.no_grad()
+def all_worst_PVOU(model: HookedTransformer, tqdm=None) -> TensorType["d_vocab_q", "d_vocab_max", "d_vocab_out"]:
+    """
+    Returns the mixture of PVOUs with the worst (largest) value of PVOU[non_max_output_tok] - PVOU[max_tok], across all possible attention scalings for the query token and for token values <= max_tok.
+    Complexity: O(PVOU + attention_score_map + n_ctx^2 * d_vocab^3)
+    Complexity: ~ O(n_ctx * d_vocab * d_model^2 (from PVOU) + d_vocab * d_head^2 * d_model * n_ctx (from attention_score_map) + (n_ctx * log(n_ctx) (sorting) + n_ctx^2) * d_vocab^3)
+    Complexity: (for n_ctx=2) O(PVOU + attention_score_map + n_ctx * d_vocab^3)
+    N.B. Clever caching could reduce n_ctx^2 to n_ctx, leaving n_ctx log(n_ctx) * d_vocab^3 from sorting as the dominant factor.
+    N.B. for max_of_{two,three}, this is maybe? worse than exhaustive enumeration (oops)
+    """
+    local_tqdm = make_local_tqdm(tqdm)
+    n_ctx, d_vocab_out, d_vocab = model.cfg.n_ctx, model.cfg.d_vocab_out, model.cfg.d_vocab
+    PVOU = all_PVOU(model)
+    assert PVOU.shape == (n_ctx, d_vocab_out), f"PVOU.shape = {PVOU.shape} != {(n_ctx, d_vocab_out)} = (n_ctx, d_vocab_out)"
+    attention_score_map = all_attention_scores(model)
+    assert attention_score_map.shape == (n_ctx, d_vocab, d_vocab), f"attention_scores.shape = {attention_score_map.shape} != {(n_ctx, d_vocab, d_vocab)} = (n_ctx, d_vocab, d_vocab)"
+    result = torch.zeros((d_vocab, d_vocab, d_vocab_out)) + float('nan')
+    for non_max_tok, query_tok in local_tqdm(itertools.product(range(d_vocab), repeat=2), total=d_vocab**2):
+        for max_tok in range(query_tok, d_vocab):
+            result[query_tok, max_tok, non_max_tok] = worst_PVOU_gap_for(model, query_tok, max_tok, non_max_tok, PVOU=PVOU, attention_score_map=attention_score_map)
+
+    return result
+

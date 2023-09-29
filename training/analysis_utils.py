@@ -942,3 +942,11 @@ def plot_QK_cosine_similarity(model, keypos=-1, querypos=-1, do_layernorm=True):
 
     line(direction_dot_embed_error.T, title="direction_dot_normed_embed_error")
     line(direction_dot_pos_embed.T, title="direction @ pos_embed")
+
+
+# %%
+def make_local_tqdm(tqdm):
+    if tqdm is None:
+        return lambda arg, **kwargs: arg
+    else:
+        return tqdm
