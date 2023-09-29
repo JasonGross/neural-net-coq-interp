@@ -86,12 +86,14 @@ def summarize(values, name=None, histogram=False, renderer=None, hist_args={},
               fit_function=None, fit_equation=None,
               min=True, max=True, mean=True, median=True, range=True, range_size=True, firstn=None, abs_max=True):
     if histogram:
-        hist_args = dict(hist_args)
-        if 'title' not in hist_args and name is not None: hist_args['title'] = f'Histogram of {name}'
-        if 'renderer' not in hist_args and renderer is not None: hist_args['renderer'] = renderer
-        if 'xaxis' not in hist_args: hist_args['xaxis'] = name if name is not None else 'Value'
-        if 'yaxis' not in hist_args: hist_args['yaxis'] = 'Count'
-        hist(values, **hist_args)
+        hist_args_list = hist_args if isinstance(hist_args, list) else [hist_args]
+        for hist_args in hist_args_list:
+            hist_args = dict(hist_args)
+            if 'title' not in hist_args and name is not None: hist_args['title'] = f'Histogram of {name}'
+            if 'renderer' not in hist_args and renderer is not None: hist_args['renderer'] = renderer
+            if 'xaxis' not in hist_args: hist_args['xaxis'] = name if name is not None else 'Value'
+            if 'yaxis' not in hist_args: hist_args['yaxis'] = 'Count'
+            hist(values, **hist_args)
 
     if imshow_args is not None:
         imshow_args = dict(imshow_args)
@@ -559,14 +561,14 @@ def calculate_attn_by_pos(model: HookedTransformer, pos=False, renderer=None):
 def replace_nans_with_row_max(tensor):
     # Step 1: Identify the nan values
     nan_mask = torch.isnan(tensor)
-    
+
     # Step 2: Compute the maximum value for each row, ignoring nans
     non_nan_tensor = torch.where(nan_mask, torch.tensor(float('-inf')).to(tensor.device), tensor)
     row_max, _ = torch.max(non_nan_tensor, dim=1, keepdim=True)
-    
+
     # Replace nan with the max value of the respective row
     tensor[nan_mask] = row_max.expand_as(tensor)[nan_mask]
-    
+
     return tensor
 
 def calculate_rowwise_attn_by_pos_near(model: HookedTransformer, pos=False, renderer=None, max_offset=1):
@@ -940,3 +942,11 @@ def plot_QK_cosine_similarity(model, keypos=-1, querypos=-1, do_layernorm=True):
 
     line(direction_dot_embed_error.T, title="direction_dot_normed_embed_error")
     line(direction_dot_pos_embed.T, title="direction @ pos_embed")
+
+
+# %%
+def make_local_tqdm(tqdm):
+    if tqdm is None:
+        return lambda arg, **kwargs: arg
+    else:
+        return tqdm

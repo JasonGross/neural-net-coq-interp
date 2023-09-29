@@ -200,6 +200,23 @@ def plot_weight_info(model):
 
 
 plot_weight_info(model)
+
+# %%
+
+# TODO make EVOU histogram plots somehow
+# evou = all_EVOU(model).detach()
+# # add axis names
+# evou = evou.rename("qt", "kt")
+# evou_diag = torch.diagonal(evou)[:, None].rename_("qt", 'kt')
+# devou = evou - evou_diag
+
+# # %%
+# # histogram of diagonal, with text showing min, med, max
+# plt.hist(evou_diag)
+# plt.title("Histogram of diagonal of EVOU")
+# plt.text(evou_diag.min(), 10, f"min: {evou_diag.min():.2f}\nmed: {np.median(evou_diag):.2f}\nmax: {evou_diag.max():.2f}")
+# plt.show()
+
 # %%
 copying_weights = model.W_E @ model.W_V[0,0] @ model.W_O[0,0] @ model.W_U
 copying_weights.topk

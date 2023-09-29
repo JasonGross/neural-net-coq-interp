@@ -1,8 +1,10 @@
 # %%
 from max_of_n import acc_fn, loss_fn
-from interp_max_utils import logit_delta
+from interp_max_utils import logit_delta, complexity_of
+from interp_max_utils import logit_delta_large_gap_exhaustive
 from training_utils import compute_all_tokens
 from train_max_of_2 import get_model
+from tqdm.auto import tqdm
 
 
 # %%
@@ -10,17 +12,32 @@ from train_max_of_2 import get_model
 if __name__ == '__main__':
     TRAIN_IF_NECESSARY = False
     model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
-    
+
 # %%
 
 if __name__ == '__main__':
-    print(f"minimum difference between the true_max logit and any other logit is {logit_delta(model)}")
+    # logit_delta(model, histogram_all_incorrect_logit_differences=True, renderer='png', hist_args=[{}, {'cumulative': True, 'histnorm': 'probability'}])
+    # logit_delta_large_gap_exhaustive(model, min_gap=1, histogram_all_incorrect_logit_differences=True, renderer='png', hist_args=[{}, {'cumulative': True, 'histnorm': 'probability'}])
+    print(f"minimum difference between the true_max logit and any other logit is {logit_delta(model)}") #, histogram_all_incorrect_logit_differences=True, renderer='png')}")
+    print(f"Complexity is:\n{complexity_of(logit_delta)}")
     all_tokens = compute_all_tokens(model=model)
     predicted_logits = model(all_tokens).detach().cpu()
     print(f"accuracy is {acc_fn(predicted_logits, all_tokens)}")
     print(f"loss (mean log(Pr(true max))) is {loss_fn(predicted_logits, all_tokens)}")
     print(f"loss (mean log(Pr(true max))) is {loss_fn(predicted_logits, all_tokens).item().hex()}")
-    
+
+# %%
+
+# if __name__ == '__main__':
+#     results = compute_heuristic_independence_attention_copying(model, tqdm=tqdm)
+# # %%
+# # count how many things are <= 0
+# [((r <= 0).sum(), r.shape) for r in results]
+# sum((r <= 0).sum() for r in results) / sum(r.shape[0] for r in results) * 4096
+
+# %%
+
+
 # # %%
 
 # def min_effect_of_EU_PU(model) -> float:
