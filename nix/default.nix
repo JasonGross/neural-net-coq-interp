@@ -1,5 +1,5 @@
 { self, inputs, ... }: {
-  perSystem = { config, self', inputs', pkgs, ... }:
+  perSystem = { config, self', inputs', pkgs, system, ... }:
     let
       doom-emacs = with inputs;
         import ./emacs.nix { inherit pkgs nix-doom-emacs; };
@@ -7,6 +7,10 @@
       shell = { text-editor ? [ ] }:
         import ./shell.nix { inherit pkgs text-editor; };
     in {
+      _module.args.pkgs = import inputs.nixpkgs {
+        inherit system;
+        config.allowUnfree = true;
+      };
       devShells = {
         coq-no-ui = shell { };
         emacs = shell { text-editor = [ doom-emacs ]; };
