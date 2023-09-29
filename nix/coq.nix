@@ -1,5 +1,5 @@
 { pkgs }:
-with pkgs.coqPackages; [
+with pkgs.coqPackages_8_17; [
   pkgs.ocaml
   pkgs.dune_3
   coq
@@ -7,6 +7,7 @@ with pkgs.coqPackages; [
   coq-record-update
   flocq
   interval
+  vcfloat
   mathcomp
   mathcomp-zify
   mathcomp-algebra-tactics
