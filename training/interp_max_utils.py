@@ -340,19 +340,21 @@ def EU_PU_PVOU(model: HookedTransformer, attention_pattern: TensorType["batch", 
 
 # In[ ]:
 @torch.no_grad()
-def worst_PVOU_for(model: HookedTransformer, query_tok: int, max_tok: int, non_max_output_tok: int,
-                   PVOU: Optional[TensorType["n_ctx", "d_vocab_out"]] = None,
-                   attention_score_map: Optional[TensorType["n_ctx_k", "d_vocab_q", "d_vocab_k"]] = None,
-                   optimize_max_query_comparison=True) -> TensorType["d_vocab_out"]:
+def worst_PVOU_gap_for(model: HookedTransformer, query_tok: int, max_tok: int,
+                       min_gap: int = 0,
+                       PVOU: Optional[TensorType["n_ctx", "d_vocab_out"]] = None,
+                       attention_score_map: Optional[TensorType["n_ctx_k", "d_vocab_q", "d_vocab_k"]] = None,
+                       optimize_max_query_comparison=True) -> TensorType["d_vocab_out"]:
     """
-    Returns the PVOU with the worst (largest) value of PVOU[non_max_output_tok] - PVOU[max_tok], across all possible attention scalings for the query token and for token values <= max_tok.
-    Complexity: O(PVOU + attention_score_map + n_ctx^2)
-    Complexity: ~ O(n_ctx * d_vocab * d_model^2 (from PVOU) + d_vocab * d_head^2 * d_model * n_ctx (from attention_score_map) + n_ctx * log(n_ctx) (sorting) + n_ctx^2)
+    Returns a map of non_max_output_tok to PVOU with the worst (largest) value of PVOU[non_max_output_tok] - PVOU[max_tok], across all possible attention scalings for the query token and for token values <= max_tok - min_gap.
+    Complexity: O(PVOU + attention_score_map + d_vocab_out * n_ctx^2)
+    Complexity: ~ O(n_ctx * d_vocab * d_model^2 (from PVOU) + d_vocab * d_head^2 * d_model * n_ctx (from attention_score_map) + (n_ctx * log(n_ctx) (sorting) + n_ctx^2) * d_vocab)
     Complexity: (for n_ctx=2) O(POVU + attention_score_map + n_ctx)
     N.B. Clever caching could reduce n_ctx^2 to n_ctx, leaving n_ctx log(n_ctx) from sorting as the dominant factor
     N.B. If optimize_max_query_comparison is set, and n_ctx is 2, then whenever query_tok != max_tok we know exactly what the sequence is and can just compute the attention
     """
     assert max_tok >= query_tok, f"max_tok = {max_tok} < {query_tok} = query_tok"
+    assert max_tok == query_tok or max_tok >= query_tok + min_gap, f"max_tok = {max_tok} < {query_tok} + {min_gap} = query_tok + min_gap"
     n_ctx, d_vocab_out, d_vocab = model.cfg.n_ctx, model.cfg.d_vocab_out, model.cfg.d_vocab
     if PVOU is None: PVOU = all_PVOU(model)
     assert PVOU.shape == (n_ctx, d_vocab_out), f"PVOU.shape = {PVOU.shape} != {(n_ctx, d_vocab_out)} = (n_ctx, d_vocab_out)"
@@ -362,44 +364,52 @@ def worst_PVOU_for(model: HookedTransformer, query_tok: int, max_tok: int, non_m
     worst_attention_score[-1] = attention_score_map[-1, query_tok, query_tok]
     if n_ctx == 2 and optimize_max_query_comparison and query_tok != max_tok:
         worst_attention_score[0] = attention_score_map[0, query_tok, max_tok]
+        worst_PVOU = worst_attention_score.softmax(dim=-1) @ PVOU
+        return worst_PVOU - worst_PVOU[max_tok]
+    elif max_tok - min_gap < 0:
+        # everything must be the max
+        worst_PVOU = attention_score_map[:, query_tok, max_tok].softmax(dim=-1) @ PVOU
+        return worst_PVOU - worst_PVOU[max_tok]
     else:
-        # compute the min and max attention scores for each position and query token where the key token is <= max_tok
-        min_attention_scores, max_attention_scores = attention_score_map[:-1, query_tok, :max_tok+1].min(dim=-1).values, attention_score_map[:-1, query_tok, :max_tok+1].max(dim=-1).values
+        # compute the min and max attention scores for each position and query token where the key token is either max_tok or <= max_tok - gap
+        min_attention_scores_below_gap, max_attention_scores_below_gap = attention_score_map[:-1, query_tok, :max_tok+1-min_gap].min(dim=-1).values, attention_score_map[:-1, query_tok, :max_tok+1-min_gap].max(dim=-1).values
+        assert min_attention_scores_below_gap.shape == (n_ctx-1,), f"min_attention_scores.shape = {min_attention_scores_below_gap.shape} != {(n_ctx-1,)} = (n_ctx-1,)"
+        assert max_attention_scores_below_gap.shape == (n_ctx-1,), f"max_attention_scores.shape = {max_attention_scores_below_gap.shape} != {(n_ctx-1,)} = (n_ctx-1,)"
+        min_attention_scores = torch.minimum(attention_score_map[:-1, query_tok, max_tok], min_attention_scores_below_gap)
+        max_attention_scores = torch.maximum(attention_score_map[:-1, query_tok, max_tok], max_attention_scores_below_gap)
         assert min_attention_scores.shape == (n_ctx-1,), f"min_attention_scores.shape = {min_attention_scores.shape} != {(n_ctx-1,)} = (n_ctx-1,)"
         assert max_attention_scores.shape == (n_ctx-1,), f"max_attention_scores.shape = {max_attention_scores.shape} != {(n_ctx-1,)} = (n_ctx-1,)"
         worst_attention_score[:-1] = min_attention_scores
-        d_PVOU = PVOU[:, non_max_output_tok] - PVOU[:, max_tok]
-        assert d_PVOU.shape == (n_ctx,), f"d_PVOU.shape = {d_PVOU.shape} != {(n_ctx,)} = (n_ctx,)"
+        PVOU = PVOU.T
+        assert PVOU.shape == (d_vocab_out, n_ctx), f"PVOU.T.shape = {PVOU.shape} != {(d_vocab_out, n_ctx)} = (d_vocab_out, n_ctx)"
+        worst_PVOU = torch.zeros((d_vocab_out, ))
+        d_PVOU = PVOU[:, :] - PVOU[max_tok, :][None, :]
+        assert d_PVOU.shape == (d_vocab_out, n_ctx), f"d_PVOU.shape = {d_PVOU.shape} != {(d_vocab_out, n_ctx)} = (d_vocab_out, n_ctx)"
         # sort d_PVOU in descending order
-        _, d_PVOU_idxs = d_PVOU[:-1].sort(descending=True)
-        for i in d_PVOU_idxs:
-            # compare d_PVOU weighted by softmax of worst_attention_score for worst_attention_score[i] in (min_attention_scores[i], max_attention_scores[i])
-            # set worst_attention_score[i] to whichever one is worse (more positive)
-            # print(d_PVOU.shape, worst_attention_score.softmax(dim=-1).shape)
-            min_d_PVOU = worst_attention_score.softmax(dim=-1) @ d_PVOU
-            worst_attention_score[i] = max_attention_scores[i]
-            max_d_PVOU = worst_attention_score.softmax(dim=-1) @ d_PVOU
-            if min_d_PVOU > max_d_PVOU: worst_attention_score[i] = min_attention_scores[i]
+        _, d_PVOU_idxs = d_PVOU[:, :-1].sort(dim=-1, descending=True)
+        for non_max_output_tok in range(d_vocab_out):
+            worst_attention_score[:-1] = min_attention_scores
+            for i in d_PVOU_idxs[non_max_output_tok, :]:
+                # compare d_PVOU weighted by softmax of worst_attention_score for worst_attention_score[i] in (min_attention_scores[i], max_attention_scores[i])
+                # set worst_attention_score[i] to whichever one is worse (more positive)
+                # print(d_PVOU.shape, worst_attention_score.softmax(dim=-1).shape)
+                min_d_PVOU = worst_attention_score.softmax(dim=-1) @ d_PVOU[non_max_output_tok, :]
+                worst_attention_score[i] = max_attention_scores[i]
+                max_d_PVOU = worst_attention_score.softmax(dim=-1) @ d_PVOU[non_max_output_tok, :]
+                if min_d_PVOU > max_d_PVOU: worst_attention_score[i] = min_attention_scores[i]
+            worst_PVOU[non_max_output_tok] = worst_attention_score.softmax(dim=-1) @ d_PVOU[non_max_output_tok, :]
             # print(i, min_attention_scores[i], worst_attention_score[i], max_attention_scores[i], min_d_PVOU, max_d_PVOU, d_PVOU[i])
-    # return the PVOU for the worst_attention_score
-    return worst_attention_score.softmax(dim=-1) @ PVOU
+        # return the PVOU for the worst_attention_score
+        return worst_PVOU
 
 # In[ ]:
 @torch.no_grad()
-def worst_PVOU_gap_for(model: HookedTransformer, query_tok: int, max_tok: int, non_max_output_tok: int,
-                       PVOU: Optional[TensorType["n_ctx", "d_vocab_out"]] = None,
-                       attention_score_map: Optional[TensorType["n_ctx_k", "d_vocab_q", "d_vocab_k"]] = None) -> float:
-    worst_PVOU = worst_PVOU_for(model, query_tok, max_tok, non_max_output_tok, PVOU=PVOU, attention_score_map=attention_score_map)
-    return worst_PVOU[non_max_output_tok] - worst_PVOU[max_tok]
-
-# In[ ]:
-@torch.no_grad()
-def all_worst_PVOU(model: HookedTransformer, tqdm=None) -> TensorType["d_vocab_q", "d_vocab_max", "d_vocab_out"]:
+def all_worst_PVOU(model: HookedTransformer, min_gap: int = 0, tqdm=None, **kwargs) -> TensorType["d_vocab_q", "d_vocab_max", "d_vocab_out"]:
     """
-    Returns the mixture of PVOUs with the worst (largest) value of PVOU[non_max_output_tok] - PVOU[max_tok], across all possible attention scalings for the query token and for token values <= max_tok.
+    Returns the mixture of PVOUs with the worst (largest) value of PVOU[non_max_output_tok] - PVOU[max_tok], across all possible attention scalings for the query token and for token values <= max_tok - min_gap.
     Complexity: O(PVOU + attention_score_map + n_ctx^2 * d_vocab^3)
     Complexity: ~ O(n_ctx * d_vocab * d_model^2 (from PVOU) + d_vocab * d_head^2 * d_model * n_ctx (from attention_score_map) + (n_ctx * log(n_ctx) (sorting) + n_ctx^2) * d_vocab^3)
-    Complexity: (for n_ctx=2) O(PVOU + attention_score_map + n_ctx * d_vocab^3)
+    Complexity: (for n_ctx=2) O(PVOU + attention_score_map + n_ctx * d_vocab^2)
     N.B. Clever caching could reduce n_ctx^2 to n_ctx, leaving n_ctx log(n_ctx) * d_vocab^3 from sorting as the dominant factor.
     N.B. for max_of_{two,three}, this is maybe? worse than exhaustive enumeration (oops)
     """
@@ -410,9 +420,133 @@ def all_worst_PVOU(model: HookedTransformer, tqdm=None) -> TensorType["d_vocab_q
     attention_score_map = all_attention_scores(model)
     assert attention_score_map.shape == (n_ctx, d_vocab, d_vocab), f"attention_scores.shape = {attention_score_map.shape} != {(n_ctx, d_vocab, d_vocab)} = (n_ctx, d_vocab, d_vocab)"
     result = torch.zeros((d_vocab, d_vocab, d_vocab_out)) + float('nan')
-    for non_max_tok, query_tok in local_tqdm(itertools.product(range(d_vocab), repeat=2), total=d_vocab**2):
-        for max_tok in range(query_tok, d_vocab):
-            result[query_tok, max_tok, non_max_tok] = worst_PVOU_gap_for(model, query_tok, max_tok, non_max_tok, PVOU=PVOU, attention_score_map=attention_score_map)
+    for query_tok in local_tqdm(range(d_vocab), total=d_vocab):
+        for max_tok in [query_tok] + list(range(query_tok+np.max([1, min_gap]), d_vocab)):
+            result[query_tok, max_tok, :] = worst_PVOU_gap_for(model, query_tok, max_tok, min_gap=min_gap, PVOU=PVOU, attention_score_map=attention_score_map, **kwargs)
 
     return result
 
+# In[ ]:
+@torch.no_grad()
+def worst_EVOU_gap_for(model: HookedTransformer, query_tok: int, max_tok: int,
+                       min_gap: int = 0,
+                       EVOU: Optional[TensorType["d_vocab", "d_vocab_out"]] = None,
+                       attention_score_map: Optional[TensorType["n_ctx_k", "d_vocab_q", "d_vocab_k"]] = None,
+                       optimize_max_query_comparison=True) -> TensorType["d_vocab_out"]:
+    """
+    Returns the map of non_max_output_tok to worst (largest) value of EVOU[non_max_output_tok] - EVOU[max_tok], across all possible attention scalings for the query token and for token values <= max_tok - min_gap.
+    To deal with the fact that attention and EVOU are not truly independent, we relax the "worst" calculation by saying that the attention paid to a given token in a given position is the min of (most attention paid to this token in this position) and (most attention paid to any token < max in this position).
+    "<" is relaxed to "<=" when the token under consideration is the max token.
+
+    Complexity: O(EVOU + attention_score_map + n_ctx * d_vocab + d_vocab^2)
+    Complexity: (for n_ctx=2) O(EOVU + attention_score_map + d_vocab + n_ctx)
+    #N.B. Clever caching could reduce n_ctx^2 to n_ctx, leaving n_ctx log(n_ctx) from sorting as the dominant factor
+    #N.B. If optimize_max_query_comparison is set, and n_ctx is 2, then whenever query_tok != max_tok we know exactly what the sequence is and can just compute the attention
+    """
+    assert max_tok >= query_tok, f"max_tok = {max_tok} < {query_tok} = query_tok"
+    assert max_tok == query_tok or max_tok >= query_tok + min_gap, f"max_tok = {max_tok} < {query_tok} + {min_gap} = query_tok + min_gap"
+    n_ctx, d_vocab_out, d_vocab = model.cfg.n_ctx, model.cfg.d_vocab_out, model.cfg.d_vocab
+    if EVOU is None: EVOU = all_EVOU(model)
+    assert EVOU.shape == (d_vocab, d_vocab_out), f"EVOU.shape = {EVOU.shape} != {(d_vocab, d_vocab_out)} = (d_vocab, d_vocab_out)"
+    if attention_score_map is None: attention_score_map = all_attention_scores(model)
+    assert attention_score_map.shape == (n_ctx, d_vocab, d_vocab), f"attention_scores.shape = {attention_score_map.shape} != {(n_ctx, d_vocab, d_vocab)} = (n_ctx, d_vocab, d_vocab)"
+    if n_ctx == 2 and optimize_max_query_comparison and query_tok != max_tok:
+        worst_attention_score = torch.zeros((n_ctx,))
+        worst_attention_score[-1] = attention_score_map[-1, query_tok, query_tok]
+        worst_attention_score[0] = attention_score_map[0, query_tok, max_tok]
+        worst_EVOU = worst_attention_score.softmax(dim=-1) @ EVOU[torch.tensor([max_tok, query_tok]), :]
+        return worst_EVOU - worst_EVOU[max_tok]
+    elif max_tok - min_gap < 0:
+        # everything must be the max
+        assert max_tok == query_tok, f"max_tok = {max_tok} != {query_tok} = query_tok"
+        worst_EVOU = EVOU[max_tok, :]
+        return worst_EVOU - worst_EVOU[max_tok]
+    else:
+        # for each non-query position, compute the min and max attention scores for that position and query token where the key token is < max_tok, and also when the key token is <= max_tok
+        max_nonmax_tok = np.min([max_tok - 1, max_tok - min_gap])
+        min_attention_scores_without_max, max_attention_scores_without_max = attention_score_map[:-1, query_tok, :max_nonmax_tok+1].min(dim=-1).values, attention_score_map[:-1, query_tok, :max_nonmax_tok+1].max(dim=-1).values
+        # min_attention_scores_with_max, max_attention_scores_with_max = attention_score_map[:-1, query_tok, :max_tok+1].min(dim=-1).values, attention_score_map[:-1, query_tok, :max_tok+1].max(dim=-1).values
+        assert min_attention_scores_without_max.shape == (n_ctx-1,), f"min_attention_scores_without_max.shape = {min_attention_scores_without_max.shape} != {(n_ctx-1,)} = (n_ctx-1,)"
+        assert max_attention_scores_without_max.shape == (n_ctx-1,), f"max_attention_scores_without_max.shape = {max_attention_scores_without_max.shape} != {(n_ctx-1,)} = (n_ctx-1,)"
+        # assert min_attention_scores_with_max.shape == (n_ctx-1,), f"min_attention_scores_with_max.shape = {min_attention_scores_with_max.shape} != {(n_ctx-1,)} = (n_ctx-1,)"
+        # assert max_attention_scores_with_max.shape == (n_ctx-1,), f"max_attention_scores_with_max.shape = {max_attention_scores_with_max.shape} != {(n_ctx-1,)} = (n_ctx-1,)"
+        # for each key token below the max, compute the min and max attention scores for that token and query token where the key token is <= max_tok
+        # min_attention_scores_for_each_key_token, max_attention_scores_for_each_key_token = attention_score_map[:-1, query_tok, :max_tok+1].min(dim=0).values, attention_score_map[:-1, query_tok, :max_tok+1].max(dim=0).values
+        # assert min_attention_scores_for_each_key_token.shape == (d_vocab,), f"min_attention_scores_for_each_key_token.shape = {min_attention_scores_for_each_key_token.shape} != {(d_vocab,)} = (d_vocab,)"
+        # assert max_attention_scores_for_each_key_token.shape == (d_vocab,), f"max_attention_scores_for_each_key_token.shape = {max_attention_scores_for_each_key_token.shape} != {(d_vocab,)} = (d_vocab,)"
+        # if query token is max, we assume all other tokens are the same; otherwise, we pick the minimal attention slot for the max token and the other slots for the non-max, except when we consider all maxes but the query
+        attention_to_max = attention_score_map[:-1, query_tok, max_tok].exp().sum()
+        attention_to_query = attention_score_map[-1, query_tok, query_tok].exp()
+        attention_sum = attention_to_max + attention_to_query
+        EVOUs = torch.zeros((max_tok+1, d_vocab_out))
+        EVOUs[max_tok, :] = EVOU[max_tok, :] * attention_to_max / attention_sum + EVOU[query_tok, :] * attention_to_query / attention_sum
+        assert EVOUs[max_tok, :].shape == (d_vocab_out,), f"EVOU_all_maxes.shape = {EVOUs[max_tok, :].shape} != {(d_vocab_out,)} = (d_vocab_out,)"
+        # EVOUs[max_tok, :] = EVOUs[max_tok, :] - EVOUs[max_tok, max_tok]
+
+        # consider all tokens < max, compute EVOU for each
+        attention_to_max = attention_score_map[:-1, query_tok, max_tok].min().exp()
+        for non_max_tok in range(max_nonmax_tok+1):
+            # we need to relax attention to non-max, picking the attention to this slot from the min of largest attention to this token and largest attention to this slot
+            max_attention_to_non_max = attention_score_map[:-1, query_tok, non_max_tok].max()
+            attention_to_non_max = torch.minimum(max_attention_to_non_max, max_attention_scores_without_max)
+            if query_tok == max_tok:
+                print(torch.softmax(torch.tensor([attention_to_non_max.item(), attention_score_map[-1, query_tok, query_tok]]), dim=-1))
+                attention_to_non_max = attention_to_non_max.exp().sum()
+                attention_sum = attention_to_non_max + attention_to_query
+                EVOUs[non_max_tok, :] = EVOU[non_max_tok, :] * attention_to_non_max / attention_sum + EVOU[query_tok, :] * attention_to_query / attention_sum
+            else:
+                attention_to_non_max = attention_to_non_max.exp()
+                # drop the smallest value in attention_to_non_max
+                attention_to_non_max = attention_to_non_max.sum() - attention_to_non_max.min()
+                attention_sum = attention_to_non_max + attention_to_query + attention_to_max
+                EVOUs[non_max_tok, :] = EVOU[non_max_tok, :] * attention_to_non_max / attention_sum + EVOU[query_tok, :] * attention_to_query / attention_sum + EVOU[max_tok, :] * attention_to_max / attention_sum
+        # subtract off the max_tok EVOU
+        print(EVOUs)
+        EVOUs = EVOUs - EVOUs[:, max_tok][:, None]
+        # return the worst EVOU
+        return EVOUs.max(dim=0).values
+# print(worst_EVOU_gap_for(model, 63, 63, 2))
+# In[ ]:
+@torch.no_grad()
+def all_worst_EVOU(model: HookedTransformer, min_gap: int = 0, tqdm=None, **kwargs) -> TensorType["d_vocab_q", "d_vocab_max", "d_vocab_out"]:
+    """
+    Returns the mixture of EVOUs with the worst (largest) value of EVOU[non_max_output_tok] - EVOU[max_tok], across all possible attention scalings for the query token and for token values <= max_tok - min_gap.
+    Complexity: O(EVOU + attention_score_map + (n_ctx + d_vocab) * d_vocab^3)
+    Complexity: (for n_ctx=2) O(EVOU + attention_score_map + (n_ctx + d_vocab) * d_vocab^2)
+    N.B. for max_of_{two,three}, this is maybe? worse than exhaustive enumeration (oops)
+    """
+    local_tqdm = make_local_tqdm(tqdm)
+    n_ctx, d_vocab_out, d_vocab = model.cfg.n_ctx, model.cfg.d_vocab_out, model.cfg.d_vocab
+    EVOU = all_EVOU(model)
+    assert EVOU.shape == (d_vocab, d_vocab_out), f"EVOU.shape = {EVOU.shape} != {(d_vocab, d_vocab_out)} = (d_vocab, d_vocab_out)"
+    attention_score_map = all_attention_scores(model)
+    assert attention_score_map.shape == (n_ctx, d_vocab, d_vocab), f"attention_scores.shape = {attention_score_map.shape} != {(n_ctx, d_vocab, d_vocab)} = (n_ctx, d_vocab, d_vocab)"
+    result = torch.zeros((d_vocab, d_vocab, d_vocab_out)) + float('nan')
+    for query_tok in local_tqdm(range(d_vocab), total=d_vocab):
+        for max_tok in [query_tok] + list(range(query_tok+np.max([1, min_gap]), d_vocab)):
+            result[query_tok, max_tok, :] = worst_EVOU_gap_for(model, query_tok, max_tok, min_gap=min_gap, EVOU=EVOU, attention_score_map=attention_score_map, **kwargs)
+
+    return result
+
+# # %%
+# from train_max_of_2 import get_model
+# from tqdm.auto import tqdm
+
+
+# # %%
+
+# if __name__ == '__main__':
+#     TRAIN_IF_NECESSARY = False
+#     model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
+
+# # %%
+# # print(all_worst_PVOU(model, min_gap=0, optimize_max_query_comparison=False, tqdm=tqdm) - all_worst_PVOU(model, min_gap=0, optimize_max_query_comparison=True, tqdm=tqdm))
+# print(all_worst_PVOU(model, min_gap=2, tqdm=tqdm))
+# # %%
+# print(all_worst_PVOU(model, min_gap=0, optimize_max_query_comparison=False, tqdm=tqdm) - all_worst_PVOU(model, min_gap=0, optimize_max_query_comparison=True, tqdm=tqdm))
+# # %np.max(1, min_gap)
+# # %%
+# print(all_worst_EVOU(model, min_gap=2, tqdm=tqdm))
+# # %%
+# print(worst_EVOU_gap_for(model, 63, 63, 2))
+# # %%
