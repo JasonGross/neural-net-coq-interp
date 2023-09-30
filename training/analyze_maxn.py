@@ -232,9 +232,11 @@ Case 2b:
  # %%
 def find_d_EVOU_PVOUx(model) -> float:
     """
-    When x is maximum, the minimum logit effect of copying the correct residual stream.
+    When x is maximum, the logit effect of copying the correct residual stream.
 
     Complexity: O(d_vocab * d_model^2 + d_vocab^2 * d_model + ...)
+    Return shape: (mt, ot)
+    reducing over mp
     """
     W_E, W_pos, W_V, W_O, W_U = model.W_E, model.W_pos, model.W_V, model.W_O, model.W_U
     d_model, n_ctx, d_vocab = model.cfg.d_model, model.cfg.n_ctx, model.cfg.d_vocab
@@ -247,30 +249,28 @@ def find_d_EVOU_PVOUx(model) -> float:
     EVOU = W_E @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (d_vocab, d_vocab). EVOU[i, j] is how copying i affects j.
     PVOU = W_pos @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (n_ctx, d_vocab)
 
-    # Worst case over all x of (effect on x - effect on y) where y != x. (could do y < x)
+    # Values of (effect on x - effect on y) where y != x. (could do y < x)
     EVOU_without_diag = EVOU - EVOU.diag().diag() * EVOU.max()
-    min_EVOU_effect = (EVOU.diag() - EVOU_without_diag.max(dim=1).values)
+    EVOU_effect = (EVOU.diag()[:, None] - EVOU) # mt, ot
 
-    # Worst case over all positions of (effect on x - effect on y) where y <= x.
-    PVOU_cummax = PVOU.cummax(dim=1).values # (n_ctx, d_vocab)
-    min_PVOU_effect = (PVOU - PVOU_cummax).min(dim=0).values # (d_vocab,)
+    EVOU_PVOU = EVOU_effect
+    for mt in range(d_vocab):
+        for ot in range(d_vocab):
+            EVOU_PVOU[mt, ot] += (PVOU[:, mt] - PVOU[:, ot]).min()
 
     # To improve this bound we take into account x-dependence of EVOU and PVOU.
-    result = (min_EVOU_effect + min_PVOU_effect).min()
-    print(f"Correct copying effect from:")
-    print(f"EVOU: {min_EVOU_effect.min().item():.2f}, PVOU: {min_PVOU_effect.min().item():.2f}")
-    print(f"Total: {result.item():.2f}")
-    return result
+    # return result
+    return EVOU_PVOU
 
 if __name__ == '__main__':
-    find_d_EVOU_PVOUx(model)
+    print(find_d_EVOU_PVOUx(model))
     
 # %%
-def min_effect_of_EU_PU(model) -> torch.Tensor:
+def effect_of_EU_PU(model) -> torch.Tensor:
     """
     Calculate the maximum negative effect of the EU and PU paths on the output.
     Complexity: O(d_vocab^2 * n_ctx * d_model)
-    Return shape: (q_token,)
+    Return shape: (qt, mt, ot)
     """
     W_E, W_pos, W_U = model.W_E, model.W_pos, model.W_U
     d_model, n_ctx, d_vocab = model.cfg.d_model, model.cfg.n_ctx, model.cfg.d_vocab
@@ -280,18 +280,37 @@ def min_effect_of_EU_PU(model) -> torch.Tensor:
 
     # The logit effect of token x and position p is given by the vector:
     #   logits(x, p) = (W_E[x] + W_pos[p]) @ W_U
-    max_logit_deltas = torch.zeros((d_vocab, n_ctx))
-    for x in range(d_vocab): # query token
-        for p in range(n_ctx):
-            logit_deltas = (W_E[x] + W_pos[p]) @ W_U # (d_vocab,)
-            max_logit_deltas[x, p] = logit_deltas.max() - logit_deltas.min()
+    max_logit_deltas = torch.zeros((d_vocab, d_vocab, d_vocab))
+    for qt in range(d_vocab): # query token
+        # for p in range(n_ctx):
+        logit_deltas = (W_E[qt] + W_pos[-1]) @ W_U # (d_vocab,)
+        max_logit_deltas[qt] = logit_deltas[:, None] - logit_deltas[None, :]
 
-    result = -max_logit_deltas.max(dim=1).values # (q_token,)
+    result = max_logit_deltas # (q_token, max_token, other_token)
     print(f"EU and PU paths have min effect of {result.min():.2f}")
     return result
 
 if __name__ == '__main__':
-    eu_pu = min_effect_of_EU_PU(model)
+    eu_pu = effect_of_EU_PU(model)
+# %%
+# def min_result_of_attn_to_max(model):
+dEVOU_PVOU = find_d_EVOU_PVOUx(model)
+dEVOU_PVOU_without_diag = dEVOU_PVOU + dEVOU_PVOU.max() * torch.eye(model.cfg.d_vocab)
+sns.histplot(dEVOU_PVOU_without_diag.flatten().detach().cpu().numpy())
+dEU_PU_above_diag = effect_of_EU_PU(model).clone()
+dEU_PU_above_diag[torch.tril_indices(model.cfg.d_vocab, model.cfg.d_vocab, offset=-1), :] = 0
+min_eu_pu = dEU_PU_above_diag.min(dim=0).values
+result = (min_eu_pu + dEVOU_PVOU_without_diag)
+sns.histplot(result.flatten().detach().cpu().numpy())
+print(result.min())
+# indices of negative values
+print((result < 0).nonzero())
+# return result
+
+# min_result_of_attn_to_max(model)
+
+
+
     
 # %%
 def find_d_EVOU_PVOUy(model) -> float:
@@ -359,7 +378,7 @@ def slack(model, biggap=None, smallgap=None):
                 return gaps, currslack
         return (biggap, None), float('-inf')
             
-    d_EU_PU = min_effect_of_EU_PU(model)
+    d_EU_PU = effect_of_EU_PU(model)
     d_score_coeff = find_d_score_coeff(model)
     d_EOVU_POVUx = find_d_EVOU_PVOUx(model)
     d_EOVU_POVUy_c1, d_EOVU_POVUy_c2 = find_d_EVOU_PVOUy(model)
@@ -410,3 +429,4 @@ plt.title("Is it easy to flip 25?")
 plt.ylabel("kt")
 plt.xlabel("ot")
 # %%
+

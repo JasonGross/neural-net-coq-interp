@@ -46,7 +46,7 @@ if __name__ == '__main__':
 
     # N_CTX = 2
     N_CTX = 5
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    DEVICE = "cpu" # "cuda" if torch.cuda.is_available() else "cpu"
     SEED = 123
 
     simpler_cfg = HookedTransformerConfig(
@@ -207,4 +207,22 @@ for test_case in [[35, 37, 40, 37, 32],
 
 # %%
 #[19, 27, 33, 27, 26]
+# %%
+# On what percentage of the input space is attention 99% on the max token?
+
+# Generate 10000 random inputs
+inputs = torch.randint(0, model.cfg.d_vocab, size=(10000, N_CTX)).to(DEVICE)
+
+# Run with cache
+logits, cache = model.run_with_cache(inputs)
+
+true_max_values = inputs.max(dim=-1).values[:, None]
+attention = cache['attn', 0][:, 0, -1].detach().cpu().numpy()
+# print(f"{attention=}")
+true_max_mask = (inputs == true_max_values).detach().cpu().numpy()
+attn_on_true_max = (attention * true_max_mask).sum(axis=-1)
+print(attn_on_true_max)
+sns.histplot(attn_on_true_max, bins=100)
+plt.yscale('log')
+
 # %%
