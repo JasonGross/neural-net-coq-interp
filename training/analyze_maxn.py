@@ -33,7 +33,7 @@ from train_max_of_n import get_model
 # %%
 
 if __name__ == '__main__':
-    
+
     TRAIN_IF_NECESSARY = False
     model = get_model(train_if_necessary=TRAIN_IF_NECESSARY).to('cpu')
 # %%
@@ -66,7 +66,7 @@ if __name__ == '__main__':
 #         logit_diff = correct_logits - model_output_logits
 #         print(f"Logit diff: {logit_diff[wrong_indices].detach().cpu().numpy()}")
 #         print(f"Wrong examples: {batch[wrong_indices].cpu().numpy()}, {model_output[wrong_indices].cpu().numpy()}")
-#     accs.append(acc) 
+#     accs.append(acc)
 # print(f"Accuracy: {np.mean(accs)}")
 
 # %%
@@ -90,12 +90,12 @@ def find_d_score_coeff(model) -> float:
     points = []
     # We have two cases, x in position 0 and x in position 1.
     last_resid = (W_E + W_pos[-1]) # (d_vocab, d_model). Rows = possible residual streams.
-    key_tok_resid = (W_E + W_pos[:, None, :]) # (n_ctx, d_model, d_vocab). Dim 1 = possible residual streams.    
+    key_tok_resid = (W_E + W_pos[:, None, :]) # (n_ctx, d_model, d_vocab). Dim 1 = possible residual streams.
     q = last_resid @ W_Q[0, 0, :, :] # (d_vocab, d_model).
     print(key_tok_resid.shape)
     print(W_K.shape)
     k = einsum(key_tok_resid, W_K[0, 0, :, :], 'n_ctx d_vocab d_model, d_model d_model_k -> n_ctx d_model_k d_vocab')
-    # k = key_tok_resid @ W_K[0, 0, :, :] # (n_ctx, d_model, d_vocab). 
+    # k = key_tok_resid @ W_K[0, 0, :, :] # (n_ctx, d_model, d_vocab).
     x_scores = einsum(q, k, 'd_vocab_q d_model, n_ctx d_model d_vocab_k -> n_ctx d_vocab_q d_vocab_k')
     print(k.T.shape)
     print(x_scores.shape)
@@ -264,7 +264,7 @@ def find_d_EVOU_PVOUx(model) -> float:
 
 if __name__ == '__main__':
     print(find_d_EVOU_PVOUx(model))
-    
+
 # %%
 def effect_of_EU_PU(model) -> torch.Tensor:
     """
@@ -293,16 +293,57 @@ def effect_of_EU_PU(model) -> torch.Tensor:
 if __name__ == '__main__':
     eu_pu = effect_of_EU_PU(model)
 # %%
+
+def compute_attention_slack(model: HookedTransformer):
+    dEVOU_PVOU = find_d_EVOU_PVOUx(model)
+    dEVOU_PVOU_without_diag = dEVOU_PVOU + dEVOU_PVOU.max() * torch.eye(model.cfg.d_vocab)
+    dEU_PU = effect_of_EU_PU(model)
+    dEU_PU_above_diag = dEU_PU.clone()
+    dEU_PU_above_diag[torch.tril_indices(model.cfg.d_vocab, model.cfg.d_vocab, offset=-1), :] = 0
+    min_eu_pu = dEU_PU_above_diag.min(dim=0).values
+    result = (min_eu_pu + dEVOU_PVOU_without_diag) # (mt, ot)
+    max_copying = torch.zeros_like(result)
+    attention_slack = torch.zeros_like(result)
+    for mt in range(model.cfg.d_vocab):
+        for ot in range(model.cfg.d_vocab):
+            if mt == ot: continue
+            max_copying[mt, ot] = dEVOU_PVOU[ot, mt] # how much more ot copies itself than mt
+            # TODO: we can do a more refined computation of scaling how much various tokens copy ot by the actual attention paid to them
+            # solve for x: x * result[mt, ot] - (1-x) * dEVOU_PVOU[ot, mt] = 0
+            # x * result[mt, ot] = (1-x) * dEVOU_PVOU[ot, mt]
+            # x * result[mt, ot] = dEVOU_PVOU[ot, mt] - x * dEVOU_PVOU[ot, mt]
+            # x * result[mt, ot] + x * dEVOU_PVOU[ot, mt] = dEVOU_PVOU[ot, mt]
+            # x * (result[mt, ot] + dEVOU_PVOU[ot, mt]) = dEVOU_PVOU[ot, mt]
+            # x = dEVOU_PVOU[ot, mt] / (result[mt, ot] + dEVOU_PVOU[ot, mt])
+            # x = e^attn_good / (e^attn_good + e^attn_bad) = e^attn_bad * e^(attn_good - attn_bad) / (e^attn_bad * (e^(attn_good - attn_bad) + 1)) = e^(attn_good - attn_bad) / (1 + e^(attn_good - attn_bad))
+            # solve for attn_good - attn_bad
+            # 1 - x = 1 / (1 + e^(attn_good - attn_bad))
+            # 1 / (1 - x) - 1 = e^(attn_good - attn_bad)
+            # log(1 / (1 - x) - 1) = attn_good - attn_bad
+            attention_slack[mt, ot] = (1 / (1 - dEVOU_PVOU[ot, mt] / (result[mt, ot] + dEVOU_PVOU[ot, mt])) - 1).log()
+    print(attention_slack)
+    # print(result.shape)
+
+print(compute_attention_slack(model))
+#%%
+
+
+
 # def min_result_of_attn_to_max(model):
 dEVOU_PVOU = find_d_EVOU_PVOUx(model)
 dEVOU_PVOU_without_diag = dEVOU_PVOU + dEVOU_PVOU.max() * torch.eye(model.cfg.d_vocab)
 sns.histplot(dEVOU_PVOU_without_diag.flatten().detach().cpu().numpy())
-dEU_PU_above_diag = effect_of_EU_PU(model).clone()
+dEU_PU = effect_of_EU_PU(model)
+dEU_PU_above_diag = dEU_PU.clone()
 dEU_PU_above_diag[torch.tril_indices(model.cfg.d_vocab, model.cfg.d_vocab, offset=-1), :] = 0
 min_eu_pu = dEU_PU_above_diag.min(dim=0).values
 result = (min_eu_pu + dEVOU_PVOU_without_diag)
 sns.histplot(result.flatten().detach().cpu().numpy())
 print(result.min())
+# get 2-D index of min
+v, r = result.min(dim=0)
+v, c = v.min(dim=0)
+print((r[c], c))
 # indices of negative values
 print((result < 0).nonzero())
 # return result
@@ -311,7 +352,7 @@ print((result < 0).nonzero())
 
 
 
-    
+
 # %%
 def find_d_EVOU_PVOUy(model) -> float:
     """
@@ -341,7 +382,7 @@ def find_d_EVOU_PVOUy(model) -> float:
     # Worst case over all positions of (effect on x - effect on y) where y <= x.
     PVOU_cummax_reverse = PVOU.flip(dims=(1,)).cummax(dim=1).values.flip(dims=(1,))
     min_PVOU_effect_case_2 = (PVOU - PVOU_cummax_reverse).min(dim=0).values # (d_vocab,): qtok
-    
+
 
     result_case_1 = (EVOU_delta_case_1 + min_PVOU_effect_case_2).min()
     result_case_2 = (EVOU_neg_range + min_PVOU_effect_case_2).min()
@@ -352,8 +393,8 @@ def find_d_EVOU_PVOUy(model) -> float:
 
 if __name__ == '__main__':
     find_d_EVOU_PVOUy(model)
-    
-# %%    
+
+# %%
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
@@ -362,22 +403,22 @@ def slack(model, biggap=None, smallgap=None):
     Compute the minimum value of logit(x)-logit(y) when x > y.
     If this is >0, the model gets 100% accuracy.
     """
-    if biggap is None: 
+    if biggap is None:
         for biggap in range(1, model.cfg.d_vocab):
             print(f"Big Gap {biggap}:")
             gaps, currslack = slack(model, biggap = biggap, smallgap = smallgap)
-            if currslack > 0: 
+            if currslack > 0:
                 return gaps, currslack
         return (None, smallgap), float('-inf')
-    
+
     if smallgap is None:
         for smallgap in range(1, biggap):
             print(f"Small Gap {smallgap}:")
             gaps, currslack = slack(model, biggap = biggap, smallgap = smallgap)
-            if currslack > 0: 
+            if currslack > 0:
                 return gaps, currslack
         return (biggap, None), float('-inf')
-            
+
     d_EU_PU = effect_of_EU_PU(model)
     d_score_coeff = find_d_score_coeff(model)
     d_EOVU_POVUx = find_d_EVOU_PVOUx(model)
@@ -398,7 +439,7 @@ def slack(model, biggap=None, smallgap=None):
     print(f"Model slack for case 1 on small gap {smallgap}, big gap {biggap}: {result:.2f}")
     #print(f"Model {'is' if result > 0 else 'is not'} proven 100% accurate.")
     return (biggap, smallgap), result
-    
+
 if __name__ == '__main__':
     slack(model)
 # %%
@@ -429,4 +470,3 @@ plt.title("Is it easy to flip 25?")
 plt.ylabel("kt")
 plt.xlabel("ot")
 # %%
-
