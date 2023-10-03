@@ -6,11 +6,12 @@ import transformer_lens
 from transformer_lens import HookedTransformer, HookedTransformerConfig
 import tqdm.auto as tqdm
 import circuitsvis as cv
-from einops import einsum
+from einops import einsum, repeat
 from pathlib import Path
 from IPython import get_ipython
 import matplotlib.pyplot as plt
 import seaborn as sns
+import time
 
 from coq_export_utils import strify
 from analysis_utils import line, summarize, plot_QK_cosine_similarity, \
@@ -23,6 +24,7 @@ from coq_export_utils import coq_export_params
 from max_of_n import acc_fn, loss_fn, train_model, large_data_gen
 from interp_max_utils import logit_delta, all_EVOU
 from training_utils import compute_all_tokens, make_testset_trainset, make_generator_from_data
+
 
 import os, sys
 from importlib import reload
@@ -296,6 +298,7 @@ def find_d_EVOU_PVOU_nonmax(model) -> float:
     d_model, n_ctx, d_vocab = model.cfg.d_model, model.cfg.n_ctx, model.cfg.d_vocab
     assert W_E.shape == (d_vocab, d_model) and W_pos.shape == (n_ctx, d_model) and W_V.shape == (1, 1, d_model, d_model) and W_O.shape == (1, 1, d_model, d_model) and W_U.shape == (d_model, d_vocab)
 
+    # is this right or do we need to transpose W_O and W_U?
     EVOU = W_E @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (d_vocab, d_vocab) = (kt, ot). EVOU[i, j] is how copying i affects j.
     PVOU = model.W_pos @ model.W_V[0, 0, :, :] @ model.W_O[0, 0, :, :] @ model.W_U # (n_ctx, d_vocab)
 
@@ -344,28 +347,54 @@ raf = required_attn_frac(model)
 
 # %%
 
-def accuracy_bound(model):
+def accuracy_bound_prep(model):
     """
     required_attn_frac(model) gives a min attention % paid to the correct token,
-      for each qt, mt, ot.
+      for each qt, mt, ot
     If we take the worst case (max) over ot, then we can prove the model correct
     for some fraction of qt, mt pairs (where there is no kt such that the model
     pays too much attention to kt and not enough to mt).
+    Return shape: qt, mt
     """
+    d_vocab = model.cfg.d_vocab
+    W_E, W_pos, W_Q, W_K = model.W_E, model.W_pos, model.W_Q, model.W_K
+
     raf = required_attn_frac(model)
-    raf_reduced = raf.max(dim=2).values # (qt, mt)
+    raf_reduced = raf.max(dim=2).values.detach().cpu().numpy() # (qt, mt)
     # Now find the worst tokens kt for qt to attend to, and put mt in the worst position with kt everywhere else.
     # Use run_with_cache to get attention score on mt then compare...
     # This is O(d_vocab^2 log d_vocab), choosing qt, mt, kt.
     # But since we don't binary search for kt this implementation is O(d_vocab^3).
-
     
+    EQKP = W_E @ W_Q[0, 0, :, :] @ W_K[0, 0, :, :].T @ W_pos.T # (qt, n_ctx)
+    worst_positions_by_qt = EQKP.argmin(dim=1)
+
+    n_ok_kts = torch.zeros((d_vocab, d_vocab))
+    for qt in range(d_vocab):
+        worst_position = worst_positions_by_qt[qt]
+        for mt in range(d_vocab):
+            input = torch.arange(mt, dtype=torch.long) # set kt
+            input = repeat(input, 'kt -> kt ctx', ctx = model.cfg.n_ctx).clone()
+            input[:, worst_position] = mt
+            input[:, -1] = qt
+            # print(input)
+            logits, cache = model.run_with_cache(input)
+            pattern = cache['pattern', 0].detach().cpu().numpy()[:, 0, -1, :]
+            attn_to_mt = pattern[:, worst_position]
+            # print(f"{qt=}, {mt=}, {input=}")
+            # print(attn_to_mt, raf_reduced[qt, mt])
+            # print(attn_to_mt)
+            n_ok_kts_qt_mt = (attn_to_mt > raf_reduced[qt, mt]).sum()
+            n_ok_kts[qt, mt] = n_ok_kts_qt_mt
+
+    return n_ok_kts
 
 
-
-
-
-
+start = time.time()
+result = accuracy_bound_prep(model)
+elapsed = time.time() - start
+print(result)
+print(f"Elapsed: {elapsed:.2f} seconds")
 
 
 # %%
