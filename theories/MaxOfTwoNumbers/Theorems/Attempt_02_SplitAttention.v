@@ -124,7 +124,7 @@ Proof.
   rewrite leb_equiv, abs_equiv, sub_equiv, div_equiv.
   cbv [raw_get].
   (* convert from prim float to flocq *)
-  let lem := constr:(Model.acc_fn_equiv (use_checkpoint2:=false) (logits all_tokens) (logits (use_checkpoint:=false) all_tokens) all_tokens (Model.logits_equiv _) tt) in
+  let lem := constr:(Model.acc_fn_equiv (use_checkpoint2:=false) (logits all_tokens) (logits (use_checkpoint:=false) all_tokens) all_tokens (Model.logits_equiv (use_checkpoint2:=false) (Model.all_tokens_Proper _ false I)) tt) in
   rewrite lem.
   (* Now I'd like to convert to R, but this means I need to prove lack of exceptions, I think *)
   (* So for now instead I'm playing around without really knowing what

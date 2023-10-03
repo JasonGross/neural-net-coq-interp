@@ -19,7 +19,7 @@ Module Model.
     try (eapply Tensor.map_Proper_dep; try eassumption; repeat intro);
     try reflexivity;
     auto.
-
+(*
   #[export] Instance embed_Proper_dep {r batch pos}
     : Dependent.Proper
         ((Dependent.const eq ==> Dependent.idR)
@@ -157,10 +157,11 @@ Module Model.
   Proof. apply attn_pattern_Proper_dep; repeat intro; subst; reflexivity. Qed.
 
   Notation model_Proper := logits_Proper (only parsing).
-
+*)
   #[export] Instance loss_fn_Proper_dep {r batch pos return_per_token}
     : Dependent.Proper
         ((Dependent.const eq ==> Dependent.idR)
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
            ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
            ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
            ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
@@ -174,8 +175,8 @@ Module Model.
         (@loss_fn r batch pos return_per_token).
   Proof. cbv [loss_fn]; HookedTransformer.t. Qed.
 
-  #[export] Instance loss_fn_Proper {r batch pos return_per_token A coerZ addA subA divA oppA expA lnA use_checkpoint}
-    : Proper (Tensor.eqf ==> Tensor.eqf ==> Tensor.eqf) (@loss_fn r batch pos return_per_token A coerZ addA subA divA oppA expA lnA use_checkpoint).
+  #[export] Instance loss_fn_Proper {r batch pos return_per_token A coerZ addA subA divA maxA oppA expA lnA use_checkpoint}
+    : Proper (Tensor.eqf ==> Tensor.eqf ==> Tensor.eqf) (@loss_fn r batch pos return_per_token A coerZ addA subA divA maxA oppA expA lnA use_checkpoint).
   Proof. apply loss_fn_Proper_dep; repeat intro; subst; reflexivity. Qed.
 
   #[export] Instance acc_fn_Proper_dep {r batch pos return_per_token}

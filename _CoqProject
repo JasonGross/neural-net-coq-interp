@@ -78,7 +78,9 @@ theories/Util/Notations.v
 theories/Util/Option.v
 theories/Util/PArray.v
 theories/Util/Pointed.v
+theories/Util/PolymorphicList.v
 theories/Util/PolymorphicOption.v
+theories/Util/PolymorphicSigma.v
 theories/Util/PrimitiveProd.v
 theories/Util/RList.v
 theories/Util/Slice.v
@@ -108,6 +110,7 @@ theories/Util/Arith/Reals/Definitions.v
 theories/Util/Arith/Reals/Instances.v
 theories/Util/Arith/Reals/Proofs.v
 theories/Util/Classes/Morphisms/Dependent.v
+theories/Util/Classes/Morphisms/DependentHetero.v
 theories/Util/Classes/PrimitiveRelationPairs/Dependent.v
 theories/Util/Classes/PrimitiveRelationPairs/Hetero.v
 theories/Util/Classes/RelationClasses/Dependent.v
@@ -128,6 +131,7 @@ theories/Util/Program/Basics/Dependent.v
 theories/Util/Program/Basics/PrimitiveBasics/Dependent.v
 theories/Util/Program/PrimitiveBasics/Dependent.v
 theories/Util/Relations/Relation_Definitions/Dependent.v
+theories/Util/Relations/Relation_Definitions/DependentHetero.v
 theories/Util/Relations/Relation_Definitions/Hetero.v
 theories/Util/Strings/Ascii.v
 theories/Util/Strings/Byte.v

@@ -107,7 +107,10 @@ Module Attention.
       {pos n_heads d_model d_head} {n_ctx:N}
       {use_split_qkv_input : with_default "use_split_qkv_input" bool false}
       {A}
-      {sqrtA : has_sqrt A} {coerZ : has_coer Z A} {addA : has_add A} {zeroA : has_zero A} {mulA : has_mul A} {divA : has_div A} {expA : has_exp A}
+      {zeroA : has_zero A} {coerZ : has_coer Z A}
+      {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
+      {maxA : has_max A}
+      {sqrtA : has_sqrt A} {expA : has_exp A}
       (defaultA : pointed A := @coer _ _ coerZ point)
       {use_checkpoint : with_default "use_checkpoint" bool true}
       (W_Q W_K W_V W_O : tensor [n_heads; d_model; d_head] A)
@@ -227,6 +230,7 @@ Module TransformerBlock.
       {A}
       {zeroA : has_zero A} {coerZ : has_coer Z A}
       {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
+      {maxA : has_max A}
       {sqrtA : has_sqrt A} {expA : has_exp A}
       (defaultA : pointed A := @coer _ _ coerZ point)
       {use_checkpoint : with_default "use_checkpoint" bool true}
@@ -310,6 +314,7 @@ Module HookedTransformer.
       {A}
       {zeroA : has_zero A} {coerZ : has_coer Z A}
       {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
+      {maxA : has_max A}
       {sqrtA : has_sqrt A} {expA : has_exp A}
       (defaultA : pointed A := @coer _ _ coerZ point)
       (*{use_split_qkv_input : with_default "use_split_qkv_input" bool false}*)

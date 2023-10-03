@@ -79,7 +79,10 @@ Module ModelFlocqify (cfg : Config) (Model : ModelSig cfg) (ModelInstances : Mod
           -> Tensor.eqfR Rf
                (logits (use_checkpoint:=use_checkpoint1) tokens1)
                (logits (use_checkpoint:=use_checkpoint2) tokens2).
-      Proof using Type. apply logits_Proper_dep; t. Qed.
+      Proof using Type.
+        apply logits_Proper_dep; t.
+        cbv [binary_float_has_leb leb]; break_innermost_match; reflexivity.
+      Qed.
 
       (*
     Lemma masked_attn_scores_equiv (tokens : tensor s IndexType)

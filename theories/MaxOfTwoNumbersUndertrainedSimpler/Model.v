@@ -54,6 +54,7 @@ Module Export Model.
       {A} {coer_float : has_coer float A} {coerZ : has_coer Z A}
       (defaultA : pointed A := @coer _ _ coerZ point)
       {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
+      {maxA : has_max A}
       {ltbA : has_ltb A}
       {oppA : has_opp A} {sqrtA : has_sqrt A} {expA : has_exp A} {lnA : has_ln A}
       {use_checkpoint : with_default "use_checkpoint" bool true}.

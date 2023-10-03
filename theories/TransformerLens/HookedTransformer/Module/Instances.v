@@ -793,6 +793,7 @@ Module ModelInstances (cfg : Config) (Model : ModelSig cfg).
              ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+             ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
              ==> (Dependent.idR ==> Dependent.idR)
              ==> Dependent.const (fun _ _ => True)
