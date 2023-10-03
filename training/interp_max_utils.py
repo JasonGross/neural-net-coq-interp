@@ -346,7 +346,8 @@ def worst_PVOU_gap_for(model: HookedTransformer, query_tok: int, max_tok: int,
                        attention_score_map: Optional[TensorType["n_ctx_k", "d_vocab_q", "d_vocab_k"]] = None, # noqa: F821
                        optimize_max_query_comparison=True) -> TensorType["d_vocab_out"]: # noqa: F821
     """
-    Returns a map of non_max_output_tok to PVOU with the worst (largest) value of PVOU[non_max_output_tok] - PVOU[max_tok], across all possible attention scalings for the query token and for token values <= max_tok - min_gap.
+    Returns a map of non_max_output_tok to PVOU with the worst (largest) value of PVOU[non_max_output_tok] - PVOU[max_tok],
+        across all possible attention scalings for the query token and for token values <= max_tok - min_gap.
     Complexity: O(PVOU + attention_score_map + d_vocab_out * n_ctx^2)
     Complexity: ~ O(n_ctx * d_vocab * d_model^2 (from PVOU) + d_vocab * d_head^2 * d_model * n_ctx (from attention_score_map) + (n_ctx * log(n_ctx) (sorting) + n_ctx^2) * d_vocab)
     Complexity: (for n_ctx=2) O(POVU + attention_score_map + n_ctx)
@@ -434,13 +435,14 @@ def worst_EVOU_gap_for(model: HookedTransformer, query_tok: int, max_tok: int,
                        attention_score_map: Optional[TensorType["n_ctx_k", "d_vocab_q", "d_vocab_k"]] = None, # noqa: F821
                        optimize_max_query_comparison=True) -> TensorType["d_vocab_out"]: # noqa: F821
     """
-    Returns the map of non_max_output_tok to worst (largest) value of EVOU[non_max_output_tok] - EVOU[max_tok], across all possible attention scalings for the query token and for token values <= max_tok - min_gap.
-    To deal with the fact that attention and EVOU are not truly independent, we relax the "worst" calculation by saying that the attention paid to a given token in a given position is the min of (most attention paid to this token in this position) and (most attention paid to any token < max in this position).
+    Returns the map of non_max_output_tok to worst (largest) value of EVOU[non_max_output_tok] - EVOU[max_tok], across all possible attention scalings for the query token
+        and for token values <= max_tok - min_gap.
+    To deal with the fact that attention and EVOU are not truly independent, we relax the "worst" calculation by saying that the attention paid to a given token in a given position
+        is the min of (most attention paid to this token in this position) and (most attention paid to any token < max in this position).
     "<" is relaxed to "<=" when the token under consideration is the max token.
 
     Complexity: O(EVOU + attention_score_map + n_ctx * d_vocab + d_vocab^2)
     Complexity: (for n_ctx=2) O(EOVU + attention_score_map + d_vocab + n_ctx)
-    #N.B. Clever caching could reduce n_ctx^2 to n_ctx, leaving n_ctx log(n_ctx) from sorting as the dominant factor
     #N.B. If optimize_max_query_comparison is set, and n_ctx is 2, then whenever query_tok != max_tok we know exactly what the sequence is and can just compute the attention
     """
     assert max_tok >= query_tok, f"max_tok = {max_tok} < {query_tok} = query_tok"
@@ -465,41 +467,45 @@ def worst_EVOU_gap_for(model: HookedTransformer, query_tok: int, max_tok: int,
         # for each non-query position, compute the min and max attention scores for that position and query token where the key token is < max_tok, and also when the key token is <= max_tok
         max_nonmax_tok = np.min([max_tok - 1, max_tok - min_gap])
         min_attention_scores_without_max, max_attention_scores_without_max = attention_score_map[:-1, query_tok, :max_nonmax_tok+1].min(dim=-1).values, attention_score_map[:-1, query_tok, :max_nonmax_tok+1].max(dim=-1).values
-        # min_attention_scores_with_max, max_attention_scores_with_max = attention_score_map[:-1, query_tok, :max_tok+1].min(dim=-1).values, attention_score_map[:-1, query_tok, :max_tok+1].max(dim=-1).values
         assert min_attention_scores_without_max.shape == (n_ctx-1,), f"min_attention_scores_without_max.shape = {min_attention_scores_without_max.shape} != {(n_ctx-1,)} = (n_ctx-1,)"
         assert max_attention_scores_without_max.shape == (n_ctx-1,), f"max_attention_scores_without_max.shape = {max_attention_scores_without_max.shape} != {(n_ctx-1,)} = (n_ctx-1,)"
-        # assert min_attention_scores_with_max.shape == (n_ctx-1,), f"min_attention_scores_with_max.shape = {min_attention_scores_with_max.shape} != {(n_ctx-1,)} = (n_ctx-1,)"
-        # assert max_attention_scores_with_max.shape == (n_ctx-1,), f"max_attention_scores_with_max.shape = {max_attention_scores_with_max.shape} != {(n_ctx-1,)} = (n_ctx-1,)"
         # for each key token below the max, compute the min and max attention scores for that token and query token where the key token is <= max_tok
-        # min_attention_scores_for_each_key_token, max_attention_scores_for_each_key_token = attention_score_map[:-1, query_tok, :max_tok+1].min(dim=0).values, attention_score_map[:-1, query_tok, :max_tok+1].max(dim=0).values
-        # assert min_attention_scores_for_each_key_token.shape == (d_vocab,), f"min_attention_scores_for_each_key_token.shape = {min_attention_scores_for_each_key_token.shape} != {(d_vocab,)} = (d_vocab,)"
-        # assert max_attention_scores_for_each_key_token.shape == (d_vocab,), f"max_attention_scores_for_each_key_token.shape = {max_attention_scores_for_each_key_token.shape} != {(d_vocab,)} = (d_vocab,)"
         # if query token is max, we assume all other tokens are the same; otherwise, we pick the minimal attention slot for the max token and the other slots for the non-max, except when we consider all maxes but the query
-        attention_to_max = attention_score_map[:-1, query_tok, max_tok].exp().sum()
-        attention_to_query = attention_score_map[-1, query_tok, query_tok].exp()
-        attention_sum = attention_to_max + attention_to_query
+        # we must subtract off the maximum to avoid overflow, as per https://github.com/pytorch/pytorch/blob/bc047ec906d8e1730e2ccd8192cef3c3467d75d1/aten/src/ATen/native/cpu/SoftMaxKernel.cpp#L115-L136
+        attention_to_query = attention_score_map[-1, query_tok, query_tok]
+        attentions_to_max = attention_score_map[:-1, query_tok, max_tok]
+        attention_offset = torch.maximum(attentions_to_max.max(), attention_to_query)
+        attention_to_max_exp = (attentions_to_max - attention_offset).exp().sum()
+        attention_to_query_exp = (attention_to_query - attention_offset).exp()
+        attention_sum = attention_to_max_exp + attention_to_query_exp
         EVOUs = torch.zeros((max_tok+1, d_vocab_out))
-        EVOUs[max_tok, :] = EVOU[max_tok, :] * attention_to_max / attention_sum + EVOU[query_tok, :] * attention_to_query / attention_sum
+        EVOUs[max_tok, :] = EVOU[max_tok, :] * attention_to_max_exp / attention_sum + EVOU[query_tok, :] * attention_to_query_exp / attention_sum
         assert EVOUs[max_tok, :].shape == (d_vocab_out,), f"EVOU_all_maxes.shape = {EVOUs[max_tok, :].shape} != {(d_vocab_out,)} = (d_vocab_out,)"
-        # EVOUs[max_tok, :] = EVOUs[max_tok, :] - EVOUs[max_tok, max_tok]
 
         # consider all tokens < max, compute EVOU for each
-        attention_to_max = attention_score_map[:-1, query_tok, max_tok].min().exp()
+        attention_to_max = attention_score_map[:-1, query_tok, max_tok].min()
         for non_max_tok in range(max_nonmax_tok+1):
             # we need to relax attention to non-max, picking the attention to this slot from the min of largest attention to this token and largest attention to this slot
             max_attention_to_non_max = attention_score_map[:-1, query_tok, non_max_tok].max()
             attention_to_non_max = torch.minimum(max_attention_to_non_max, max_attention_scores_without_max)
             if query_tok == max_tok:
-                print(torch.softmax(torch.tensor([attention_to_non_max.item(), attention_score_map[-1, query_tok, query_tok]]), dim=-1))
-                attention_to_non_max = attention_to_non_max.exp().sum()
-                attention_sum = attention_to_non_max + attention_to_query
-                EVOUs[non_max_tok, :] = EVOU[non_max_tok, :] * attention_to_non_max / attention_sum + EVOU[query_tok, :] * attention_to_query / attention_sum
+                # we must subtract off the maximum to avoid overflow, as per https://github.com/pytorch/pytorch/blob/bc047ec906d8e1730e2ccd8192cef3c3467d75d1/aten/src/ATen/native/cpu/SoftMaxKernel.cpp#L115-L136
+                attention_offset = torch.maximum(attention_to_query, attention_to_non_max.max())
+                attention_to_max_exp = (attention_to_max - attention_offset).exp()
+                attention_to_query_exp = (attention_to_query - attention_offset).exp()
+                attention_to_non_max_exp = (attention_to_non_max - attention_offset).exp().sum()
+                attention_sum = attention_to_non_max_exp + attention_to_query_exp
+                EVOUs[non_max_tok, :] = EVOU[non_max_tok, :] * attention_to_non_max_exp / attention_sum + EVOU[query_tok, :] * attention_to_query_exp / attention_sum
             else:
-                attention_to_non_max = attention_to_non_max.exp()
+                # we must subtract off the maximum to avoid overflow, as per https://github.com/pytorch/pytorch/blob/bc047ec906d8e1730e2ccd8192cef3c3467d75d1/aten/src/ATen/native/cpu/SoftMaxKernel.cpp#L115-L136
+                attention_offset = torch.maximum(torch.maximum(attention_to_max, attention_to_query), attention_to_non_max.max())
+                attention_to_non_max_exp = (attention_to_non_max - attention_offset).exp()
                 # drop the smallest value in attention_to_non_max
-                attention_to_non_max = attention_to_non_max.sum() - attention_to_non_max.min()
-                attention_sum = attention_to_non_max + attention_to_query + attention_to_max
-                EVOUs[non_max_tok, :] = EVOU[non_max_tok, :] * attention_to_non_max / attention_sum + EVOU[query_tok, :] * attention_to_query / attention_sum + EVOU[max_tok, :] * attention_to_max / attention_sum
+                attention_to_non_max_exp = attention_to_non_max_exp.sum() - attention_to_non_max_exp.min()
+                attention_to_max_exp = (attention_to_max - attention_offset).exp()
+                attention_to_query_exp = (attention_to_query - attention_offset).exp()
+                attention_sum = attention_to_non_max_exp + attention_to_query_exp + attention_to_max_exp
+                EVOUs[non_max_tok, :] = EVOU[non_max_tok, :] * attention_to_non_max_exp / attention_sum + EVOU[query_tok, :] * attention_to_query_exp / attention_sum + EVOU[max_tok, :] * attention_to_max_exp / attention_sum
         # subtract off the max_tok EVOU
         print(EVOUs)
         EVOUs = EVOUs - EVOUs[:, max_tok][:, None]
