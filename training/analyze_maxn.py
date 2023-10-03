@@ -129,9 +129,6 @@ find_d_score_coeff(model)
 #plt.ylabel("Query token")
 
 # %%
-list(enumerate(model(torch.tensor([1, 1, 1, 18, 19]))[0, -1, :]))
-
-# %%
 # calculate_copying(model)
 
 
@@ -139,11 +136,6 @@ list(enumerate(model(torch.tensor([1, 1, 1, 18, 19]))[0, -1, :]))
 # %%
 calculate_rowwise_embed_and_pos_embed_overlap(model)
 
-# %%
-list(enumerate(model(torch.tensor([36, 35, 40, 37, 32]))[0, -1, :]))
-
-# %%
-list(enumerate(model(torch.tensor([37, 37, 40, 27, 32]))[0, -1, :]))
 
 # %%
 # Run the model on a single example using run_with_cache,
@@ -230,7 +222,7 @@ Case 2b:
     e.g. we have "17, 17, small, 18, 10"
 """
  # %%
-def find_d_EVOU_PVOUx(model) -> float:
+def find_d_EVOU_PVOU_max(model) -> float:
     """
     When x is maximum, the logit effect of copying the correct residual stream.
 
@@ -263,7 +255,7 @@ def find_d_EVOU_PVOUx(model) -> float:
     return EVOU_PVOU
 
 if __name__ == '__main__':
-    print(find_d_EVOU_PVOUx(model))
+    print(find_d_EVOU_PVOU_max(model))
 
 # %%
 def effect_of_EU_PU(model) -> torch.Tensor:
@@ -292,52 +284,135 @@ def effect_of_EU_PU(model) -> torch.Tensor:
 
 if __name__ == '__main__':
     eu_pu = effect_of_EU_PU(model)
+
+# %%
+def find_d_EVOU_PVOU_nonmax(model) -> float:
+    """
+    When x is maximum, the minimum logit effect of copying the incorrect residual stream.
+    Basically the max amount that copying y increases z more than x where z < x and y < x.
+    Return shape: (mt, ot)
+    """
+    W_E, W_pos, W_V, W_O, W_U = model.W_E, model.W_pos, model.W_V, model.W_O, model.W_U
+    d_model, n_ctx, d_vocab = model.cfg.d_model, model.cfg.n_ctx, model.cfg.d_vocab
+    assert W_E.shape == (d_vocab, d_model) and W_pos.shape == (n_ctx, d_model) and W_V.shape == (1, 1, d_model, d_model) and W_O.shape == (1, 1, d_model, d_model) and W_U.shape == (d_model, d_vocab)
+
+    EVOU = W_E @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (d_vocab, d_vocab) = (kt, ot). EVOU[i, j] is how copying i affects j.
+    PVOU = model.W_pos @ model.W_V[0, 0, :, :] @ model.W_O[0, 0, :, :] @ model.W_U # (n_ctx, d_vocab)
+
+    # Our reasoning is simpler than for find_d_EVOU_PVOUx: just the largest logit delta from each key token
+    dEVOUs = (EVOU[:, None, :] - EVOU[:, :, None]).min(dim=0).values # (mt, ot)
+
+    # Worst case over all positions of (effect on x - effect on y) where y <= x.
+    PVOU_cummax_reverse = PVOU.flip(dims=(1,)).cummax(dim=1).values.flip(dims=(1,)) # n_ctx, kt
+    min_PVOU_effect = (PVOU - PVOU_cummax_reverse).min(dim=0).values # (ot,)
+
+    result = (dEVOUs + min_PVOU_effect[None, :]) # (mt, ot)
+    return result
+
+if __name__ == '__main__':
+    wrong_attn_dEPVOU = find_d_EVOU_PVOU_nonmax(model)
+
+# %%
+def required_attn_frac(model):
+    """
+    Returns the minimum percentage of attention that must be paid to the correct token mt
+      to prove that mt has a higher logit than some other token ot.
+    Return shape: qt, mt, ot
+    """
+    d_vocab = model.cfg.d_vocab
+
+    dEU_PU = effect_of_EU_PU(model)
+    # Minimum of EU+PU effect values where qt <= mt
+    dEU_PU_above_diag = dEU_PU.clone() # (qt, mt, ot)
+    tril_index = torch.tril_indices(d_vocab, d_vocab, offset=-1)
+    dEU_PU_above_diag[tril_index[0], tril_index[1], :] = max(dEU_PU.flatten()) # (qt, mt, ot)
+    # min_eu_pu = dEU_PU_above_diag.min(dim=0).values # (mt, ot)
+
+    correct_attn_dEPVOU = find_d_EVOU_PVOU_max(model) # (mt, ot)
+    # Ignore diagonal; we don't care what happens when mt = ot
+    correct_attn_dEPVOU = correct_attn_dEPVOU + correct_attn_dEPVOU.max() * torch.eye(d_vocab) # (mt, ot)
+
+    wrong_attn_dEPVOU = find_d_EVOU_PVOU_nonmax(model) # (mt, ot)
+
+    # Output logit diff = EUPU effect + x * correct copying EPVOU + (1-x) * incorrect copying EPVOU > 0
+    # x (correct EPVOU - incorrect EPVOU) > -(incorrect EPVOU + EUPU)
+    # We can divide by correct EPVOU - incorrect EPVOU because it's always positive]
+    assert (correct_attn_dEPVOU - wrong_attn_dEPVOU).min() > 0
+    result = - (wrong_attn_dEPVOU + dEU_PU_above_diag) / (correct_attn_dEPVOU - wrong_attn_dEPVOU) # (qt, mt, ot)
+    return result
+raf = required_attn_frac(model)
+
 # %%
 
-def compute_attention_slack(model: HookedTransformer):
-    dEVOU_PVOU = find_d_EVOU_PVOUx(model)
-    dEVOU_PVOU_without_diag = dEVOU_PVOU + dEVOU_PVOU.max() * torch.eye(model.cfg.d_vocab)
-    dEU_PU = effect_of_EU_PU(model)
-    dEU_PU_above_diag = dEU_PU.clone()
-    dEU_PU_above_diag[torch.tril_indices(model.cfg.d_vocab, model.cfg.d_vocab, offset=-1), :] = 0
-    min_eu_pu = dEU_PU_above_diag.min(dim=0).values
-    result = (min_eu_pu + dEVOU_PVOU_without_diag) # (mt, ot)
-    max_copying = torch.zeros_like(result)
-    attention_slack = torch.zeros_like(result)
-    for mt in range(model.cfg.d_vocab):
-        for ot in range(model.cfg.d_vocab):
-            if mt == ot: continue
-            max_copying[mt, ot] = dEVOU_PVOU[ot, mt] # how much more ot copies itself than mt
-            # TODO: we can do a more refined computation of scaling how much various tokens copy ot by the actual attention paid to them
-            # solve for x: x * result[mt, ot] - (1-x) * dEVOU_PVOU[ot, mt] = 0
-            # x * result[mt, ot] = (1-x) * dEVOU_PVOU[ot, mt]
-            # x * result[mt, ot] = dEVOU_PVOU[ot, mt] - x * dEVOU_PVOU[ot, mt]
-            # x * result[mt, ot] + x * dEVOU_PVOU[ot, mt] = dEVOU_PVOU[ot, mt]
-            # x * (result[mt, ot] + dEVOU_PVOU[ot, mt]) = dEVOU_PVOU[ot, mt]
-            # x = dEVOU_PVOU[ot, mt] / (result[mt, ot] + dEVOU_PVOU[ot, mt])
-            # x = e^attn_good / (e^attn_good + e^attn_bad) = e^attn_bad * e^(attn_good - attn_bad) / (e^attn_bad * (e^(attn_good - attn_bad) + 1)) = e^(attn_good - attn_bad) / (1 + e^(attn_good - attn_bad))
-            # solve for attn_good - attn_bad
-            # 1 - x = 1 / (1 + e^(attn_good - attn_bad))
-            # 1 / (1 - x) - 1 = e^(attn_good - attn_bad)
-            # log(1 / (1 - x) - 1) = attn_good - attn_bad
-            attention_slack[mt, ot] = (1 / (1 - dEVOU_PVOU[ot, mt] / (result[mt, ot] + dEVOU_PVOU[ot, mt])) - 1).log()
-    print(attention_slack)
-    # print(result.shape)
+def accuracy_bound(model):
+    """
+    required_attn_frac(model) gives a min attention % paid to the correct token,
+      for each qt, mt, ot.
+    If we take the worst case (max) over ot, then we can prove the model correct
+    for some fraction of qt, mt pairs (where there is no kt such that the model
+    pays too much attention to kt and not enough to mt).
+    """
+    raf = required_attn_frac(model)
+    raf_reduced = raf.max(dim=2).values # (qt, mt)
+    # Now find the worst tokens kt for qt to attend to, and put mt in the worst position with kt everywhere else.
+    # Use run_with_cache to get attention score on mt then compare...
+    # This is O(d_vocab^2 log d_vocab), choosing qt, mt, kt.
+    # But since we don't binary search for kt this implementation is O(d_vocab^3).
 
-print(compute_attention_slack(model))
+    
+
+
+
+
+
+
+
+
+# %%
+# def compute_attention_slack(model: HookedTransformer):
+max_copying = torch.zeros_like(correct_copying_effect)
+attention_slack = torch.zeros_like(correct_copying_effect)
+for mt in range(d_vocab):
+    for ot in range(d_vocab):
+        if mt == ot: continue
+        max_copying[mt, ot] = dEVOU_PVOU[ot, mt] # how much more ot copies itself than mt
+        # TODO: we can do a more refined computation of scaling how much various tokens copy ot by the actual attention paid to them
+        # solve for x: x * result[mt, ot] - (1-x) * dEVOU_PVOU[ot, mt] = 0
+        # x * result[mt, ot] = (1-x) * dEVOU_PVOU[ot, mt]
+        # x * result[mt, ot] = dEVOU_PVOU[ot, mt] - x * dEVOU_PVOU[ot, mt]
+        # x * result[mt, ot] + x * dEVOU_PVOU[ot, mt] = dEVOU_PVOU[ot, mt]
+        # x * (result[mt, ot] + dEVOU_PVOU[ot, mt]) = dEVOU_PVOU[ot, mt]
+        # x = dEVOU_PVOU[ot, mt] / (result[mt, ot] + dEVOU_PVOU[ot, mt])
+        # x = e^attn_good / (e^attn_good + e^attn_bad) = e^attn_bad * e^(attn_good - attn_bad) / (e^attn_bad * (e^(attn_good - attn_bad) + 1)) = e^(attn_good - attn_bad) / (1 + e^(attn_good - attn_bad))
+        # solve for attn_good - attn_bad
+        # 1 - x = 1 / (1 + e^(attn_good - attn_bad))
+        # 1 / (1 - x) - 1 = e^(attn_good - attn_bad)
+        # log(1 / (1 - x) - 1) = attn_good - attn_bad
+        attention_slack[mt, ot] = (1 / (1 - dEVOU_PVOU[ot, mt] / (correct_copying_effect[mt, ot] + dEVOU_PVOU[ot, mt])) - 1).log()
+print(attention_slack)
+
+# print(compute_attention_slack(model))
 #%%
 
+a = torch.arange(36).reshape((3, 3, 4))
+print(a)
+tril_index = torch.tril_indices(3, 3, offset=-1)
+print(tril_index)
+print(f"{a[tril_index[0], tril_index[1]]=}")
+a[tril_index[0], tril_index[1], :] = 5
+print(a)
 
+# %%
 
 # def min_result_of_attn_to_max(model):
-dEVOU_PVOU = find_d_EVOU_PVOUx(model)
+dEVOU_PVOU = find_d_EVOU_PVOU_max(model)
 dEVOU_PVOU_without_diag = dEVOU_PVOU + dEVOU_PVOU.max() * torch.eye(model.cfg.d_vocab)
 sns.histplot(dEVOU_PVOU_without_diag.flatten().detach().cpu().numpy())
 dEU_PU = effect_of_EU_PU(model)
 dEU_PU_above_diag = dEU_PU.clone()
 dEU_PU_above_diag[torch.tril_indices(model.cfg.d_vocab, model.cfg.d_vocab, offset=-1), :] = 0
 min_eu_pu = dEU_PU_above_diag.min(dim=0).values
-result = (min_eu_pu + dEVOU_PVOU_without_diag)
+result = (min_eu_pu + dEVOU_PVOU_without_diag) # (mt, ot)
 sns.histplot(result.flatten().detach().cpu().numpy())
 print(result.min())
 # get 2-D index of min
@@ -353,46 +428,6 @@ print((result < 0).nonzero())
 
 
 
-# %%
-def find_d_EVOU_PVOUy(model) -> float:
-    """
-    When x is maximum, the minimum logit effect of copying the incorrect residual stream.
-    Basically the max amount that copying y increases z more than x where z < x and y < x.
-    """
-    W_E, W_pos, W_V, W_O, W_U = model.W_E, model.W_pos, model.W_V, model.W_O, model.W_U
-    d_model, n_ctx, d_vocab = model.cfg.d_model, model.cfg.n_ctx, model.cfg.d_vocab
-    assert W_E.shape == (d_vocab, d_model)
-    assert W_pos.shape == (n_ctx, d_model)
-    assert W_V.shape == (1, 1, d_model, d_model)
-    assert W_O.shape == (1, 1, d_model, d_model)
-    assert W_U.shape == (d_model, d_vocab)
-
-    EVOU = W_E @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (d_vocab, d_vocab). EVOU[i, j] is how copying i affects j.
-    EVOU.names = ('qtok', 'ktok')
-    PVOU = W_pos @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (n_ctx, d_vocab)
-
-    # Our reasoning is simpler than for find_d_EVOU_PVOUx: just the largest logit delta from each query token
-    EVOU_neg_range = -EVOU.max(dim='ktok').values + EVOU.min(dim='ktok').values # (d_vocab,) for each query token
-    # Case 1: y = x - 1 e.g. 37, 38. We want EVOU[37, 38] - max_j EVOU[37, j].
-    # EVOU_delta_case_1 = torch.diff(EVOU, dim=1).min(dim='ktok').values # (d_vocab,)
-    EVOU_y_yp1 = torch.cat((EVOU.rename(None).diag(1), torch.tensor((1000,)))) # (d_vocab,)
-    EVOU_y_smaller = EVOU.cummax(dim='ktok').values.diagonal() # (d_vocab,)
-    EVOU_delta_case_1 = (EVOU_y_yp1[:, None] - EVOU_y_smaller) # (d_vocab, d_vocab)
-
-    # Worst case over all positions of (effect on x - effect on y) where y <= x.
-    PVOU_cummax_reverse = PVOU.flip(dims=(1,)).cummax(dim=1).values.flip(dims=(1,))
-    min_PVOU_effect_case_2 = (PVOU - PVOU_cummax_reverse).min(dim=0).values # (d_vocab,): qtok
-
-
-    result_case_1 = (EVOU_delta_case_1 + min_PVOU_effect_case_2).min()
-    result_case_2 = (EVOU_neg_range + min_PVOU_effect_case_2).min()
-    print(f"Incorrect copying effect:")
-    print(f"Case 1: {result_case_1.item():.2f}, Case 2: {result_case_2.item():.2f}")
-    # result_case_1, result_case_2
-    return result_case_1, result_case_2
-
-if __name__ == '__main__':
-    find_d_EVOU_PVOUy(model)
 
 # %%
 def sigmoid(x):
@@ -421,8 +456,8 @@ def slack(model, biggap=None, smallgap=None):
 
     d_EU_PU = effect_of_EU_PU(model)
     d_score_coeff = find_d_score_coeff(model)
-    d_EOVU_POVUx = find_d_EVOU_PVOUx(model)
-    d_EOVU_POVUy_c1, d_EOVU_POVUy_c2 = find_d_EVOU_PVOUy(model)
+    d_EOVU_POVUx = find_d_EVOU_PVOU_max(model)
+    d_EOVU_POVUy_c1, d_EOVU_POVUy_c2 = find_d_EVOU_PVOU_nonmax(model)
 
     # d_attn_out_U_case_1 = sigmoid(d_score_coeff) * d_EOVU_POVUx + (1 - sigmoid(d_score_coeff)) * d_EOVU_POVUy_c1
     # d_attn_out_U_case_2 = sigmoid(d_score_coeff * 2) * d_EOVU_POVUx + (1 - sigmoid(d_score_coeff * 2)) * d_EOVU_POVUy_c2
