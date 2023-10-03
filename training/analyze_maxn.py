@@ -381,10 +381,10 @@ def accuracy_bound_prep(model):
             logits, cache = model.run_with_cache(input)
             pattern = cache['pattern', 0].detach().cpu().numpy()[:, 0, -1, :]
             attn_to_mt = pattern[:, worst_position]
-            # print(f"{qt=}, {mt=}, {input=}")
-            # print(attn_to_mt, raf_reduced[qt, mt])
-            # print(attn_to_mt)
-            n_ok_kts_qt_mt = (attn_to_mt > raf_reduced[qt, mt]).sum()
+
+            # when qt==mt, we should count attention to qt
+            good_attn = attn_to_mt + pattern[:, -1] if (qt == mt and worst_position != -1) else attn_to_mt
+            n_ok_kts_qt_mt = (good_attn > raf_reduced[qt, mt]).sum()
             n_ok_kts[qt, mt] = n_ok_kts_qt_mt
 
     return n_ok_kts
@@ -395,6 +395,29 @@ result = accuracy_bound_prep(model)
 elapsed = time.time() - start
 print(result)
 print(f"Elapsed: {elapsed:.2f} seconds")
+
+# %%
+
+def accuracy_bound(model):
+    d_vocab, n_ctx = model.cfg.d_vocab, model.cfg.n_ctx
+    ok_kts_arr = accuracy_bound_prep(model) # (qt, mt)
+
+    # When qt = mt, there are ok_kts^(n_ctx - 1) choices of input
+    # When qt != mt, there are ok_kts^(n_ctx - 2) * (n_ctx - 1) choices of input
+    total = 0
+    for qt in range(d_vocab):
+        for mt in range(d_vocab):
+            if qt == mt:
+                total += ok_kts_arr[qt, mt] ** (n_ctx - 1)
+            else:
+                # TODO fix for multiplicity of mt
+                total += ok_kts_arr[qt, mt] ** (n_ctx - 2) * (n_ctx - 1)
+    
+    return total / (d_vocab ** n_ctx)
+
+accuracy = accuracy_bound(model)
+print(f"Accuracy bound: {accuracy:.2f}")
+
 
 
 # %%
