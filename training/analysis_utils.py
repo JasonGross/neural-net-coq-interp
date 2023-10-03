@@ -54,6 +54,13 @@ def absolute_shift_abs_sinusoid_func(x, a, b, c, d, e):
     return (a * np.abs(x - b) + c) * np.abs(np.sin(d * x + e))
 absolute_shift_abs_sinusoid_func.equation = lambda popt: f'y = ({popt[0]:.3f}*|x - {popt[1]:.3f}| + {popt[2]:.3f}) * |sin({popt[3]:.3f}*x + {popt[4]:.3f})|'
 
+def sigmoid_func(x, K, B, M):
+    return K / (1 + np.exp(-B * (x - M)))
+sigmoid_func.equation = lambda popt: f'y = {popt[0]:.3f} / (1 + exp(-{popt[1]:.3f} * (x - {popt[2]:.3f})))'
+
+def inv_sigmoid_func(y, K, B, M):
+    return M - np.log(K / y - 1) / B
+inv_sigmoid_func.equation = lambda popt: f'x = {popt[2]:.3f} - ln({popt[0]:.3f} / y - 1) / {popt[1]:.3f}'
 
 def imshow(tensor, renderer=None, xaxis="", yaxis="", **kwargs):
     px.imshow(utils.to_numpy(tensor), color_continuous_midpoint=0.0, color_continuous_scale="RdBu", labels={"x":xaxis, "y":yaxis}, **kwargs).show(renderer)
@@ -950,3 +957,91 @@ def make_local_tqdm(tqdm):
         return lambda arg, **kwargs: arg
     else:
         return tqdm
+
+# %%
+
+def display_size_direction_stats(size_direction: torch.Tensor, QK: torch.Tensor, U: torch.Tensor, Vh: torch.Tensor, S: torch.Tensor, renderer=None):
+    imshow(QK, title="W_E @ W_Q @ W_K.T @ W_E.T", renderer=renderer)
+    imshow(U, title="U", renderer=renderer)
+    imshow(Vh, title="Vh", renderer=renderer)
+    line(S, title="S", renderer=renderer)
+    line(size_direction, title="size direction", renderer=renderer)
+
+    # fit to sigmoid
+    y_data = size_direction.detach().cpu().numpy()
+    x_data = np.linspace(1, len(y_data), len(y_data))
+    y_transposed = np.linspace(1, len(x_data), len(x_data))
+    initial_params_transposed = [max(y_transposed), 1/np.mean(y_data), np.median(y_data)]
+
+    # Fit the curve with initial parameters
+
+    params_transposed, covariance_transposed = curve_fit(sigmoid_func, y_data, y_transposed, p0=initial_params_transposed, maxfev=10000)
+
+    # Generate predicted y values with parameters
+    y_pred_transposed = sigmoid_func(y_data, *params_transposed)
+    # Calculating residuals
+    residuals = y_transposed - y_pred_transposed
+
+    # Creating subplots
+    fig, axs = plt.subplots(2, 1, figsize=(10, 12))
+    fig.suptitle('Fitting a Sigmoid to the Size Vector Components and Residuals Analysis', fontsize=16)
+
+    # Plotting the original data and fitted curve
+    axs[0].scatter(y_data, y_transposed, label='Data', color='blue')
+    axs[0].plot(y_data, y_pred_transposed, color='red',
+            label=rf'{inv_sigmoid_func.equation(params_transposed)}')
+    axs[0].set_xlabel('Component in Normalized Size Vector')
+    axs[0].set_ylabel('Input Token')
+    axs[0].legend()
+    axs[0].grid(True)
+
+    # Plotting residuals
+    axs[1].scatter(y_data, residuals, color='green', label='Residuals')
+    axs[1].axhline(y=0, color='r', linestyle='--', label='y=0')
+    axs[1].set_xlabel('Component in Normalized Size Vector')
+    axs[1].set_ylabel('Residual')
+    axs[1].legend()
+    axs[1].grid(True)
+
+    # Displaying the plots
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # To prevent overlap between suptitle and subplots
+    plt.show()
+
+@torch.no_grad()
+def find_size_direction(model: HookedTransformer, plot_heatmaps=False, renderer=None):
+    """
+    Approximates the size direction of the model.
+    """
+    W_pos, W_Q, W_K, W_E = model.W_pos, model.W_Q, model.W_K, model.W_E
+    d_model, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_vocab, model.cfg.n_ctx
+    assert W_pos.shape == (n_ctx, d_model), f"W_pos.shape = {W_pos.shape} != {(n_ctx, d_model)} = (n_ctx, d_model)"
+    assert W_Q.shape == (1, 1, d_model, d_model), f"W_Q.shape = {W_Q.shape} != {(1, 1, d_model, d_model)} = (1, 1, d_model, d_model)"
+    assert W_K.shape == (1, 1, d_model, d_model), f"W_K.shape = {W_K.shape} != {(1, 1, d_model, d_model)} = (1, 1, d_model, d_model)"
+    assert W_E.shape == (d_vocab, d_model), f"W_E.shape = {W_E.shape} != {(d_vocab, d_model)} = (d_vocab, d_model)"
+
+    QK = (W_E + W_pos[-1]) @ W_Q[0, 0, :, :] @ W_K[0, 0, :, :].T @ W_E.T
+    assert QK.shape == (d_vocab, d_vocab), f"QK.shape = {QK.shape} != {(d_vocab, d_vocab)} = (d_vocab, d_vocab)"
+
+    # take SVD:
+    U, S, Vh = torch.svd(QK)
+
+    # the size direction is the first column of Vh times the mean of the first column of U (to account for sign) times the first singular value, normalized
+    size_direction = Vh[:, 0] * U[:, 0].mean() * S[0]
+    size_direction = size_direction / size_direction.norm()
+
+    if plot_heatmaps: display_size_direction_stats(size_direction, QK, U, Vh, S, renderer=renderer)
+
+    return size_direction
+
+
+
+# from train_max_of_2 import get_model
+# from tqdm.auto import tqdm
+
+
+# if __name__ == '__main__':
+#     TRAIN_IF_NECESSARY = False
+#     model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
+
+# find_size_direction(model, plot_heatmaps=True)
+# %%
