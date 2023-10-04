@@ -22,7 +22,7 @@ from analysis_utils import line, summarize, plot_QK_cosine_similarity, \
     plot_avg_qk_heatmap, plot_qk_heatmap, plot_qk_heatmaps_normed, plot_unembed_cosine_similarity
 from coq_export_utils import coq_export_params
 from max_of_n import acc_fn, loss_fn, train_model, large_data_gen
-from interp_max_utils import logit_delta, all_EVOU
+from interp_max_utils import logit_delta, all_EVOU, all_PVOU
 from training_utils import compute_all_tokens, make_testset_trainset, make_generator_from_data
 
 
@@ -240,8 +240,8 @@ def find_d_EVOU_PVOU_max(model) -> float:
     assert W_O.shape == (1, 1, d_model, d_model)
     assert W_U.shape == (d_model, d_vocab)
 
-    EVOU = W_E @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (d_vocab, d_vocab). EVOU[i, j] is how copying i affects j.
-    PVOU = W_pos @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (n_ctx, d_vocab)
+    EVOU = all_EVOU(model) # (d_vocab, d_vocab). EVOU[i, j] is how copying i affects j.
+    PVOU = all_PVOU(model) # (n_ctx, d_vocab)
 
     # Values of (effect on x - effect on y) where y != x. (could do y < x)
     EVOU_without_diag = EVOU - EVOU.diag().diag() * EVOU.max()
@@ -254,7 +254,7 @@ def find_d_EVOU_PVOU_max(model) -> float:
 
     # To improve this bound we take into account x-dependence of EVOU and PVOU.
     # return result
-    return EVOU_PVOU
+    return EVOU_PVOU.rename('mt', 'ot')
 
 if __name__ == '__main__':
     print(find_d_EVOU_PVOU_max(model))
@@ -282,38 +282,41 @@ def effect_of_EU_PU(model) -> torch.Tensor:
 
     result = max_logit_deltas # (q_token, max_token, other_token)
     print(f"EU and PU paths have min effect of {result.min():.2f}")
-    return result
+    return result.rename('qt', 'mt', 'ot')
 
 if __name__ == '__main__':
     eu_pu = effect_of_EU_PU(model)
 
 # %%
-def find_d_EVOU_PVOU_nonmax(model) -> float:
+def find_d_EVOU_PVOU_nonmax(model, out_shape=('kt','mt','ot')) -> torch.Tensor:
     """
     When x is maximum, the minimum logit effect of copying the incorrect residual stream.
     Basically the max amount that copying y increases z more than x where z < x and y < x.
     Return shape: (mt, ot)
     """
+    assert out_shape in [('kt','mt','ot'), ('mt', 'ot')]
     W_E, W_pos, W_V, W_O, W_U = model.W_E, model.W_pos, model.W_V, model.W_O, model.W_U
     d_model, n_ctx, d_vocab = model.cfg.d_model, model.cfg.n_ctx, model.cfg.d_vocab
     assert W_E.shape == (d_vocab, d_model) and W_pos.shape == (n_ctx, d_model) and W_V.shape == (1, 1, d_model, d_model) and W_O.shape == (1, 1, d_model, d_model) and W_U.shape == (d_model, d_vocab)
 
     # is this right or do we need to transpose W_O and W_U?
-    EVOU = W_E @ W_V[0, 0, :, :] @ W_O[0, 0, :, :] @ W_U # (d_vocab, d_vocab) = (kt, ot). EVOU[i, j] is how copying i affects j.
-    PVOU = model.W_pos @ model.W_V[0, 0, :, :] @ model.W_O[0, 0, :, :] @ model.W_U # (n_ctx, d_vocab)
+    EVOU = all_EVOU(model) # (d_vocab, d_vocab) = (kt, ot). EVOU[i, j] is how copying i affects j.
+    PVOU = all_PVOU(model) # (n_ctx, d_vocab) = (kp, ot)
 
     # Our reasoning is simpler than for find_d_EVOU_PVOUx: just the largest logit delta from each key token
-    dEVOUs = (EVOU[:, None, :] - EVOU[:, :, None]).min(dim=0).values # (mt, ot)
+    dEVOUs = (EVOU[:, None, :] - EVOU[:, :, None]) # (kt, mt, ot)
+    if out_shape == ('mt', 'ot'): dEVOUs = dEVOUs.min(dim=0).values # (mt, ot)
 
     # Worst case over all positions of (effect on x - effect on y) where y <= x.
-    PVOU_cummax_reverse = PVOU.flip(dims=(1,)).cummax(dim=1).values.flip(dims=(1,)) # n_ctx, kt
+    PVOU_cummax_reverse = PVOU.flip(dims=(1,)).cummax(dim=1).values.flip(dims=(1,)) # kp, ot
     min_PVOU_effect = (PVOU - PVOU_cummax_reverse).min(dim=0).values # (ot,)
 
-    result = (dEVOUs + min_PVOU_effect[None, :]) # (mt, ot)
-    return result
+    result = (dEVOUs + (min_PVOU_effect[None, None, :] if 'kt' in out_shape else min_PVOU_effect[None, :])) # (mt, ot)
+    return result.rename(*out_shape)
 
 if __name__ == '__main__':
     wrong_attn_dEPVOU = find_d_EVOU_PVOU_nonmax(model)
+    print(wrong_attn_dEPVOU)
 
 # %%
 def required_attn_frac(model):
@@ -327,15 +330,17 @@ def required_attn_frac(model):
     dEU_PU = effect_of_EU_PU(model)
     # Minimum of EU+PU effect values where qt <= mt
     dEU_PU_above_diag = dEU_PU.clone() # (qt, mt, ot)
+    print(dEU_PU_above_diag.names)
     tril_index = torch.tril_indices(d_vocab, d_vocab, offset=-1)
-    dEU_PU_above_diag[tril_index[0], tril_index[1], :] = max(dEU_PU.flatten()) # (qt, mt, ot)
+    dEU_PU_above_diag.rename_(None)
+    dEU_PU_above_diag[tril_index[0], tril_index[1], :] = dEU_PU.max() # (qt, mt, ot)
     # min_eu_pu = dEU_PU_above_diag.min(dim=0).values # (mt, ot)
 
     correct_attn_dEPVOU = find_d_EVOU_PVOU_max(model) # (mt, ot)
     # Ignore diagonal; we don't care what happens when mt = ot
     correct_attn_dEPVOU = correct_attn_dEPVOU + correct_attn_dEPVOU.max() * torch.eye(d_vocab) # (mt, ot)
 
-    wrong_attn_dEPVOU = find_d_EVOU_PVOU_nonmax(model) # (mt, ot)
+    wrong_attn_dEPVOU = find_d_EVOU_PVOU_nonmax(model, out_shape=('mt', 'ot')) # (mt, ot)
 
     # Output logit diff = EUPU effect + x * correct copying EPVOU + (1-x) * incorrect copying EPVOU > 0
     # x (correct EPVOU - incorrect EPVOU) > -(incorrect EPVOU + EUPU)
@@ -344,6 +349,7 @@ def required_attn_frac(model):
     result = - (wrong_attn_dEPVOU + dEU_PU_above_diag) / (correct_attn_dEPVOU - wrong_attn_dEPVOU) # (qt, mt, ot)
     return result
 raf = required_attn_frac(model)
+print(raf)
 
 # %%
 
@@ -416,7 +422,7 @@ def accuracy_bound(model):
     return total / (d_vocab ** n_ctx)
 
 accuracy = accuracy_bound(model)
-print(f"Accuracy bound: {accuracy:.2f}")
+print(f"Accuracy bound: {accuracy*100:.4f}%")
 
 
 
