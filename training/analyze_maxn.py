@@ -282,7 +282,7 @@ def effect_of_EU_PU(model) -> torch.Tensor:
 
     result = max_logit_deltas # (q_token, max_token, other_token)
     print(f"EU and PU paths have min effect of {result.min():.2f}")
-    return result.rename('qt', 'mt', 'ot')
+    return result.detach().rename('qt', 'mt', 'ot')
 
 if __name__ == '__main__':
     eu_pu = effect_of_EU_PU(model)
@@ -319,12 +319,14 @@ if __name__ == '__main__':
     print(wrong_attn_dEPVOU)
 
 # %%
-def required_attn_frac(model):
+def required_attn_frac(model, out_shape=('qt','kt','mt')):
     """
     Returns the minimum percentage of attention that must be paid to the correct token mt
       to prove that mt has a higher logit than some other token ot.
-    Return shape: qt, mt, ot
+    Return shape: qt, kt, mt
     """
+    assert out_shape in [('qt','kt','mt'), ('qt', 'mt')]
+
     d_vocab = model.cfg.d_vocab
 
     dEU_PU = effect_of_EU_PU(model)
@@ -334,22 +336,34 @@ def required_attn_frac(model):
     tril_index = torch.tril_indices(d_vocab, d_vocab, offset=-1)
     dEU_PU_above_diag.rename_(None)
     dEU_PU_above_diag[tril_index[0], tril_index[1], :] = dEU_PU.max() # (qt, mt, ot)
-    # min_eu_pu = dEU_PU_above_diag.min(dim=0).values # (mt, ot)
+    if 'kt' in out_shape:
+        dEU_PU_above_diag = dEU_PU_above_diag.min(dim=2).values # (qt, mt)
+        dEU_PU_above_diag = dEU_PU_above_diag.unsqueeze(1).rename('qt', 'kt', 'mt') # (qt, mt)
 
     correct_attn_dEPVOU = find_d_EVOU_PVOU_max(model) # (mt, ot)
     # Ignore diagonal; we don't care what happens when mt = ot
     correct_attn_dEPVOU = correct_attn_dEPVOU + correct_attn_dEPVOU.max() * torch.eye(d_vocab) # (mt, ot)
 
-    wrong_attn_dEPVOU = find_d_EVOU_PVOU_nonmax(model, out_shape=('mt', 'ot')) # (mt, ot)
+    wrong_attn_dEPVOU = find_d_EVOU_PVOU_nonmax(model, out_shape=('kt', 'mt','ot') if 'kt' in out_shape else ('mt', 'ot'))
+    # dEPVOU_delta = (correct_attn_dEPVOU - wrong_attn_dEPVOU).min(dim='ot').values # (kt, mt)
+
+    if 'kt' in out_shape:
+        correct_attn_dEPVOU = correct_attn_dEPVOU.min(dim='ot').values # (mt,)
+        wrong_attn_dEPVOU = wrong_attn_dEPVOU.min(dim='ot').values # (kt, mt)
 
     # Output logit diff = EUPU effect + x * correct copying EPVOU + (1-x) * incorrect copying EPVOU > 0
     # x (correct EPVOU - incorrect EPVOU) > -(incorrect EPVOU + EUPU)
-    # We can divide by correct EPVOU - incorrect EPVOU because it's always positive]
-    assert (correct_attn_dEPVOU - wrong_attn_dEPVOU).min() > 0
-    result = - (wrong_attn_dEPVOU + dEU_PU_above_diag) / (correct_attn_dEPVOU - wrong_attn_dEPVOU) # (qt, mt, ot)
-    return result
+    # We can divide by correct EPVOU - incorrect EPVOU because it's always positive; correct attention is better than the worst incorrect attention.
+    if 'kt' not in out_shape: assert (correct_attn_dEPVOU - wrong_attn_dEPVOU).min() > 0
+    raf = - (wrong_attn_dEPVOU + dEU_PU_above_diag) / (correct_attn_dEPVOU - wrong_attn_dEPVOU) # (qt, kt, mt)
+    if 'ot' in raf.names: raf = raf.max(dim='ot').values
+    return raf
 raf = required_attn_frac(model)
-print(raf)
+print(f"{raf.min():.4f}, {raf.median():.4f}, {raf.max():.4f}")
+
+sns.ecdfplot(raf.rename(None).flatten())
+raf2 = required_attn_frac(model, out_shape=('qt', 'mt'))
+sns.ecdfplot(raf2.rename(None).flatten(), color='orange')
 
 # %%
 
@@ -365,8 +379,8 @@ def accuracy_bound_prep(model):
     d_vocab = model.cfg.d_vocab
     W_E, W_pos, W_Q, W_K = model.W_E, model.W_pos, model.W_Q, model.W_K
 
-    raf = required_attn_frac(model)
-    raf_reduced = raf.max(dim=2).values.detach().cpu().numpy() # (qt, mt)
+    raf = required_attn_frac(model) # (qt, kt, mt) or (qt, mt, ot)
+    # raf_reduced = raf.max(dim=2).values.detach().cpu().numpy() # (qt, mt)
     # Now find the worst tokens kt for qt to attend to, and put mt in the worst position with kt everywhere else.
     # Use run_with_cache to get attention score on mt then compare...
     # This is O(d_vocab^2 log d_vocab), choosing qt, mt, kt.
@@ -375,7 +389,7 @@ def accuracy_bound_prep(model):
     EQKP = W_E @ W_Q[0, 0, :, :] @ W_K[0, 0, :, :].T @ W_pos.T # (qt, n_ctx)
     worst_positions_by_qt = EQKP.argmin(dim=1)
 
-    n_ok_kts = torch.zeros((d_vocab, d_vocab))
+    n_ok_kts = torch.zeros((d_vocab, d_vocab), dtype=torch.long)
     for qt in range(d_vocab):
         worst_position = worst_positions_by_qt[qt]
         for mt in range(d_vocab):
@@ -390,17 +404,17 @@ def accuracy_bound_prep(model):
 
             # when qt==mt, we should count attention to qt
             good_attn = attn_to_mt + pattern[:, -1] if (qt == mt and worst_position != -1) else attn_to_mt
-            n_ok_kts_qt_mt = (good_attn > raf_reduced[qt, mt]).sum()
+            n_ok_kts_qt_mt = (torch.tensor(good_attn) > raf[qt, :mt, mt]).sum()
             n_ok_kts[qt, mt] = n_ok_kts_qt_mt
 
     return n_ok_kts
 
 
-start = time.time()
-result = accuracy_bound_prep(model)
-elapsed = time.time() - start
-print(result)
-print(f"Elapsed: {elapsed:.2f} seconds")
+# start = time.time()
+# result = accuracy_bound_prep(model)
+# elapsed = time.time() - start
+# print(result)
+# print(f"Elapsed: {elapsed:.2f} seconds")
 
 # %%
 
