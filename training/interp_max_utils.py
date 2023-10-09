@@ -1,11 +1,11 @@
 # NOTE that this file is synchronized with theories/TrainingComputations/interp_max_utils.v
 # In[ ]:
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 from torchtyping import TensorType
 from enum import Enum, verify, UNIQUE, CONTINUOUS
 import enum
 import itertools
-from analysis_utils import make_local_tqdm
+from analysis_utils import find_size_direction, make_local_tqdm
 from fancy_einsum import einsum
 import matplotlib.pyplot as plt
 import numpy as np
@@ -533,6 +533,26 @@ def all_worst_EVOU(model: HookedTransformer, min_gap: int = 0, tqdm=None, **kwar
             result[query_tok, max_tok, :] = worst_EVOU_gap_for(model, query_tok, max_tok, min_gap=min_gap, EVOU=EVOU, attention_score_map=attention_score_map, **kwargs)
 
     return result
+
+# %%
+# @torch.no_grad()
+# def query_size_overlap(model: HookedTransformer, pos: int = -1, size_direction: Optional[TensorType["d_model"]] = None, do_plot: bool = False, renderer=None) -> Tuple[TensorType["q_vocab_q"], TensorType["q_vocab_q", "d_head"]]: # noqa: F821
+#     """
+#     Returns the overlap between the query token and the size vector.
+#     Complexity:
+#     """
+#     if size_direction is None: size_direction = find_size_direction(model, renderer=renderer, plot_heatmaps=do_plot)
+#     d_vocab, d_model, n_ctx = model.cfg.d_vocab, model.cfg.d_model, model.cfg.n_ctx
+#     W_pos, W_E, W_Q = model.W_pos, model.W_E, model.W_Q
+#     assert W_pos.shape == (n_ctx, d_model), f"W_pos.shape = {W_pos.shape} != {(n_ctx, d_model)} = (n_ctx, d_model)"
+#     assert W_E.shape == (d_vocab, d_model), f"W_E.shape = {W_E.shape} != {(d_vocab, d_model)} = (d_vocab, d_model)"
+#     assert W_Q.shape == (1, 1, d_vocab, d_model), f"W_Q.shape = {W_Q.shape} != {(1, 1, d_vocab, d_model)} = (1, 1, d_vocab, d_model)"
+#     assert size_direction.shape == (d_model,), f"size_direction.shape = {size_direction.shape} != {(d_model,)} = (d_model,)"
+
+#     # compute the overlap between the query token and the size vector
+#     (W_pos[pos, :] + W_E[0, 0, :, :])
+
+
 
 # # %%
 # from train_max_of_2 import get_model
