@@ -4,7 +4,7 @@
 # from training.Proving_How_A_Transformer_Takes_Max import linear_func
 
 
-from typing import Optional
+from typing import Iterable, Optional
 import einops
 from fancy_einsum import einsum
 import matplotlib.pyplot as plt
@@ -25,6 +25,18 @@ linear_func.equation = lambda popt: f'y = {popt[0]:.3f}*x + {popt[1]:.3f}'
 def quadratic_func(x, a, b, c):
     return a * x**2 + b * x + c
 quadratic_func.equation = lambda popt: f'y = {popt[0]:.3f}*x^2 + {popt[1]:.3f}*x + {popt[2]:.3f}'
+
+def cubic_func(x, a, b, c, d):
+    return a * x**3 + b * x**2 + c * x + d
+cubic_func.equation = lambda popt: f'y = {popt[0]:.3f}*x^3 + {popt[1]:.3f}*x^2 + {popt[2]:.3f}*x + {popt[3]:.3f}'
+
+def quartic_func(x, a, b, c, d, e):
+    return a * x**4 + b * x**3 + c * x**2 + d * x + e
+quartic_func.equation = lambda popt: f'y = {popt[0]:.3f}*x^4 + {popt[1]:.3f}*x^3 + {popt[2]:.3f}*x^2 + {popt[3]:.3f}*x + {popt[4]:.3f}'
+
+def quintic_func(x, a, b, c, d, e, f):
+    return a * x**5 + b * x**4 + c * x**3 + d * x**2 + e * x + f
+quintic_func.equation = lambda popt: f'y = {popt[0]:.3f}*x^5 + {popt[1]:.3f}*x^4 + {popt[2]:.3f}*x^3 + {popt[3]:.3f}*x^2 + {popt[4]:.3f}*x + {popt[5]:.3f}'
 
 def absolute_shift_func(x, a, b, c):
     return a * np.abs(x - b) + c
@@ -90,7 +102,7 @@ def pm_mean_std(values):
 
 def summarize(values, name=None, histogram=False, renderer=None, hist_args={},
               imshow_args=None, include_value=False, linear_fit=False,
-              fit_function=None, fit_equation=None,
+              fit_function=None, fit_equation=None, fit_name=None,
               min=True, max=True, mean=True, median=True, range=True, range_size=True, firstn=None, abs_max=True):
     if histogram:
         hist_args_list = hist_args if isinstance(hist_args, list) else [hist_args]
@@ -126,26 +138,33 @@ def summarize(values, name=None, histogram=False, renderer=None, hist_args={},
             y_vals = utils.to_numpy(values.flatten())
             aggregated = 'Aggregated '
         name_space = '' if name is None else f'{name} '
-        fit_title = f"{aggregated}{name_space}Data and Fit"
+        if fit_name is None:
+            fit_name = fit_function.__name__
+            if fit_name is not None and fit_name.endswith('_func'): fit_name = fit_name[:-len('_func')]
+        fit_name_space = '' if not fit_name else f'{fit_name} '
+        fit_title = f"{aggregated}{name_space}Data and {fit_name_space}Fit"
         resid_title = f"{aggregated}{name_space}Residual Errors"
 
         # Fit linear regression to the aggregated data
         popt, _ = curve_fit(fit_function, x_vals, y_vals)
 
-        # Scatter plot the data & best fit line
-        plt.figure()
-        plt.scatter(x_vals, y_vals, label='Data', alpha=0.5, s=1)
-        plt.plot(x_vals, fit_function(x_vals, *popt), 'r-', label=f'Fit: {fit_equation(popt)}')
-        plt.title(fit_title)
-        plt.legend()
-        plt.show()
+        # Create a subplot with 1 row and 2 columns
+        fig, axs = plt.subplots(1, 2, figsize=(12, 6))  # Adjust the figure size to your liking
 
-        # Plot residual errors
+        # Scatter plot the data & best fit line on the first subplot
+        axs[0].scatter(x_vals, y_vals, label='Data', alpha=0.5, s=1)
+        axs[0].plot(x_vals, fit_function(x_vals, *popt), 'r-', label=f'Fit: {fit_equation(popt)}')
+        axs[0].set_title(fit_title)
+        axs[0].legend()
+
+        # Plot residual errors on the second subplot
         residuals = y_vals - fit_function(x_vals, *popt)
         order_indices = np.argsort(x_vals)
-        plt.figure()
-        plt.scatter(x_vals[order_indices], residuals[order_indices], c='b', alpha=0.5)
-        plt.title(resid_title)
+        axs[1].scatter(x_vals[order_indices], residuals[order_indices], c='b', alpha=0.5)
+        axs[1].set_title(resid_title)
+
+        # Adjust the layout
+        plt.tight_layout()
         plt.show()
 
     res = {}
@@ -960,52 +979,63 @@ def make_local_tqdm(tqdm):
 
 # %%
 
-def display_size_direction_stats(size_direction: torch.Tensor, QK: torch.Tensor, U: torch.Tensor, Vh: torch.Tensor, S: torch.Tensor, renderer=None):
+def display_size_direction_stats(size_direction: torch.Tensor, QK: torch.Tensor, U: torch.Tensor, Vh: torch.Tensor, S: torch.Tensor,
+                                 renderer=None, fit_funcs: Iterable = (sigmoid_func, cubic_func, quintic_func)):
     imshow(QK, title="W_E @ W_Q @ W_K.T @ W_E.T", renderer=renderer)
     imshow(U, title="U", renderer=renderer)
     imshow(Vh, title="Vh", renderer=renderer)
     line(S, title="S", renderer=renderer)
     line(size_direction, title="size direction", renderer=renderer)
 
-    # fit to sigmoid
     y_data = size_direction.detach().cpu().numpy()
     x_data = np.linspace(1, len(y_data), len(y_data))
-    y_transposed = np.linspace(1, len(x_data), len(x_data))
-    initial_params_transposed = [max(y_transposed), 1/np.mean(y_data), np.median(y_data)]
 
-    # Fit the curve with initial parameters
+    for fit_func in fit_funcs:
+        fit_func_name = fit_func.__name__
+        if fit_func_name.endswith("_func"): fit_func_name = fit_func_name[:-len("_func")]
 
-    params_transposed, covariance_transposed = curve_fit(sigmoid_func, y_data, y_transposed, p0=initial_params_transposed, maxfev=10000)
+        if fit_func is sigmoid_func:
+            # fit to sigmoid
+            y_transposed = np.linspace(1, len(x_data), len(x_data))
+            initial_params_transposed = [max(y_transposed), 1/np.mean(y_data), np.median(y_data)]
 
-    # Generate predicted y values with parameters
-    y_pred_transposed = sigmoid_func(y_data, *params_transposed)
-    # Calculating residuals
-    residuals = y_transposed - y_pred_transposed
+            # Fit the curve with initial parameters
 
-    # Creating subplots
-    fig, axs = plt.subplots(2, 1, figsize=(10, 12))
-    fig.suptitle('Fitting a Sigmoid to the Size Vector Components and Residuals Analysis', fontsize=16)
+            params_transposed, covariance_transposed = curve_fit(sigmoid_func, y_data, y_transposed, p0=initial_params_transposed, maxfev=10000)
 
-    # Plotting the original data and fitted curve
-    axs[0].scatter(y_data, y_transposed, label='Data', color='blue')
-    axs[0].plot(y_data, y_pred_transposed, color='red',
-            label=rf'{inv_sigmoid_func.equation(params_transposed)}')
-    axs[0].set_xlabel('Component in Normalized Size Vector')
-    axs[0].set_ylabel('Input Token')
-    axs[0].legend()
-    axs[0].grid(True)
+            # Generate predicted y values with parameters
+            y_pred_transposed = sigmoid_func(y_data, *params_transposed)
+            # Calculating residuals
+            residuals = y_transposed - y_pred_transposed
 
-    # Plotting residuals
-    axs[1].scatter(y_data, residuals, color='green', label='Residuals')
-    axs[1].axhline(y=0, color='r', linestyle='--', label='y=0')
-    axs[1].set_xlabel('Component in Normalized Size Vector')
-    axs[1].set_ylabel('Residual')
-    axs[1].legend()
-    axs[1].grid(True)
+            # Creating subplots
+            fig, axs = plt.subplots(2, 1, figsize=(10, 12))
+            fig.suptitle('Fitting a Sigmoid to the Size Vector Components and Residuals Analysis', fontsize=16)
 
-    # Displaying the plots
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # To prevent overlap between suptitle and subplots
-    plt.show()
+            # Plotting the original data and fitted curve
+            axs[0].scatter(y_data, y_transposed, label='Data', color='blue')
+            axs[0].plot(y_data, y_pred_transposed, color='red',
+                    label=rf'{inv_sigmoid_func.equation(params_transposed)}')
+            axs[0].set_xlabel('Component in Normalized Size Vector')
+            axs[0].set_ylabel('Input Token')
+            axs[0].legend()
+            axs[0].grid(True)
+
+            # Plotting residuals
+            axs[1].scatter(y_data, residuals, color='green', label='Residuals')
+            axs[1].axhline(y=0, color='r', linestyle='--', label='y=0')
+            axs[1].set_xlabel('Component in Normalized Size Vector')
+            axs[1].set_ylabel('Residual')
+            axs[1].legend()
+            axs[1].grid(True)
+
+            # Displaying the plots
+            plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # To prevent overlap between suptitle and subplots
+            plt.show()
+        else:
+            summarize(size_direction, fit_function=fit_func, renderer=renderer, name="Size Direction")
+
+
 
 @torch.no_grad()
 def find_size_direction(model: HookedTransformer, plot_heatmaps=False, renderer=None):
@@ -1035,13 +1065,13 @@ def find_size_direction(model: HookedTransformer, plot_heatmaps=False, renderer=
 
 
 
-# from train_max_of_2 import get_model
-# from tqdm.auto import tqdm
+from train_max_of_2 import get_model
+from tqdm.auto import tqdm
 
 
-# if __name__ == '__main__':
-#     TRAIN_IF_NECESSARY = False
-#     model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
+if __name__ == '__main__':
+    TRAIN_IF_NECESSARY = False
+    model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
 
-# find_size_direction(model, plot_heatmaps=True)
+find_size_direction(model, plot_heatmaps=True)
 # %%

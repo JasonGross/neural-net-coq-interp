@@ -536,21 +536,33 @@ def all_worst_EVOU(model: HookedTransformer, min_gap: int = 0, tqdm=None, **kwar
 
 # %%
 # @torch.no_grad()
-# def query_size_overlap(model: HookedTransformer, pos: int = -1, size_direction: Optional[TensorType["d_model"]] = None, do_plot: bool = False, renderer=None) -> Tuple[TensorType["q_vocab_q"], TensorType["q_vocab_q", "d_head"]]: # noqa: F821
+# def size_overlap(model: HookedTransformer, pos: int = -1, size_direction: Optional[TensorType["d_vocab"]] = None, # noqa: F821
+#                 do_plot: bool = False, renderer=None) -> Tuple[TensorType["d_vocab"], TensorType["n_ctx"]]: # noqa: F821
 #     """
-#     Returns the overlap between the query token and the size vector.
-#     Complexity:
+#     Returns the overlap between the query / position and the size vector
+#     Complexity: O(|W_E| + |W_K| + )
+#     Complexity: = O(d_vocab^2 * d_model + d_model^2 * d_head + )
 #     """
 #     if size_direction is None: size_direction = find_size_direction(model, renderer=renderer, plot_heatmaps=do_plot)
-#     d_vocab, d_model, n_ctx = model.cfg.d_vocab, model.cfg.d_model, model.cfg.n_ctx
-#     W_pos, W_E, W_Q = model.W_pos, model.W_E, model.W_Q
+#     d_vocab, d_model, d_head, n_ctx = model.cfg.d_vocab, model.cfg.d_model, model.cfg.d_head, model.cfg.n_ctx
+#     W_pos, W_E, W_Q, W_K = model.W_pos, model.W_E, model.W_Q, model.W_K
 #     assert W_pos.shape == (n_ctx, d_model), f"W_pos.shape = {W_pos.shape} != {(n_ctx, d_model)} = (n_ctx, d_model)"
 #     assert W_E.shape == (d_vocab, d_model), f"W_E.shape = {W_E.shape} != {(d_vocab, d_model)} = (d_vocab, d_model)"
-#     assert W_Q.shape == (1, 1, d_vocab, d_model), f"W_Q.shape = {W_Q.shape} != {(1, 1, d_vocab, d_model)} = (1, 1, d_vocab, d_model)"
-#     assert size_direction.shape == (d_model,), f"size_direction.shape = {size_direction.shape} != {(d_model,)} = (d_model,)"
+#     assert W_Q.shape == (1, 1, d_model, d_head), f"W_Q.shape = {W_Q.shape} != {(1, 1, d_model, d_head)} = (1, 1, d_model, d_head)"
+#     assert W_K.shape == (1, 1, d_model, d_head), f"W_K.shape = {W_K.shape} != {(1, 1, d_model, d_head)} = (1, 1, d_model, d_head)"
+#     assert size_direction.shape == (d_vocab,), f"size_direction.shape = {size_direction.shape} != {(d_vocab,)} = (d_vocab,)"
+
+#     k = W_K[0, 0, :, :].T @ (W_E.T @ size_direction)
+#     assert k.shape == (d_head,), f"k.shape = {k.shape} != {(d_head,)} = (d_head,)"
+
+#     qk = W_Q[0, 0, :, :] @ k
+#     assert qk.shape == (d_model,), f"qk.shape = {qk.shape} != {(d_model,)} = (d_model,)"
+#     q = W_E @ qk
+#     assert q.shape == (d_vocab,), f"q.shape = {q.shape} != {(d_vocab,)} = (d_vocab,)"
+
 
 #     # compute the overlap between the query token and the size vector
-#     (W_pos[pos, :] + W_E[0, 0, :, :])
+#     (W_pos[pos, :] + W_E[0, 0, :, :]) @ W_Q[0, 0, :, :]
 
 
 
