@@ -978,6 +978,19 @@ def make_local_tqdm(tqdm):
         return tqdm
 
 # %%
+@torch.no_grad()
+def layernorm_noscale(x: torch.Tensor) -> torch.Tensor:
+    return x - x.mean(axis=-1, keepdim=True)
+
+# %%
+@torch.no_grad()
+def layernorm_scales(x: torch.Tensor, eps: float = 1e-5, recip: bool = True) -> torch.Tensor:
+    x = layernorm_noscale(x)
+    scale = (x.pow(2).mean(axis=-1, keepdim=True) + eps).sqrt()
+    if recip: scale = 1 / scale
+    return scale
+
+# %%
 
 def display_size_direction_stats(size_direction: torch.Tensor, QK: torch.Tensor, U: torch.Tensor, Vh: torch.Tensor, S: torch.Tensor,
                                  renderer=None, fit_funcs: Iterable = (sigmoid_func, cubic_func, quintic_func)):
@@ -1065,13 +1078,12 @@ def find_size_direction(model: HookedTransformer, plot_heatmaps=False, renderer=
 
 
 
-# from train_max_of_2 import get_model
-# from tqdm.auto import tqdm
-
-
 # if __name__ == '__main__':
+#     from train_max_of_2 import get_model
+#     from tqdm.auto import tqdm
+
 #     TRAIN_IF_NECESSARY = False
 #     model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
 
-#     find_size_direction(model, plot_heatmaps=True, renderer='png')
+#     find_size_direction(model, plot_heatmaps=True)#, renderer='png')
 # %%
