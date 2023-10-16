@@ -1065,13 +1065,13 @@ def find_size_direction(model: HookedTransformer, plot_heatmaps=False, renderer=
 
 
 
-from train_max_of_2 import get_model
-from tqdm.auto import tqdm
+# from train_max_of_2 import get_model
+# from tqdm.auto import tqdm
 
 
-if __name__ == '__main__':
-    TRAIN_IF_NECESSARY = False
-    model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
+# if __name__ == '__main__':
+#     TRAIN_IF_NECESSARY = False
+#     model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
 
-find_size_direction(model, plot_heatmaps=True)
+#     find_size_direction(model, plot_heatmaps=True, renderer='png')
 # %%
