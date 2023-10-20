@@ -263,7 +263,7 @@ Notation "'weaksauce_einsum' x"
                     let z := (eval cbn beta iota delta [Nat.radd] in z) in
                     let z := (eval cbn beta iota zeta delta [Shape.snoc Shape.nil] in z) in
                     (*let z := (eval cbn beta iota zeta delta [PrimitiveProd.Primitive.fst PrimitiveProd.Primitive.snd Shape.snoc Shape.nil] in z) in*)
-                    exact $z)
+                    eexact $z)
       end)
        (x custom einsum_args at level 10, at level 10, only parsing).
 (*
