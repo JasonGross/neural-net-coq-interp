@@ -115,6 +115,7 @@ Lemma get_cartesian_exp {s A defaultA t n idx}
 Proof.
   cbv [get adjust_indices_for Index.map2 adjust_index_for Index.tl Index.snoc]; cbn [snd]; rewrite raw_get_cartesian_exp.
   subst i j; cbv [RawIndex.nil Index.nil RawIndex.snoc Index.snoc Index.tl RawIndex.tl RawIndex.hd Index.hd Shape.snoc Uint63.coer_int_N']; cbn [fst snd].
+  cbv [Classes.modulo Uint63.int_has_modulo].
   replace ((snd idx mod n) mod n)%uint63 with (snd idx mod n)%uint63; [ reflexivity | ].
   destruct idx as [[[] i] j]; cbv in *; clear.
   assert ((j mod n) / n = 0)%uint63 by nia.

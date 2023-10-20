@@ -1,4 +1,4 @@
-From Coq Require Import QMicromega Reals List Floats PArray Sint63 Uint63 Arith PArith NArith ZArith QArith.
+From Coq Require Import Qminmax QMicromega Reals List Floats PArray Sint63 Uint63 Arith PArith NArith ZArith QArith.
 From NeuralNetInterp.Util.Arith Require Import Classes FloatArith.Definitions QArith ZArith.
 Import ListNotations.
 Set Implicit Arguments.
@@ -146,6 +146,8 @@ Local Open Scope Q_scope.
 #[export] Instance Q_has_sub : has_sub Q := Qminus.
 #[export] Instance Q_has_mul : has_mul Q := Qmult.
 #[export] Instance Q_has_div : has_div Q := Qdiv.
+#[export] Instance Q_has_max : has_max Q := Qmax.
+#[export] Instance Q_has_min : has_min Q := Qmin.
 #[export] Instance Q_has_zero : has_zero Q := 0.
 #[export] Instance Q_has_one : has_one Q := 1.
 #[export] Instance Q_has_sqrt : has_sqrt Q := Qsqrt.
@@ -225,6 +227,8 @@ Local Open Scope float_scope.
 #[export] Instance float_has_sub : has_sub float := eta2 PrimFloat.sub.
 #[export] Instance float_has_mul : has_mul float := eta2 PrimFloat.mul.
 #[export] Instance float_has_div : has_div float := eta2 PrimFloat.div.
+#[export] Instance float_has_max : has_max float := _.
+#[export] Instance float_has_min : has_min float := _.
 #[export] Instance float_has_zero : has_zero float := 0.
 #[export] Instance float_has_one : has_one float := 1.
 #[export] Instance float_has_exp : has_exp float := eta1 PrimFloat.exp.
@@ -270,6 +274,8 @@ End Float.
 #[export] Instance R_has_one : has_one R := 1.
 #[export] Instance R_has_exp : has_exp R := Rtrigo_def.exp.
 #[export] Instance R_has_ln : has_ln R := Rpower.ln.
+#[export] Instance R_has_max : has_max R := Rmax.
+#[export] Instance R_has_min : has_min R := Rmin.
 #[export] Instance R_has_is_nan : has_is_nan R := fun _ => false.
 #[export] Instance R_has_is_infinity : has_is_infinity R := fun _ => false.
 #[local] Set Warnings Append "-unsupported-attributes".

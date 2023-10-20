@@ -3,16 +3,18 @@ From Coq.Floats Require Import Floats.
 From Flocq.Core Require Import Raux Generic_fmt Zaux FLX.
 From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
 From NeuralNetInterp.Util Require Import Default Arith.Classes Arith.Instances Arith.Flocq Arith.Flocq.Instances Arith.Flocq.Definitions.
-From NeuralNetInterp.Util.Tactics Require Import Head.
+From NeuralNetInterp.Util.Tactics Require Import Head BreakMatch.
 From NeuralNetInterp.Torch Require Import Tensor Tensor.Instances.
+From NeuralNetInterp.TransformerLens.HookedTransformer Require Import Instances Module.Instances Module.Flocqify.
 From NeuralNetInterp.MaxOfTwoNumbers Require Import Parameters Model Model.Instances.
 Import Dependent.ProperNotations.
 Import Arith.Instances.Truncating Arith.Flocq.Instances.Truncating.
 
 Module Model.
   Export Model.Instances.Model.
-  Notation R x y := (Prim2B x = y).
-  Notation Rf := (fun x y => R x y).
+  Include ModelFlocqify cfg Model.Model Instances.Model.
+  Include HookedTransformer.
+
   Section with_batch.
     Context {r} {batch : Shape r} {pos}
       (s := (batch ::' pos)%shape)
@@ -59,13 +61,7 @@ Module Model.
       end;
       repeat autorewrite with prim2b;
       try reflexivity.
-
-    Lemma logits_equiv (tokens : tensor s IndexType)
-      : Tensor.eqfR Rf
-          (logits (use_checkpoint:=use_checkpoint1) tokens)
-          (logits (use_checkpoint:=use_checkpoint2) tokens).
-    Proof using Type. apply logits_Proper_dep; t. Qed.
-
+(*
     Lemma masked_attn_scores_equiv (tokens : tensor s IndexType)
       : Tensor.eqfR Rf
           (masked_attn_scores (use_checkpoint:=use_checkpoint1) tokens)
@@ -77,14 +73,17 @@ Module Model.
           (attn_pattern (use_checkpoint:=use_checkpoint1) tokens)
           (attn_pattern (use_checkpoint:=use_checkpoint2) tokens).
     Proof using Type. apply attn_pattern_Proper_dep; t. Qed.
-
+*)
     Lemma loss_fn_equiv (logits logits' : tensor (s ::' cfg.d_vocab_out) _)
       (tokens : tensor s IndexType)
       : Tensor.eqfR Rf logits logits'
         -> Tensor.eqfR Rf
              (loss_fn (use_checkpoint:=use_checkpoint1) logits tokens)
              (loss_fn (use_checkpoint:=use_checkpoint2) logits' tokens).
-    Proof using Type. intro Hl; apply loss_fn_Proper_dep; t. Qed.
+    Proof using Type.
+      intro Hl; apply loss_fn_Proper_dep; t.
+      cbv [Classes.leb binary_float_has_leb]; break_innermost_match; reflexivity.
+    Qed.
 
     Lemma acc_fn_equiv (logits logits' : tensor (s ::' cfg.d_vocab_out) _)
       (tokens : tensor s IndexType)

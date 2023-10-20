@@ -91,8 +91,10 @@ Ltac specialize_step i' :=
   cbv [Classes.max Classes.min Classes.ltb Classes.leb Classes.eqb
          has_default_max_leb has_default_min_leb
          Uint63.max Uint63.min
-         R_has_leb R_has_ltb int_has_leb int_has_ltb];
-  clear; intros; break_innermost_match;
+         R_has_leb R_has_ltb R_has_min int_has_leb int_has_ltb Rmin];
+  clear; intros;
+  (idtac + instantiate (1:=Rle_bool));
+  break_innermost_match;
   rewrite <- ?not_true_iff_false, ?Rle_bool_iff, ?Rlt_bool_iff in *;
   try lia; try lra.
 #[local] Ltac handle_argminmax_in H :=
@@ -198,7 +200,15 @@ Proof.
             cbv [x y]
        | _ => idtac
        end.
+  all: do 2 lazymatch goal with
+         | [ |- Model.R (if ?x then _ else _) (if ?y then _ else _) ]
+           => let x := head x in
+              let y := head y in
+              cbv [x y]
+         | _ => idtac
+         end.
   all: autorewrite with prim2b; try reflexivity.
+  all: break_innermost_match; try reflexivity.
   all: [ > ].
   set (logits := logits all_tokens) in *.
   set (all_tokens := all_tokens) in *.
@@ -363,20 +373,20 @@ Proof.
                    specialize (H' i' (Z.to_nat (Uint63.to_Z i')) pf));
          [ cbv [Reduction.in_bounds_alt_at]; clear;
            rewrite ?nat_N_Z, ?Z2Nat.id, ?of_to_Z by lia;
-           cbv [Classes.add Classes.mul int_has_add int_has_mul];
+           cbv [Classes.add Classes.mul Classes.zero int_has_add Classes.one int_has_one int_has_mul int_has_zero];
            match goal with
            | [ |- context[?v] ]
-             => lazymatch type of v with
+             => lazymatch v with context[i'] => fail | context[if _ then _ else _] => idtac end;
+                lazymatch type of v with
                 | Z => idtac
                 | nat => idtac
                 | int => idtac
                 | N => idtac
                 end;
-                lazymatch v with context[i'] => fail | context[if _ then _ else _] => idtac end;
                 let v' := (eval vm_compute in v) in
                 progress change v with v'
            end;
-           try lia
+           try (break_innermost_match; lia)
          | cbv [Classes.leb R_has_leb is_true] in H';
            rewrite !Rle_bool_iff in H';
            etransitivity; [ eassumption | etransitivity; [ apply H' | apply Req_le, f_equal, f_equal ] ];
@@ -393,6 +403,7 @@ Proof.
   cbv [inject_int] in *.
   specialize_step i'.
   specialize_step i'.
+  cbv [Classes.modulo int_has_modulo] in *.
   set (i'' := (i' mod _)%uint63) in *.
   assert (i' = i'') by (clear; subst i' i''; nia).
   clearbody i''; subst i''.
@@ -450,6 +461,7 @@ Proof.
          end.
   destruct_head'_and.
   cbv [Classes.leb Classes.ltb int_has_leb int_has_ltb R_has_ltb] in *.
+  cbv [Classes.zero int_has_zero] in *.
   repeat match goal with
          | [ H0 : forall j0, (0 <=? ?f j0)%uint63 = true, H1 : forall j, (?f j <? ?m)%uint63 = true, H' : context[?f ?j'] |- _ ]
            => progress (try unique pose proof (H0 j'); try unique pose proof (H1 j'))
@@ -475,4 +487,5 @@ Proof.
   rewrite Rlt_bool_iff in *.
   destruct_head'_or; destruct_head'_and.
   all: lra.
+  all: fail. (* no goals left *)
 Abort. (* so slow :-( *)

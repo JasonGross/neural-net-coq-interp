@@ -668,6 +668,7 @@ Declare Scope raw_tensor_scope.
 Delimit Scope raw_tensor_scope with raw_tensor.
 Bind Scope tensor_scope with tensor_of_rank.
 Bind Scope tensor_scope with tensor.
+Local Open Scope core_scope.
 Local Open Scope tensor_scope.
 
 #[export] Instance empty_of_rank {r A} {default : pointed A} : pointed (tensor_of_rank r A)
@@ -1121,49 +1122,55 @@ Section reduce.
     := reduce_axis_m1 (Reduction.var (correction:=correction)) (reshape_all t).
 End reduce.
 
-Definition softmax_dim_m1 {r} {s0 : Shape r} {s'}
-  (s:=(s0 ::' s')%shape)
-  {A B C}
-  {addB : has_add B} {expA : has_exp_to A B} {zeroB : has_zero B} {divB : has_div_by B B C}
-  {use_checkpoint : with_default "use_checkpoint" bool true}
-  {defaultB : pointed B}
-  (t : tensor s A) : tensor s C
-  := (let exp_t : tensor s B := PArray.maybe_checkpoint (map exp t) in
-      let sum_exp_t : tensor (s0 ::' 1) B := PArray.maybe_checkpoint (sum_dim_m1 (keepdim:=true) exp_t) in
-      exp_t / sum_exp_t)%core.
+(* Note that we first subtract off the maxium, so that we get maximum precision for the largest values of softmax.  See also https://github.com/pytorch/pytorch/blob/bc047ec906d8e1730e2ccd8192cef3c3467d75d1/aten/src/ATen/native/cpu/SoftMaxKernel.cpp#L115-L136 *)
+Section softmax_dim_m1.
+  Context {r} {s0 : Shape r} {s'}
+    (s:=(s0 ::' s')%shape)
+    {A A' B C C' D}
+    {addB : has_add B} {subA : has_sub_with A A A'} {expA : has_exp_to A' B} {zeroB : has_zero B}
+    {divB : has_div_by B B C} {addC : has_add_with C A C'} {subA' : has_sub_with A C' D}
+    {lnA : has_ln_to B C}
+    {maxA : has_max A}
+    {use_checkpoint : with_default "use_checkpoint" bool true}
+    {defaultA : pointed A}
+    {defaultA' : pointed A'}
+    {defaultB : pointed B}
+    {defaultC' : pointed C'}
+    (t : tensor s A).
 
-Definition log_softmax_dim_m1 {r} {s0 : Shape r} {s'} (s:=(s0 ::' s')%shape)
-  {A B C D}
-  {addB : has_add B} {lnA : has_ln_to B C} {expA : has_exp_to A B} {zeroB : has_zero B} {subB : has_sub_with A C D}
-  {use_checkpoint : with_default "use_checkpoint" bool true}
-  {defaultB : pointed B}
-  {defaultC : pointed C}
-  (t : tensor s A) : tensor s D
-  := (let exp_t : tensor s B := PArray.maybe_checkpoint (map exp t) in
-      let sum_exp_t : tensor (s0 ::' 1) B := sum_dim_m1 (keepdim:=true) exp_t in
-      let ln_sum_exp_t : tensor (s0 ::' 1) C := PArray.maybe_checkpoint (map ln sum_exp_t) in
-      t - ln_sum_exp_t)%core.
+  Let max_t : tensor (s0 ::' 1) A := PArray.maybe_checkpoint (max_dim_m1 (keepdim:=true) t).
+  Let exp_t : tensor s B := PArray.maybe_checkpoint (map exp (t - max_t)).
+  Let sum_exp_t : tensor (s0 ::' 1) B := PArray.maybe_checkpoint (sum_dim_m1 (keepdim:=true) exp_t).
 
-Definition softmax {r} {s : Shape r}
-  {A B C}
-  {addB : has_add B} {expA : has_exp_to A B} {zeroB : has_zero B} {divB : has_div_by B B C}
-  {use_checkpoint : with_default "use_checkpoint" bool true}
-  {defaultB : pointed B}
-  (t : tensor s A) : tensor s C
-  := (let exp_t : tensor s B := PArray.maybe_checkpoint (map exp t) in
-      let sum_exp_t : B := item (sum_dim_m1 (keepdim:=false) (reshape_all exp_t)) in
-      exp_t / broadcast' sum_exp_t)%core.
+  Definition softmax_dim_m1 : tensor s C
+    := exp_t / sum_exp_t.
 
-Definition log_softmax {r} {s : Shape r}
-  {A B C D}
-  {addB : has_add B} {lnA : has_ln_to B C} {expA : has_exp_to A B} {zeroB : has_zero B} {subACD : has_sub_with A C D}
-  {use_checkpoint : with_default "use_checkpoint" bool true}
-  {defaultB : pointed B}
-  (t : tensor s A) : tensor s D
-  := (let exp_t : tensor s B := PArray.maybe_checkpoint (map exp t) in
-      let sum_exp_t : B := item (sum_dim_m1 (keepdim:=false) (reshape_all exp_t)) in
-      let ln_sum_exp_t : C := ln sum_exp_t in
-      t - broadcast' ln_sum_exp_t)%core.
+  Definition log_softmax_dim_m1 : tensor s D
+    := let ln_sum_exp_t : tensor (s0 ::' 1) C' := PArray.maybe_checkpoint (map ln sum_exp_t + max_t) in
+       t - ln_sum_exp_t.
+End softmax_dim_m1.
+
+Section softmax.
+  Context {r} {s : Shape r}
+    {A A' B C C' D}
+    {addB : has_add B} {subA : has_sub_with A A A'} {expA : has_exp_to A' B} {lnA : has_ln_to B C} {zeroB : has_zero B} {divB : has_div_by B B C}
+    {addC : has_add_with C A C'} {subA' : has_sub_with A C' D}
+    {maxA : has_max A}
+    {use_checkpoint : with_default "use_checkpoint" bool true}
+    {defaultB : pointed B}
+    (t : tensor s A).
+
+  Let max_t : A := item (max t).
+  Let exp_t : tensor s B := PArray.maybe_checkpoint (map exp (t - broadcast' max_t)).
+  Let sum_exp_t : B := item (sum exp_t).
+
+  Definition softmax : tensor s C
+    := exp_t / broadcast' sum_exp_t.
+
+  Definition log_softmax : tensor s D
+    :=  let ln_sum_exp_t : C' := ln sum_exp_t + max_t in
+        t - broadcast' ln_sum_exp_t.
+End softmax.
 
 Definition to_bool {r} {s : Shape r} {A} {zero : has_zero A} {eqb : has_eqb A} (xs : tensor s A) : tensor s bool
   := map (fun x => x ≠? 0)%core xs.

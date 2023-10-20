@@ -300,7 +300,7 @@ Proof.
   cbv [Tensor.get Tensor.raw_get SliceIndex.slice SliceIndex.SliceIndexType.slice RawIndex.hd Slice.invert_index RawIndex.tl RawIndex.snoc RawIndex.nil adjust_index_for Shape.tl Shape.hd Shape.nil Shape.snoc FancyIndex.slice reshape_app_combine' RawIndex.uncurry_radd FancyIndex.slice_ map_dep RawIndex.split_radd Nat.radd FancyIndex.broadcast map2 FancyIndex.FancyIndexType.broadcast map2' repeat' Tensor.map Tensor.map' map3
          coer_tensor coer_ln_tensor
          where_
-         Classes.add tensor_add Classes.div tensor_div_by map2 R_has_add R_has_div] in *.
+         Classes.add Classes.sub tensor_add tensor_sub Classes.div tensor_div_by map2 R_has_add R_has_div] in *.
   cbn [fst snd] in *.
   repeat match goal with H := fun x => coer (?f x) |- _ => first [ is_var f | is_const f ]; subst H end.
   repeat match goal with H := ?f |- _ => first [ is_var f | is_const f | is_constructor f ]; subst H end.

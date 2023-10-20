@@ -2,6 +2,7 @@ From Coq.Program Require Import Basics Tactics.
 From Coq.Classes Require Import Morphisms RelationClasses.
 From NeuralNetInterp.Util.Program Require Import Basics.Dependent.
 From NeuralNetInterp.Util.Relations Require Relation_Definitions.Dependent.
+From NeuralNetInterp.Util.Classes.Morphisms Require DependentHetero.
 Export Relation_Definitions.Dependent.RelationsNotations.
 (*From NeuralNetInterp.Util.Classes Require Export RelationClasses.Hetero.*)
 
@@ -11,6 +12,20 @@ Local Obligation Tactic := try solve [ simpl_relation ].
 #[local] Set Universe Polymorphism.
 #[local] Unset Universe Minimization ToSet.
 #[local] Set Polymorphic Inductive Cumulativity.
+
+Section Propern.
+  Class Propern {n} {F : type_functionn n} (R : Dependent.relationn F) (m : Dependent.foralln F) : Prop
+    := propern_prf : DependentHetero.Propern R m m.
+
+  Definition respectfuln {n} {A B : type_functionn n} (R : Dependent.relationn A) (R' : Dependent.relationn B) : Dependent.relationn (Dependent.arrown A B)
+    := DependentHetero.respectfuln R R'.
+End Propern.
+
+#[local] Notation "'Propern!' n F R m"
+  := (match n, F, R, m return _ with
+      | n', F', R', m' => ltac:(let v := eval cbv -[Hetero.relation] in (@Propern n' F' R' m') in
+                                  exact v)
+      end) (only parsing, at level 10, n at level 0, F at level 0, R at level 0, m at level 0).
 
 Section Proper.
   Context {F : Type -> Type}.
@@ -33,34 +48,52 @@ Section Proper2.
   Context {F : Type -> Type -> Type}.
 
   Class Proper2 (R : Dependent.relation2 F) (m : forall A B, F A B) : Prop :=
-    proper2_prf : forall {A B} (R0 : Hetero.relation A B) {A' B'} (R1 : Hetero.relation A' B'), R A B R0 A' B' R1 (m A A') (m B B').
+    proper2_prf : Propern! 2 F R m.
 
   Definition respectful2 {A B : Type -> Type -> Type} (R : Dependent.relation2 A) (R' : Dependent.relation2 B) : Dependent.relation2 (fun T U => A T U -> B T U)
-    := fun a0 b0 R0 a1 b1 R1 f g => forall x y, R _ _ R0 _ _ R1 x y -> R' _ _ R0 _ _ R1 (f x) (g y).
-
+    := Eval cbv in @respectfuln 2 A B R R'.
 End Proper2.
 
 Section Proper3.
   Context {F : Type -> Type -> Type -> Type}.
 
   Class Proper3 (R : Dependent.relation3 F) (m : forall A B C, F A B C) : Prop :=
-    proper3_prf : forall {A B} (R0 : Hetero.relation A B) {A' B'} (R1 : Hetero.relation A' B') {A'' B''} (R2 : Hetero.relation A'' B''), R A B R0 A' B' R1 A'' B'' R2 (m A A' A'') (m B B' B'').
+    proper3_prf : Propern! 3 F R m.
 
   Definition respectful3 {A B : Type -> Type -> Type -> Type} (R : Dependent.relation3 A) (R' : Dependent.relation3 B) : Dependent.relation3 (fun T U V => A T U V -> B T U V)
-    := fun a0 b0 R0 a1 b1 R1 a2 b2 R2 f g => forall x y, R _ _ R0 _ _ R1 _ _ R2 x y -> R' _ _ R0 _ _ R1 _ _ R2 (f x) (g y).
-
+    := Eval cbv in @respectfuln 3 A B R R'.
 End Proper3.
 
 Section Proper4.
   Context {F : Type -> Type -> Type -> Type -> Type}.
 
   Class Proper4 (R : Dependent.relation4 F) (m : forall A B C D, F A B C D) : Prop :=
-    proper4_prf : forall {A B} (R0 : Hetero.relation A B) {A' B'} (R1 : Hetero.relation A' B') {A'' B''} (R2 : Hetero.relation A'' B'') {A''' B'''} (R3 : Hetero.relation A''' B'''), R A B R0 A' B' R1 A'' B'' R2 A''' B''' R3 (m A A' A'' A''') (m B B' B'' B''').
+    proper4_prf : Propern! 4 F R m.
 
   Definition respectful4 {A B : Type -> Type -> Type -> Type -> Type} (R : Dependent.relation4 A) (R' : Dependent.relation4 B) : Dependent.relation4 (fun T U V W => A T U V W -> B T U V W)
-    := fun a0 b0 R0 a1 b1 R1 a2 b2 R2 a3 b3 R3 f g => forall x y, R _ _ R0 _ _ R1 _ _ R2 _ _ R3 x y -> R' _ _ R0 _ _ R1 _ _ R2 _ _ R3 (f x) (g y).
-
+    := Eval cbv in @respectfuln 4 A B R R'.
 End Proper4.
+
+Section Proper5.
+  Context {F : Type -> Type -> Type -> Type -> Type -> Type}.
+
+  Class Proper5 (R : Dependent.relation5 F) (m : forall A B C D E, F A B C D E) : Prop :=
+    proper5_prf : Propern! 5 F R m.
+
+  Definition respectful5 {A B : Type -> Type -> Type -> Type -> Type -> Type} (R : Dependent.relation5 A) (R' : Dependent.relation5 B) : Dependent.relation5 (fun T U V W X => A T U V W X -> B T U V W X)
+    := Eval cbv in @respectfuln 5 A B R R'.
+End Proper5.
+
+Section Proper6.
+  Context {F : Type -> Type -> Type -> Type -> Type -> Type -> Type}.
+
+  Class Proper6 (R : Dependent.relation6 F) (m : forall A B C D E G, F A B C D E G) : Prop :=
+    proper6_prf : Propern! 6 F R m.
+
+  Definition respectful6 {A B : Type -> Type -> Type -> Type -> Type -> Type -> Type} (R : Dependent.relation6 A) (R' : Dependent.relation6 B) : Dependent.relation6 (fun T U V W X Y => A T U V W X Y -> B T U V W X Y)
+    := Eval cbv in @respectfuln 6 A B R R'.
+End Proper6.
+
 (*
 (** Non-dependent pointwise lifting *)
 Definition pointwise_relation A {B} (R : relation B) : relation (A -> B) :=
@@ -122,9 +155,43 @@ Module Export ProperNotations.
   Notation " R --> R' " := (@respectful4 _ _ (flip (R%dependent4_signature)) (R'%dependent4_signature))
     (right associativity, at level 55) : dependent4_signature_scope.
 
+  Notation " R ++> R' " := (@respectful5 _ _ (R%dependent5_signature) (R'%dependent5_signature))
+    (right associativity, at level 55) : dependent5_signature_scope.
+
+  Notation " R ==> R' " := (@respectful5 _ _ (R%dependent5_signature) (R'%dependent5_signature))
+    (right associativity, at level 55) : dependent5_signature_scope.
+
+  Notation " R --> R' " := (@respectful5 _ _ (flip (R%dependent5_signature)) (R'%dependent5_signature))
+    (right associativity, at level 55) : dependent5_signature_scope.
+
+  Notation " R ++> R' " := (@respectful6 _ _ (R%dependent6_signature) (R'%dependent6_signature))
+    (right associativity, at level 55) : dependent6_signature_scope.
+
+  Notation " R ==> R' " := (@respectful6 _ _ (R%dependent6_signature) (R'%dependent6_signature))
+    (right associativity, at level 55) : dependent6_signature_scope.
+
+  Notation " R --> R' " := (@respectful6 _ _ (flip (R%dependent6_signature)) (R'%dependent6_signature))
+    (right associativity, at level 55) : dependent6_signature_scope.
+
+  Notation " R ++> R' " := (@respectfuln _ _ _ (R%dependentn_signature) (R'%dependentn_signature))
+    (right associativity, at level 55) : dependentn_signature_scope.
+
+  Notation " R ==> R' " := (@respectfuln _ _ _ (R%dependentn_signature) (R'%dependentn_signature))
+    (right associativity, at level 55) : dependentn_signature_scope.
+
+  Notation " R --> R' " := (@respectfuln _ _ _ (flip (R%dependentn_signature)) (R'%dependentn_signature))
+    (right associativity, at level 55) : dependentn_signature_scope.
+
 End ProperNotations.
 
 Notation idR := (fun (A B : Type) (R : Hetero.relation A B) => R).
+
+Fixpoint constn {n : nat} : forall {A} (R : Relation_Definitions.relation A), @Dependent.relationn n (Constn A)
+  := fun A R => match n with
+                | O => R
+                | S n => fun _ _ _ => @constn n A R
+                end.
+
 Notation const R := (match _ as F return forall A B, Hetero.relation A B -> Hetero.relation F F with
                      | F => fun (A B : Type) (_ : Hetero.relation A B) => R
                      end) (only parsing).
@@ -141,6 +208,14 @@ Notation const4 R := (match _ as F return forall A B, Hetero.relation A B -> for
                       | F => fun (A B : Type) (_ : Hetero.relation A B) (A' B' : Type) (_ : Hetero.relation A' B') (A'' B'' : Type) (_ : Hetero.relation A'' B'') (A''' B''' : Type) (_ : Hetero.relation A''' B''') => R
                       end) (only parsing).
 Notation constR4 R := (fun (A B : Type) (_ : Hetero.relation A B) (A' B' : Type) (_ : Hetero.relation A' B') (A'' B'' : Type) (_ : Hetero.relation A'' B'') (A''' B''' : Type) (_ : Hetero.relation A''' B''') => R).
+Notation const5 R := (match _ as F return forall A B, Hetero.relation A B -> forall A' B', Hetero.relation A' B' -> forall A'' B'', Hetero.relation A'' B'' -> forall A''' B''', Hetero.relation A''' B''' -> forall A'''' B'''', Hetero.relation A'''' B'''' -> Hetero.relation F F with
+                      | F => fun (A B : Type) (_ : Hetero.relation A B) (A' B' : Type) (_ : Hetero.relation A' B') (A'' B'' : Type) (_ : Hetero.relation A'' B'') (A''' B''' : Type) (_ : Hetero.relation A''' B''') (A'''' B'''' : Type) (_ : Hetero.relation A'''' B'''') => R
+                      end) (only parsing).
+Notation constR5 R := (fun (A B : Type) (_ : Hetero.relation A B) (A' B' : Type) (_ : Hetero.relation A' B') (A'' B'' : Type) (_ : Hetero.relation A'' B'') (A''' B''' : Type) (_ : Hetero.relation A''' B''') (A'''' B'''' : Type) (_ : Hetero.relation A'''' B'''') => R).
+Notation const6 R := (match _ as F return forall A B, Hetero.relation A B -> forall A' B', Hetero.relation A' B' -> forall A'' B'', Hetero.relation A'' B'' -> forall A''' B''', Hetero.relation A''' B''' -> forall A'''' B'''', Hetero.relation A'''' B'''' -> forall A''''' B''''', Hetero.relation A''''' B''''' -> Hetero.relation F F with
+                      | F => fun (A B : Type) (_ : Hetero.relation A B) (A' B' : Type) (_ : Hetero.relation A' B') (A'' B'' : Type) (_ : Hetero.relation A'' B'') (A''' B''' : Type) (_ : Hetero.relation A''' B''') (A'''' B'''' : Type) (_ : Hetero.relation A'''' B'''') (A''''' B''''' : Type) (_ : Hetero.relation A''''' B''''') => R
+                      end) (only parsing).
+Notation constR6 R := (fun (A B : Type) (_ : Hetero.relation A B) (A' B' : Type) (_ : Hetero.relation A' B') (A'' B'' : Type) (_ : Hetero.relation A'' B'') (A''' B''' : Type) (_ : Hetero.relation A''' B''') (A'''' B'''' : Type) (_ : Hetero.relation A'''' B'''') (A''''' B''''' : Type) (_ : Hetero.relation A''''' B''''') => R).
 Arguments Proper {F}%type R%dependent_signature m.
 Arguments respectful {A B}%type (R R')%dependent_signature (_ _)%type _ _.
 Arguments Proper2 {F}%type R%dependent2_signature m.
@@ -149,6 +224,12 @@ Arguments Proper3 {F}%type R%dependent3_signature m.
 Arguments respectful3 {A B}%type (R R')%dependent3_signature (_ _)%type _ _.
 Arguments Proper4 {F}%type R%dependent4_signature m.
 Arguments respectful4 {A B}%type (R R')%dependent4_signature (_ _)%type _ _.
+Arguments Proper5 {F}%type R%dependent5_signature m.
+Arguments respectful5 {A B}%type (R R')%dependent5_signature (_ _)%type _ _.
+Arguments Proper6 {F}%type R%dependent6_signature m.
+Arguments respectful6 {A B}%type (R R')%dependent6_signature (_ _)%type _ _.
+Arguments Propern {n}%nat {F}%type R%dependentn_signature m.
+Arguments respectfuln {n}%nat {A B}%type (R R')%dependentn_signature.
 
 Local Open Scope dependent_signature_scope.
 

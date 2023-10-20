@@ -1,6 +1,7 @@
 From Coq Require Import Floats Arith NArith ZArith QArith PArray Uint63 List.
 Import ListNotations.
 Class pointed T := point : T.
+#[export] Hint Mode pointed ! : typeclass_instances.
 #[export] Instance default_Q : pointed Q := 0 : Q.
 #[export] Instance default_nat : pointed nat := 0%nat.
 #[export] Instance default_N : pointed N := 0%N.

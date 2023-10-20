@@ -115,7 +115,8 @@ End LayerNorm.
         (s := (batch ::' pos)%shape)
         (resid_shape := (s ::' cfg.d_model)%shape)
         {A} {coer_float : has_coer float A} {coerZ : has_coer Z A}
-        {addA : has_add A} {mulA : has_mul A} {divA : has_div A}
+        {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
+        {maxA : has_max A}
         {sqrtA : has_sqrt A} {expA : has_exp A}
         {use_checkpoint : with_default "use_checkpoint" bool true}
         (query_input key_input value_input : tensor resid_shape A).
@@ -191,6 +192,7 @@ End LayerNorm.
         (resid_shape := (s ::' cfg.d_model)%shape)
         {A} {coer_float : has_coer float A} {coerZ : has_coer Z A}
         {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
+        {maxA : has_max A}
         {sqrtA : has_sqrt A} {expA : has_exp A}
         {use_checkpoint : with_default "use_checkpoint" bool true}
         (resid_pre : tensor resid_shape A).
@@ -237,6 +239,7 @@ End LayerNorm.
         (resid_shape := (s ::' cfg.d_model)%shape)
         {A} {coer_float : has_coer float A} {coerZ : has_coer Z A}
         {addA : has_add A} {subA : has_sub A} {mulA : has_mul A} {divA : has_div A}
+        {maxA : has_max A}
         {sqrtA : has_sqrt A} {expA : has_exp A}
         {use_checkpoint : with_default "use_checkpoint" bool true}.
       Let coerA' (x : float) : A := coer x.
@@ -478,7 +481,7 @@ End LayerNorm.
   Print logits_all_tokens.
    *)
   Notation logits_all_tokens
-    := (@HookedTransformer.logits 1 [Uint63.of_Z (Z.of_N (@pow N N N N_has_pow cfg.d_vocab cfg.n_ctx))] (of_Z (Z.of_N cfg.n_ctx)) float (@coer_refl float) coer_Z_float float_has_add float_has_sub float_has_mul float_has_div float_has_sqrt float_has_exp true (@all_tokens true)).
+    := (@HookedTransformer.logits 1 [Uint63.of_Z (Z.of_N (@pow N N N N_has_pow cfg.d_vocab cfg.n_ctx))] (of_Z (Z.of_N cfg.n_ctx)) float (@coer_refl float) coer_Z_float float_has_add float_has_sub float_has_mul float_has_div float_has_max float_has_sqrt float_has_exp true (@all_tokens true)).
 
   Definition logits_all_tokens_concrete : PArray.concrete_tensor _ float
     := PArray.concretize logits_all_tokens.

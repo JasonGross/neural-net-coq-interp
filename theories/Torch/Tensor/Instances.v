@@ -674,130 +674,152 @@ Qed.
   Proof. apply var_Proper_dep; repeat intro; subst; reflexivity. Qed.
 
   #[export] Instance softmax_dim_m1_Proper_dep {r s0 s'}
-    : Dependent.Proper3
-        ((Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR)
-           ==> (Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_2 Dependent.idR)
-           ==> Dependent.lift3_2 Dependent.idR
-           ==> (Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_3 Dependent.idR)
-           ==> Dependent.const3 (fun _ _ => True)
-           ==> Dependent.lift3_2 Dependent.idR
-           ==> Dependent.lift3_1 eqfR
-           ==> Dependent.lift3_3 eqfR)
-        (@softmax_dim_m1 r s0 s').
-  Proof.
-    repeat intro; cbv [softmax_dim_m1 div].
-    eapply tensor_div_by_Proper_dep; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct.
-    all: try (eapply sum_dim_m1_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
-    all: try (eapply map_Proper_dep; try eassumption; repeat intro).
-    all: repeat intro; cbv in *; subst; eauto.
-  Qed.
-
-  #[export] Instance softmax_dim_m1_Proper {r s0 s' A B C addB expA zeroB divB use_checkpoint defaultB}
-    : Proper (eqf ==> eqf) (@softmax_dim_m1 r s0 s' A B C addB expA zeroB divB use_checkpoint defaultB).
-  Proof. eapply softmax_dim_m1_Proper_dep; repeat intro; hnf in *; try reflexivity; subst; reflexivity. Qed.
-
-  Lemma softmax_dim_m1_equiv {r s0 s' A B C addB expA zeroB divB use_checkpoint defaultB t}
-    : eqf
-        (@softmax_dim_m1 r s0 s' A B C addB expA zeroB divB use_checkpoint defaultB t)
-        (@softmax_dim_m1 r s0 s' A B C addB expA zeroB divB false defaultB t).
-  Proof. eapply softmax_dim_m1_Proper_dep; cbv; repeat intro; try (refine eq_refl; solve_constraints); subst; constructor. Qed.
-
-  #[export] Instance log_softmax_dim_m1_Proper_dep {r s0 s'}
     : Dependent.Proper4
-        ((Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_2 Dependent.idR)
+        ((Dependent.lift4_3 Dependent.idR ==> Dependent.lift4_3 Dependent.idR ==> Dependent.lift4_3 Dependent.idR)
+           ==> (Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_2 Dependent.idR)
            ==> (Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_3 Dependent.idR)
-           ==> (Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_2 Dependent.idR)
-           ==> Dependent.lift4_2 Dependent.idR
-           ==> (Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_3 Dependent.idR ==> Dependent.lift4_4 Dependent.idR)
+           ==> Dependent.lift4_3 Dependent.idR
+           ==> (Dependent.lift4_3 Dependent.idR ==> Dependent.lift4_3 Dependent.idR ==> Dependent.lift4_4 Dependent.idR)
+           ==> (Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_1 Dependent.idR)
            ==> Dependent.const4 (fun _ _ => True)
-           ==> Dependent.lift4_2 Dependent.idR
+           ==> Dependent.lift4_1 Dependent.idR
            ==> Dependent.lift4_3 Dependent.idR
            ==> Dependent.lift4_1 eqfR
            ==> Dependent.lift4_4 eqfR)
+        (@softmax_dim_m1 r s0 s').
+  Proof.
+    repeat intro; cbv [softmax_dim_m1 Classes.div Classes.sub].
+    eapply tensor_div_by_Proper_dep; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct.
+    all: try (eapply sum_dim_m1_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
+    all: try (eapply map_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
+    all: try (eapply tensor_sub_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
+    all: try (eapply max_dim_m1_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
+    all: repeat intro; cbv in *; subst; eauto.
+  Qed.
+
+  #[export] Instance softmax_dim_m1_Proper {r s0 s' A A' B C addB subA expA zeroB divB maxA use_checkpoint defaultA defaultB}
+    : Proper (eqf ==> eqf) (@softmax_dim_m1 r s0 s' A A' B C addB subA expA zeroB divB maxA use_checkpoint defaultA defaultB).
+  Proof. eapply softmax_dim_m1_Proper_dep; repeat intro; hnf in *; try instantiate (1:=eq); subst; reflexivity. Qed.
+
+  Lemma softmax_dim_m1_equiv {r s0 s' A A' B C addB subA expA zeroB divB maxA use_checkpoint defaultA defaultB t}
+    : eqf
+        (@softmax_dim_m1 r s0 s' A A' B C addB subA expA zeroB divB maxA use_checkpoint defaultA defaultB t)
+        (@softmax_dim_m1 r s0 s' A A' B C addB subA expA zeroB divB maxA false defaultA defaultB t).
+  Proof. eapply softmax_dim_m1_Proper_dep; cbv; repeat intro; try instantiate (1:=eq); subst; reflexivity. Qed.
+
+  #[export] Instance log_softmax_dim_m1_Proper_dep {r s0 s'}
+    : Dependent.Proper6
+        ((Dependent.lift6_3 Dependent.idR ==> Dependent.lift6_3 Dependent.idR ==> Dependent.lift6_3 Dependent.idR)
+           ==> (Dependent.lift6_1 Dependent.idR ==> Dependent.lift6_1 Dependent.idR ==> Dependent.lift6_2 Dependent.idR)
+           ==> (Dependent.lift6_2 Dependent.idR ==> Dependent.lift6_3 Dependent.idR)
+           ==> Dependent.lift6_3 Dependent.idR
+           ==> (Dependent.lift6_4 Dependent.idR ==> Dependent.lift6_1 Dependent.idR ==> Dependent.lift6_5 Dependent.idR)
+           ==> (Dependent.lift6_1 Dependent.idR ==> Dependent.lift6_5 Dependent.idR ==> Dependent.lift6_6 Dependent.idR)
+           ==> (Dependent.lift6_3 Dependent.idR ==> Dependent.lift6_4 Dependent.idR)
+           ==> (Dependent.lift6_1 Dependent.idR ==> Dependent.lift6_1 Dependent.idR ==> Dependent.lift6_1 Dependent.idR)
+           ==> Dependent.const6 (fun _ _ => True)
+           ==> Dependent.lift6_1 Dependent.idR
+           ==> Dependent.lift6_3 Dependent.idR
+           ==> Dependent.lift6_5 Dependent.idR
+           ==> Dependent.lift6_1 eqfR
+           ==> Dependent.lift6_6 eqfR)
         (@log_softmax_dim_m1 r s0 s').
   Proof.
-    repeat intro; cbv [log_softmax_dim_m1 sub].
-    eapply tensor_sub_Proper_dep; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct.
-    all: try (eapply map_Proper_dep; try eassumption; repeat intro; hnf).
-    all: try (eapply sum_dim_m1_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
-    all: try (eapply map_Proper_dep; try eassumption; repeat intro; hnf).
-    all: repeat intro; cbv in *; subst; eauto.
+    repeat intro; cbv [log_softmax_dim_m1 sub add].
+    all: repeat try (first [ eapply tensor_sub_Proper_dep
+                           | eapply tensor_add_Proper_dep
+                           | eapply map_Proper_dep
+                           | eapply sum_dim_m1_Proper_dep
+                           | eapply max_dim_m1_Proper_dep ];
+                     try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
   Qed.
 
-  #[export] Instance log_softmax_dim_m1_Proper {r s0 s' A B C D addB lnA expA zeroB subB use_checkpoint defaultB defaultC}
-    : Proper (eqf ==> eqf) (@log_softmax_dim_m1 r s0 s' A B C D addB lnA expA zeroB subB use_checkpoint defaultB defaultC).
-  Proof. eapply log_softmax_dim_m1_Proper_dep; repeat intro; hnf in *; try reflexivity; subst; reflexivity. Qed.
+  #[export] Instance log_softmax_dim_m1_Proper {r s0 s' A A' B C C' D addB subA expA zeroB addC subA' lnA maxA use_checkpoint defaultA defaultB defaultC'}
+    : Proper (eqf ==> eqf) (@log_softmax_dim_m1 r s0 s' A A' B C C' D addB subA expA zeroB addC subA' lnA maxA use_checkpoint defaultA defaultB defaultC').
+  Proof. eapply log_softmax_dim_m1_Proper_dep; repeat intro; hnf in *; try instantiate (1:=eq); subst; reflexivity. Qed.
 
-  Lemma log_softmax_dim_m1_equiv {r s0 s' A B C D addB lnA expA zeroB subB use_checkpoint defaultB defaultC t}
+  Lemma log_softmax_dim_m1_equiv {r s0 s' A A' B C C' D addB subA expA zeroB addC subA' lnA maxA use_checkpoint defaultA defaultB defaultC' t}
     : eqf
-        (@log_softmax_dim_m1 r s0 s' A B C D addB lnA expA zeroB subB use_checkpoint defaultB defaultC t)
-        (@log_softmax_dim_m1 r s0 s' A B C D addB lnA expA zeroB subB false defaultB defaultC t).
-  Proof. eapply log_softmax_dim_m1_Proper_dep; cbv; repeat intro; try (refine eq_refl; solve_constraints); subst; constructor. Qed.
+        (@log_softmax_dim_m1 r s0 s' A A' B C C' D addB subA expA zeroB addC subA' lnA maxA use_checkpoint defaultA defaultB defaultC' t)
+        (@log_softmax_dim_m1 r s0 s' A A' B C C' D addB subA expA zeroB addC subA' lnA maxA false defaultA defaultB defaultC' t).
+  Proof. eapply log_softmax_dim_m1_Proper_dep; cbv; repeat intro; try instantiate (1:=eq); subst; reflexivity. Qed.
 
   #[export] Instance softmax_Proper_dep {r s}
-    : Dependent.Proper3
-        ((Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR)
-           ==> (Dependent.lift3_1 Dependent.idR ==> Dependent.lift3_2 Dependent.idR)
-           ==> Dependent.lift3_2 Dependent.idR
-           ==> (Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_2 Dependent.idR ==> Dependent.lift3_3 Dependent.idR)
-           ==> Dependent.const3 (fun _ _ => True)
-           ==> Dependent.lift3_2 Dependent.idR
-           ==> Dependent.lift3_1 eqfR
-           ==> Dependent.lift3_3 eqfR)
+    : Dependent.Proper4
+        ((Dependent.lift4_3 Dependent.idR ==> Dependent.lift4_3 Dependent.idR ==> Dependent.lift4_3 Dependent.idR)
+           ==> (Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_2 Dependent.idR)
+           ==> (Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_3 Dependent.idR)
+           ==> Dependent.lift4_3 Dependent.idR
+           ==> (Dependent.lift4_3 Dependent.idR ==> Dependent.lift4_3 Dependent.idR ==> Dependent.lift4_4 Dependent.idR)
+           ==> (Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_1 Dependent.idR)
+           ==> Dependent.const4 (fun _ _ => True)
+           ==> Dependent.lift4_3 Dependent.idR
+           ==> Dependent.lift4_1 eqfR
+           ==> Dependent.lift4_4 eqfR)
         (@softmax r s).
   Proof.
-    repeat intro; cbv [softmax div].
+    repeat intro; cbv [softmax Classes.div Classes.sub item raw_get].
     eapply tensor_div_by_Proper_dep; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct.
     all: try eapply broadcast'_Proper_dep.
-    all: try (eapply item_Proper_dep; repeat intro).
-    all: try (eapply sum_dim_m1_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
-    all: try (eapply reshape_all_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
-    all: try (eapply map_Proper_dep; try eassumption; repeat intro).
+    all: try (eapply sum_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
+    all: try (eapply map_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
+    all: try (eapply tensor_sub_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
+    all: try eapply broadcast'_Proper_dep.
+    all: try eapply item_Proper_dep; repeat intro.
+    all: try (eapply max_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
     all: repeat intro; cbv in *; subst; eauto.
   Qed.
 
-  #[export] Instance softmax_Proper {r s A B C addB expA zeroB divB use_checkpoint defaultB}
-    : Proper (eqf ==> eqf) (@softmax r s A B C addB expA zeroB divB use_checkpoint defaultB).
-  Proof. eapply softmax_Proper_dep; repeat intro; hnf in *; try reflexivity; subst; reflexivity. Qed.
+  #[export] Instance softmax_Proper {r s A A' B C addB subA expA zeroB divB maxA use_checkpoint defaultB}
+    : Proper (eqf ==> eqf) (@softmax r s A A' B C addB subA expA zeroB divB maxA use_checkpoint defaultB).
+  Proof. eapply softmax_Proper_dep; repeat intro; hnf in *; try instantiate (1:=eq); subst; reflexivity. Qed.
 
-  Lemma softmax_equiv {r s A B C addB expA zeroB divB use_checkpoint defaultB t}
+  Lemma softmax_equiv {r s A A' B C addB subA expA zeroB divB maxA use_checkpoint defaultB t}
     : eqf
-        (@softmax r s A B C addB expA zeroB divB use_checkpoint defaultB t)
-        (@softmax r s A B C addB expA zeroB divB false defaultB t).
-  Proof. eapply softmax_Proper_dep; cbv; repeat intro; try (refine eq_refl; solve_constraints); subst; constructor. Qed.
+        (@softmax r s A A' B C addB subA expA zeroB divB maxA use_checkpoint defaultB t)
+        (@softmax r s A A' B C addB subA expA zeroB divB maxA false defaultB t).
+  Proof. eapply softmax_Proper_dep; cbv; repeat intro; try instantiate (1:=eq); subst; reflexivity. Qed.
 
   #[export] Instance log_softmax_Proper_dep {r s}
-    : Dependent.Proper4
-        ((Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_2 Dependent.idR)
-           ==> (Dependent.lift4_2 Dependent.idR ==> Dependent.lift4_3 Dependent.idR)
-           ==> (Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_2 Dependent.idR)
-           ==> Dependent.lift4_2 Dependent.idR
-           ==> (Dependent.lift4_1 Dependent.idR ==> Dependent.lift4_3 Dependent.idR ==> Dependent.lift4_4 Dependent.idR)
-           ==> Dependent.const4 (fun _ _ => True)
-           ==> Dependent.lift4_2 Dependent.idR
-           ==> Dependent.lift4_1 eqfR
-           ==> Dependent.lift4_4 eqfR)
+    : Dependent.Proper6
+        ((Dependent.lift6_3 Dependent.idR ==> Dependent.lift6_3 Dependent.idR ==> Dependent.lift6_3 Dependent.idR)
+           ==> (Dependent.lift6_1 Dependent.idR ==> Dependent.lift6_1 Dependent.idR ==> Dependent.lift6_2 Dependent.idR)
+           ==> (Dependent.lift6_2 Dependent.idR ==> Dependent.lift6_3 Dependent.idR)
+           ==> (Dependent.lift6_3 Dependent.idR ==> Dependent.lift6_4 Dependent.idR)
+           ==> Dependent.lift6_3 Dependent.idR
+           ==> (Dependent.lift6_4 Dependent.idR ==> Dependent.lift6_1 Dependent.idR ==> Dependent.lift6_5 Dependent.idR)
+           ==> (Dependent.lift6_1 Dependent.idR ==> Dependent.lift6_5 Dependent.idR ==> Dependent.lift6_6 Dependent.idR)
+           ==> (Dependent.lift6_1 Dependent.idR ==> Dependent.lift6_1 Dependent.idR ==> Dependent.lift6_1 Dependent.idR)
+           ==> Dependent.const6 (fun _ _ => True)
+           ==> Dependent.lift6_3 Dependent.idR
+           ==> Dependent.lift6_1 eqfR
+           ==> Dependent.lift6_6 eqfR)
         (@log_softmax r s).
   Proof.
-    repeat intro; cbv [log_softmax sub ln].
-    eapply tensor_sub_Proper_dep; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct.
-    all: try eapply broadcast'_Proper_dep.
-    all: match goal with H : _ |- _ => eapply H end; repeat intro; hnf; try assumption.
-    all: try (eapply item_Proper_dep; repeat intro).
-    all: try (eapply sum_dim_m1_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
-    all: try (eapply reshape_all_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
-    all: try (eapply map_Proper_dep; try eassumption; repeat intro).
+    repeat intro; cbv [log_softmax sub add item raw_get ln].
+    all: repeat try (first [ eapply tensor_sub_Proper_dep
+                           | eapply tensor_add_Proper_dep
+                           | eapply broadcast'_Proper_dep
+                           | match goal with H : _ |- _ => eapply H; clear H end ];
+                     try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
+    all: try (eapply sum_Proper_dep; try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
+    all: repeat try (first [ eapply tensor_sub_Proper_dep
+                           | eapply map_Proper_dep
+                           | eapply broadcast'_Proper_dep
+                           | eapply max_Proper_dep
+                           | match goal with H : _ |- _ => eapply H; clear H end ];
+                     try eassumption; repeat intro; hnf; rewrite ?PArray.maybe_checkpoint_correct).
   Qed.
 
-  #[export] Instance log_softmax_Proper {r s A B C D addB lnA expA zeroB subB use_checkpoint defaultB}
-    : Proper (eqf ==> eqf) (@log_softmax r s A B C D addB lnA expA zeroB subB use_checkpoint defaultB).
+  #[export] Instance log_softmax_Proper {r s A A' B C C' D addB subA expA lnA zeroB addC subA' maxA use_checkpoint defaultB}
+    : Proper (eqf ==> eqf) (@log_softmax r s A A' B C C' D addB subA expA lnA zeroB addC subA' maxA use_checkpoint defaultB).
   Proof. eapply log_softmax_Proper_dep; repeat intro; hnf in *; try instantiate (1:=eq); subst; reflexivity. Qed.
 
-  Lemma log_softmax_equiv {r s A B C D addB lnA expA zeroB subB use_checkpoint defaultB t}
+  Lemma log_softmax_equiv {r s A A' B C C' D addB subA expA lnA zeroB addC subA' maxA use_checkpoint defaultB t}
     : eqf
-        (@log_softmax r s A B C D addB lnA expA zeroB subB use_checkpoint defaultB t)
-        (@log_softmax r s A B C D addB lnA expA zeroB subB false defaultB t).
-  Proof. eapply log_softmax_Proper_dep; cbv; repeat intro; try instantiate (1:=eq); subst; constructor. Qed.
+        (@log_softmax r s A A' B C C' D addB subA expA lnA zeroB addC subA' maxA use_checkpoint defaultB t)
+        (@log_softmax r s A A' B C C' D addB subA expA lnA zeroB addC subA' maxA false defaultB t).
+  Proof. eapply log_softmax_Proper_dep; cbv; repeat intro; try instantiate (1:=eq); subst; reflexivity. Qed.
 
   #[export] Instance to_bool_Proper_dep {r s} : Dependent.Proper (Dependent.idR ==> (Dependent.idR ==> Dependent.idR ==> Dependent.const eq) ==> eqfR ==> Dependent.const eqf) (@to_bool r s).
   Proof.
