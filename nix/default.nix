@@ -22,7 +22,6 @@
         buildInputs = (shell { }).buildInputs;
         src = ./..;
         buildPhase = ''
-          patch -ruN _CoqProject < _CoqProjectDune.patch
           dune build
         '';
         installPhase = ''

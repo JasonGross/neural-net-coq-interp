@@ -1,4 +1,0 @@
-1c1
-< -R theories NeuralNetInterp
----
-> -R _build/default/theories NeuralNetInterp
