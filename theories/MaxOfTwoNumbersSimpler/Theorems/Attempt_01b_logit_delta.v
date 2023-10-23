@@ -373,7 +373,7 @@ Proof.
                    specialize (H' i' (Z.to_nat (Uint63.to_Z i')) pf));
          [ cbv [Reduction.in_bounds_alt_at]; clear;
            rewrite ?nat_N_Z, ?Z2Nat.id, ?of_to_Z by lia;
-           cbv [Classes.add Classes.mul Classes.zero int_has_add Classes.one int_has_one int_has_mul int_has_zero];
+           cbv [Classes.add Classes.mul Classes.zero Classes.max int_has_add Classes.one Classes.eqb Uint63.max int_has_eqb int_has_one int_has_mul int_has_zero has_default_max_leb Classes.leb int_has_leb Uint63.leb] in *;
            match goal with
            | [ |- context[?v] ]
              => lazymatch v with context[i'] => fail | context[if _ then _ else _] => idtac end;
@@ -382,6 +382,7 @@ Proof.
                 | nat => idtac
                 | int => idtac
                 | N => idtac
+                | bool => idtac
                 end;
                 let v' := (eval vm_compute in v) in
                 progress change v with v'
@@ -403,9 +404,9 @@ Proof.
   cbv [inject_int] in *.
   specialize_step i'.
   specialize_step i'.
-  cbv [Classes.modulo int_has_modulo] in *.
+  cbv [Classes.modulo int_has_modulo Classes.max Uint63.max has_default_max_leb Classes.leb int_has_leb Uint63.leb] in *.
   set (i'' := (i' mod _)%uint63) in *.
-  assert (i' = i'') by (clear; subst i' i''; nia).
+  assert (i' = i'') by (clear; subst i' i''; try nia).
   clearbody i''; subst i''.
   move indices_of_max at bottom.
   subst min_incorrect_logit.

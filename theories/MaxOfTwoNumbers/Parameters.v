@@ -16,7 +16,7 @@ Module cfg <: CommonConfig.
   Definition model_name := "custom".
   Definition n_heads := 1%N.
   Definition d_mlp := @None Z.
-  Definition act_fn := "relu".
+  Definition act_fn := @None ActivationKind.
   Definition d_vocab := 64%N.
   Definition eps := 1e-05.
   Definition use_attn_result := false.

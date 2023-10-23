@@ -1,3 +1,90 @@
+(** This file corresponds roughly to components.py from
+    transformer_lens at
+    https://github.com/neelnanda-io/TransformerLens/blob/main/transformer_lens/components.py
+
+    In this file, each class in components.py is turned into a Coq
+    Module purely for namespacing / code organizational purposes.
+
+    - In this file, NN configuration parameters are taken as arguments
+      to each function.
+
+    - In [HookedTransformer/Module.v], we organize the same building
+      blocks into module functors where the configuration parameters
+      are taken in as module functor arguments, using the code defined
+      in this file.
+
+    - This file allows the potential for proving theorems about the
+      functions that are universally quantified over all parameters,
+      while the module functor organization allows the potential for
+      avoiding the overhead of passing around the parameters to every
+      function call (hopefully, I'm still figuring out ideal design
+      choices here).
+
+    - It might be better to combine the files and stick with just the
+      module functor based organization, since that's the one we
+      ultimately use.
+ *)
+(** Design principles:
+
+    Two goals for code in this file:
+
+    1. Be able to run the code (efficiently, on primitive floats and
+       arrays)
+
+    2. Be able to reuse the same code to prove theorems about the
+       computation (using, e.g., reals or rationals instead of
+       primitive floats, so we get more nice mathematical properties).
+
+    As a result, we want to:
+
+    - parameterize each function over the type of data (and the
+      associated operations on that datatype that we need)
+
+    - order the arguments so that we can define [Proper] instances
+      relating instantiations on different datatypes; arguments that
+      are the same across instantiations (such as vocab size) come
+      first, while arguments that vary (such as how to do addition on
+      the datatype) come later.
+
+    Additionally, we parameterize functions over the batch size and
+    the shape of the tensor.
+
+    Ordering of the particular datatype operations is currently a bit
+    ad-hoc and disorganized, though some effort is made to maintain
+    consistency across components.
+
+    In each component, arguments are specified with a [Context]
+    directive in an unnamed [Section] to allow sharing of argument
+    declarations between different functions within that component.
+    Coq automatically determines the subset of arguments used for each
+    function.
+
+    - Most arguments are implicit and maximally inserted (using curly
+      braces [{}]) so that they are picked up by type inference or
+      typeclass resolution.  Exceptions are the weights and biases and
+      the tensors that are passed into the python code.
+
+
+    - We pass a [use_checkpoint : with_default "use_checkpoint" bool
+      true] argument which specifies whether or not we materialize
+      concrete arrays at various points in the code.
+
+      - Because our tensors are represented as functions from indices
+        to data, by default computation is lazy and deferred until
+        concrete indices are given.
+
+      - This is useful to avoid duplicating computation when
+        broadcasting scalars, but would involve massive duplication in
+        other cases such as recomputing the same mean repeatedly for
+        every index separately.
+
+      - Hence we use [PArray.maybe_checkpoint] to materialize
+        computations before any step that might duplicate them.
+
+      - Materializing arrays gets in the way of proofs, so we use this
+        parameter to ease infrastructure for removing all array
+        materialization simultaneously in a single proof step.  *)
+
 From Coq Require Import Floats Sint63 Uint63 QArith Lia List PArray Morphisms RelationClasses.
 From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool PrimitiveProd.
 From NeuralNetInterp.Util Require Nat Wf_Uint63.
@@ -13,6 +100,7 @@ Local Open Scope list_scope.
 Set Implicit Arguments.
 Import ListNotations.
 Local Open Scope raw_tensor_scope.
+Local Open Scope core_scope.
 
 Notation tensor_of_list ls := (Tensor.PArray.abstract (Tensor.PArray.concretize (Tensor.of_list ls))) (only parsing).
 
@@ -218,6 +306,54 @@ Module Attention.
           PArray.maybe_checkpoint (out + broadcast b_O))%core.
   End __.
 End Attention.
+
+Module MLP.
+  Section __.
+    Context {r} {batch : Shape r}
+      {pos d_model d_mlp}
+      (act_fn_kind : ActivationKind)
+      {A}
+      {addA : has_add A} {mulA : has_mul A}
+      {maxA : has_max A}
+      {zeroA : has_zero A}
+      {use_checkpoint : with_default "use_checkpoint" bool true}
+      (W_in : tensor [d_model; d_mlp] A) (b_in : tensor [d_mlp] A)
+      (W_out : tensor [d_mlp; d_model] A) (b_out : tensor [d_model] A)
+      (x : tensor (batch ::' pos ::' d_model) A)
+    .
+
+    Definition pre_act : tensor (batch ::' pos ::' d_mlp) A
+      := let x' : tensor (batch ::' pos ::' d_mlp) A
+           := Tensor.map'
+                (fun x : tensor [pos; d_mlp] A
+                 => weaksauce_einsum {{{ {{ pos d_model , d_model d_mlp -> pos d_mlp }}
+                            , x
+                            , W_in }}}
+                   : tensor [pos; d_mlp] A)
+                x in
+         x' + broadcast b_in.
+
+    Definition act_fn : tensor (batch ::' pos ::' d_mlp) A -> tensor (batch ::' pos ::' d_mlp) A
+      := match act_fn_kind with
+         | relu => Tensor.relu
+         end.
+
+    (* TODO: if act_fn is *_ln, then handle ln *)
+    Definition post_act : tensor (batch ::' pos ::' d_mlp) A
+      := act_fn pre_act.
+
+    Definition forward : tensor (batch ::' pos ::' d_model) A
+      := let fx' : tensor (batch ::' pos ::' d_model) A
+           := Tensor.map'
+                (fun fx : tensor [pos; d_mlp] A
+                 => weaksauce_einsum {{{ {{ pos d_mlp , d_mlp d_model -> pos d_model }}
+                            , fx
+                            , W_out }}}
+                   : tensor [pos; d_mlp] A)
+                post_act in
+         fx' + broadcast b_out.
+  End __.
+End MLP.
 
 Module TransformerBlock.
   Section __.

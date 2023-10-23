@@ -7,7 +7,7 @@ from transformer_lens import HookedTransformer, FactoredMatrix
 
 
 def strify(v, ty=None, description=None, parens_if_space=False):
-    tymap = {'int': 'Z', 'float':'Q', 'str':'string', 'bool':'bool', 'NormalizationType':'NormalizationType'}
+    tymap = {'int': 'Z', 'float':'Q', 'str':'string', 'bool':'bool', 'NormalizationType':'NormalizationType', 'ActivationKind':'ActivationKind'}
     def wrap_parens(s):
         return f'({s})' if parens_if_space else s
     if v is None:
@@ -23,7 +23,7 @@ def strify(v, ty=None, description=None, parens_if_space=False):
         ty = ty[len('Optional['):-1]
         return wrap_parens(f'Some {strify(v, ty=ty, description=description, parens_if_space=True)}')
     if isinstance(v, bool): return 'true' if v else 'false'
-    if isinstance(v, str) and ty == 'NormalizationType': return v
+    if isinstance(v, str) and ty in ('NormalizationType', 'ActivationKind'): return v
     if isinstance(v, str): return '"' + repr(v)[1:-1] + '"'
     if isinstance(v, torch.Tensor): return strify(v.detach().cpu().numpy(), ty=ty, description=description, parens_if_space=parens_if_space)
     if isinstance(v, np.ndarray):
@@ -55,8 +55,13 @@ def coq_export_params_lines(model: HookedTransformer) -> Iterable[str]:
     for f in dataclasses.fields(model.cfg):
         val = dataclasses.asdict(model.cfg)[f.name]
         ty = f.type
-        if f.name == 'attn_types' and ty == 'Optional[List]': ty = 'Optional[List[str]]'
-        if f.name == 'normalization_type' and ty == 'Optional[str]': ty = 'Optional[NormalizationType]'
+        for (name, expty, newty) in [('attn_types', 'Optional[List]', 'Optional[List[str]]'),
+                                    ('normalization_type', 'Optional[str]', 'Optional[NormalizationType]'),
+                                    ('act_fn', 'Optional[str]', 'Optional[ActivationKind]')]:
+            if f.name == name:
+                assert ty == expty, f'{f.name}.ty == {ty} != {expty}'
+                ty = newty
+                break
         yield f'  Definition {f.name} := {strify(val, ty=ty, description=f.name)}.'
     yield 'End cfg.'
 
@@ -83,7 +88,7 @@ def coq_export_params_lines(model: HookedTransformer) -> Iterable[str]:
         yield strify(getattr(model, name))
         yield '.'
 
-    
+
     for layer, block in enumerate(model.blocks):
         for module, names in (('ln1', ('b', 'w')), ('attn', ('W_Q', 'W_K', 'W_O', 'W_V', 'b_Q', 'b_K', 'b_O', 'b_V')), ):
             if hasattr(block, module):

@@ -1,6 +1,6 @@
 (** Ported from https://github.com/neelnanda-io/TransformerLens/blob/main/transformer_lens/HookedTransformerConfig.py *)
 From Coq Require Import Floats Uint63 ZArith NArith.
-From NeuralNetInterp.Util Require Import Default.
+From NeuralNetInterp.Util Require Import Option Default.
 (** Copying the docstring from Python:
 
 <<<
@@ -124,6 +124,14 @@ From NeuralNetInterp.Util Require Import Default.
 >>> *)
 
 Variant NormalizationType := LN (* | LNPre *) .
+Variant ActivationKind :=
+  | relu
+(* | gelu *)
+(* | silu *)
+(* | gelu_new *)
+(* | solu_ln *)
+(* | gelu_fast *)
+.
 
 Module Type CommonConfig.
   Parameter d_model : N.
@@ -132,8 +140,12 @@ Module Type CommonConfig.
   Parameter d_vocab : N.
   Parameter d_vocab_out : N.
   Parameter n_heads : N.
-  Parameter eps : float.
+  #[local] Set Warnings "-inexact-float".
+  Parameter eps : with_default "eps" float (1e-5)%float.
+  #[local] Set Warnings "inexact-float".
   Parameter normalization_type : with_default "normalization_type" (option NormalizationType) (Some LN).
+  Parameter act_fn : with_default "act_fn" (option ActivationKind) None.
+  Definition attn_only : with_default "attn_only" bool false := Option.is_None act_fn.
   (*Parameter use_split_qkv_input : with_default "use_split_qkv_input" bool false.*)
   (*Notation maybe_n_heads := (if use_split_qkv_input as b return Shape (if b then _ else _) then [n_heads] else [])%shape (only parsing).*)
 End CommonConfig.
@@ -149,14 +161,6 @@ Import RecordSetNotations.
 #[local] Set Decidable Equality Schemes.
 #[local] Set Boolean Equality Schemes.
 
-Variant ActivationKind :=
-  | relu
-(* | gelu *)
-(* | silu *)
-(* | gelu_new *)
-(* | solu_ln *)
-(* | gelu_fast *)
-.
 
 (** Copying the docstring from Python:
 
