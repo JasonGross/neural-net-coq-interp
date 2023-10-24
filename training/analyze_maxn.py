@@ -292,7 +292,7 @@ def find_d_EVOU_PVOU_nonmax(model, out_shape=('kt','mt','ot')) -> torch.Tensor:
     """
     When x is maximum, the minimum logit effect of copying the incorrect residual stream.
     Basically the max amount that copying y increases z more than x where z < x and y < x.
-    Return shape: (mt, ot)
+    Return shape: (mt, ot) or (kt, mt, ot)
     """
     assert out_shape in [('kt','mt','ot'), ('mt', 'ot')]
     W_E, W_pos, W_V, W_O, W_U = model.W_E, model.W_pos, model.W_V, model.W_O, model.W_U
@@ -326,9 +326,10 @@ def required_attn_frac(model, out_shape=('qt','kt','mt')):
     Return shape: qt, kt, mt
     """
     assert out_shape in [('qt','kt','mt'), ('qt', 'mt')]
-
+    # out_shape = ('qt', 'kt', 'mt')
     d_vocab = model.cfg.d_vocab
 
+    global dEU_PU_above_diag
     dEU_PU = effect_of_EU_PU(model)
     # Minimum of EU+PU effect values where qt <= mt
     dEU_PU_above_diag = dEU_PU.clone() # (qt, mt, ot)
@@ -338,7 +339,7 @@ def required_attn_frac(model, out_shape=('qt','kt','mt')):
     dEU_PU_above_diag[tril_index[0], tril_index[1], :] = dEU_PU.max() # (qt, mt, ot)
     if 'kt' in out_shape:
         dEU_PU_above_diag = dEU_PU_above_diag.min(dim=2).values # (qt, mt)
-        dEU_PU_above_diag = dEU_PU_above_diag.unsqueeze(1).rename('qt', 'kt', 'mt') # (qt, mt)
+        dEU_PU_above_diag = dEU_PU_above_diag.unsqueeze(1).rename('qt', 'kt', 'mt')
 
     correct_attn_dEPVOU = find_d_EVOU_PVOU_max(model) # (mt, ot)
     # Ignore diagonal; we don't care what happens when mt = ot
@@ -348,20 +349,35 @@ def required_attn_frac(model, out_shape=('qt','kt','mt')):
     # dEPVOU_delta = (correct_attn_dEPVOU - wrong_attn_dEPVOU).min(dim='ot').values # (kt, mt)
 
     if 'kt' in out_shape:
+        pass
+        global wrong_attn_dEPVOU_min
         correct_attn_dEPVOU = correct_attn_dEPVOU.min(dim='ot').values # (mt,)
-        wrong_attn_dEPVOU = wrong_attn_dEPVOU.min(dim='ot').values # (kt, mt)
+        wrong_attn_dEPVOU_min = wrong_attn_dEPVOU.min(dim='ot').values # (kt, mt)
+        wrong_attn_dEPVOU_max = wrong_attn_dEPVOU.max(dim='ot').values # (kt, mt)
+
+        # where this is true, we get a maximum attention %
+        # global wrong_better_than_correct_mask 
+        # wrong_better_than_correct_mask = (correct_attn_dEPVOU - wrong_attn_dEPVOU < 0) # (kt, mt, ot)
+        # print(wrong_better_than_correct_mask.names)
 
     # Output logit diff = EUPU effect + x * correct copying EPVOU + (1-x) * incorrect copying EPVOU > 0
     # x (correct EPVOU - incorrect EPVOU) > -(incorrect EPVOU + EUPU)
     # We can divide by correct EPVOU - incorrect EPVOU because it's always positive; correct attention is better than the worst incorrect attention.
     if 'kt' not in out_shape: assert (correct_attn_dEPVOU - wrong_attn_dEPVOU).min() > 0
-    raf = - (wrong_attn_dEPVOU + dEU_PU_above_diag) / (correct_attn_dEPVOU - wrong_attn_dEPVOU) # (qt, kt, mt)
+    # sns.histplot((correct_attn_dEPVOU - wrong_attn_dEPVOU).rename(None).flatten())
+    # sns.histplot((wrong_attn_dEPVOU + dEU_PU_above_diag).rename(None).flatten())
+    # numerator is how much "slack" to overcome, denominator is goodness of correct attention
+    always_good_mask = (wrong_attn_dEPVOU_min + dEU_PU_above_diag > 0).rename(None) & (correct_attn_dEPVOU + dEU_PU_above_diag > 0).rename(None) # (qt, kt, mt)
+    always_bad_mask = (wrong_attn_dEPVOU_max + dEU_PU_above_diag < 0).rename(None) & (correct_attn_dEPVOU + dEU_PU_above_diag < 0).rename(None) # (qt, kt, mt)
+    raf = - (wrong_attn_dEPVOU_min + dEU_PU_above_diag) / (correct_attn_dEPVOU - wrong_attn_dEPVOU_min) # (qt, kt, mt)
+    raf.rename(None)[always_good_mask] = -1
+    raf.rename(None)[always_bad_mask] = 2
     if 'ot' in raf.names: raf = raf.max(dim='ot').values
     return raf
 raf = required_attn_frac(model)
 print(f"{raf.min():.4f}, {raf.median():.4f}, {raf.max():.4f}")
-
-sns.ecdfplot(raf.rename(None).flatten())
+# %%
+sns.ecdfplot(raf.rename(None).flatten(), color='blue')
 raf2 = required_attn_frac(model, out_shape=('qt', 'mt'))
 sns.ecdfplot(raf2.rename(None).flatten(), color='orange')
 
