@@ -356,7 +356,7 @@ def required_attn_frac(model, out_shape=('qt','kt','mt')):
         wrong_attn_dEPVOU_max = wrong_attn_dEPVOU.max(dim='ot').values # (kt, mt)
 
         # where this is true, we get a maximum attention %
-        # global wrong_better_than_correct_mask 
+        # global wrong_better_than_correct_mask
         # wrong_better_than_correct_mask = (correct_attn_dEPVOU - wrong_attn_dEPVOU < 0) # (kt, mt, ot)
         # print(wrong_better_than_correct_mask.names)
 
@@ -401,7 +401,7 @@ def accuracy_bound_prep(model):
     # Use run_with_cache to get attention score on mt then compare...
     # This is O(d_vocab^2 log d_vocab), choosing qt, mt, kt.
     # But since we don't binary search for kt this implementation is O(d_vocab^3).
-    
+
     EQKP = W_E @ W_Q[0, 0, :, :] @ W_K[0, 0, :, :].T @ W_pos.T # (qt, n_ctx)
     worst_positions_by_qt = EQKP.argmin(dim=1)
 
@@ -448,7 +448,7 @@ def accuracy_bound(model):
             else:
                 # TODO fix for multiplicity of mt
                 total += ok_kts_arr[qt, mt] ** (n_ctx - 2) * (n_ctx - 1)
-    
+
     return total / (d_vocab ** n_ctx)
 
 accuracy = accuracy_bound(model)
@@ -458,26 +458,26 @@ print(f"Accuracy bound: {accuracy*100:.4f}%")
 
 # %%
 # def compute_attention_slack(model: HookedTransformer):
-max_copying = torch.zeros_like(correct_copying_effect)
-attention_slack = torch.zeros_like(correct_copying_effect)
-for mt in range(d_vocab):
-    for ot in range(d_vocab):
-        if mt == ot: continue
-        max_copying[mt, ot] = dEVOU_PVOU[ot, mt] # how much more ot copies itself than mt
-        # TODO: we can do a more refined computation of scaling how much various tokens copy ot by the actual attention paid to them
-        # solve for x: x * result[mt, ot] - (1-x) * dEVOU_PVOU[ot, mt] = 0
-        # x * result[mt, ot] = (1-x) * dEVOU_PVOU[ot, mt]
-        # x * result[mt, ot] = dEVOU_PVOU[ot, mt] - x * dEVOU_PVOU[ot, mt]
-        # x * result[mt, ot] + x * dEVOU_PVOU[ot, mt] = dEVOU_PVOU[ot, mt]
-        # x * (result[mt, ot] + dEVOU_PVOU[ot, mt]) = dEVOU_PVOU[ot, mt]
-        # x = dEVOU_PVOU[ot, mt] / (result[mt, ot] + dEVOU_PVOU[ot, mt])
-        # x = e^attn_good / (e^attn_good + e^attn_bad) = e^attn_bad * e^(attn_good - attn_bad) / (e^attn_bad * (e^(attn_good - attn_bad) + 1)) = e^(attn_good - attn_bad) / (1 + e^(attn_good - attn_bad))
-        # solve for attn_good - attn_bad
-        # 1 - x = 1 / (1 + e^(attn_good - attn_bad))
-        # 1 / (1 - x) - 1 = e^(attn_good - attn_bad)
-        # log(1 / (1 - x) - 1) = attn_good - attn_bad
-        attention_slack[mt, ot] = (1 / (1 - dEVOU_PVOU[ot, mt] / (correct_copying_effect[mt, ot] + dEVOU_PVOU[ot, mt])) - 1).log()
-print(attention_slack)
+# max_copying = torch.zeros_like(correct_copying_effect)
+# attention_slack = torch.zeros_like(correct_copying_effect)
+# for mt in range(d_vocab):
+#     for ot in range(d_vocab):
+#         if mt == ot: continue
+#         max_copying[mt, ot] = dEVOU_PVOU[ot, mt] # how much more ot copies itself than mt
+#         # TODO: we can do a more refined computation of scaling how much various tokens copy ot by the actual attention paid to them
+#         # solve for x: x * result[mt, ot] - (1-x) * dEVOU_PVOU[ot, mt] = 0
+#         # x * result[mt, ot] = (1-x) * dEVOU_PVOU[ot, mt]
+#         # x * result[mt, ot] = dEVOU_PVOU[ot, mt] - x * dEVOU_PVOU[ot, mt]
+#         # x * result[mt, ot] + x * dEVOU_PVOU[ot, mt] = dEVOU_PVOU[ot, mt]
+#         # x * (result[mt, ot] + dEVOU_PVOU[ot, mt]) = dEVOU_PVOU[ot, mt]
+#         # x = dEVOU_PVOU[ot, mt] / (result[mt, ot] + dEVOU_PVOU[ot, mt])
+#         # x = e^attn_good / (e^attn_good + e^attn_bad) = e^attn_bad * e^(attn_good - attn_bad) / (e^attn_bad * (e^(attn_good - attn_bad) + 1)) = e^(attn_good - attn_bad) / (1 + e^(attn_good - attn_bad))
+#         # solve for attn_good - attn_bad
+#         # 1 - x = 1 / (1 + e^(attn_good - attn_bad))
+#         # 1 / (1 - x) - 1 = e^(attn_good - attn_bad)
+#         # log(1 / (1 - x) - 1) = attn_good - attn_bad
+#         attention_slack[mt, ot] = (1 / (1 - dEVOU_PVOU[ot, mt] / (correct_copying_effect[mt, ot] + dEVOU_PVOU[ot, mt])) - 1).log()
+# print(attention_slack)
 
 # print(compute_attention_slack(model))
 #%%

@@ -243,8 +243,8 @@ if __name__ == '__main__':
 if __name__ == '__main__':
     model(torch.tensor([8, 8, 8, 8, 8]))[0, -1].topk(5)
 # %%
-if __name__ == '__main__':
-    attn_weights[40, :].detach().numpy()
+# if __name__ == '__main__':
+#     attn_weights[40, :].detach().numpy()
 
 # %%
 if __name__ == '__main__':
