@@ -363,6 +363,7 @@ import transformer_lens.utils as utils
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from transformer_lens import HookedTransformer
 
 # %% [markdown]
 # ## Utils
@@ -805,196 +806,221 @@ fig.show()
 # # Finding the Minimum with query SEP in Position 10
 
 # %% [markdown]
-# ## Exploratory Plots
+# ## When the sequence contains nothing in $S$
+
+# %% [markdown]
+# ### More attention is paid to the minimum by head 1 than to anything else
+#
+# Operationalization:
+#
+# Simplest version:
+# Independence relaxations:
+# - Attention to token is independent of key position
+# - Off-diagonal OV behavior is independent of which wrong answer we're considering
+# - Attention to non-min tokens is independent of OV behavior
+# - The EUPU behavior is irrelevant (independent of everything else)
+# - Attention paid to non-min tokens is independent between the two heads
+#
+# Operationalization:
+# - For each possible minimum sequence value ktokmin:
+# - The sum of the two OV matrices on input key ktokmin makes the logit for ktokmin larger than any other logit by more than the largest logit gap in EUPU
+# - The attention correction that comes from either head paying more attention to anything else is small enough that the logit gap is still large enough
+#
+
+# %% [markdown]
+#
+# We first compute the skip connection / EUPU (Embed @ Unembed + PosEmbed @ Unembed) behavior.
 
 # %%
-from training.analysis_utils import imshow, line, analyze_svd, layernorm_noscale, layernorm_scales
+@torch.no_grad()
+def skip_connection_impacts(model: HookedTransformer, pos=dataset.list_len, tok=-1) -> t.Tensor:
+    EUPU = compute_EUPU(model)
+    # (pos, input, output)
+    EUPU = EUPU[pos, tok]
+    return t.cat([EUPU[i+1:] - EUPU[i] for i in range(EUPU.shape[0] - 1)])
+
+@torch.no_grad()
+def worst_skip_connection_impact(model: HookedTransformer, **kwargs) -> float:
+    return skip_connection_impacts(model, **kwargs).max().item()
+
+
+hist(skip_connection_impacts(model), title="Skip Connection ((W_E + W_pos) @ W_U) Impact on Logits", xaxis="Logit diff (nonmin - min)")
+print(worst_skip_connection_impact(model))
+
+# %% [markdown]
+#
+# Now we compute the distribution of behaviors of OV
 
 # %%
-print(dataset[0])
-print(', '.join(dataset.str_toks[0]))
-print(model(dataset[0]))
-print(model(dataset[0]).argmax(dim=-1))
-print([(i, v.item()) for i, v in enumerate(model(dataset[0]).argmax(dim=-1)[0])])
+@torch.no_grad()
+def ov_impacts(model: HookedTransformer, sep_pos=dataset.list_len) -> t.Tensor:
+    EPVOU = compute_EPVOU(model)
+    # (head, pos, input, output)
+    EPVOU = EPVOU[:, :sep_pos, :-1, :]
+    return t.cat([EPVOU[:, :, :, i+1:] - EPVOU[:, :, :, i:i+1] for i in range(EPVOU.shape[-1] - 1)], dim=-1)
+
+@torch.no_grad()
+def worst_ov_impact(model: HookedTransformer, **kwargs) -> float:
+    return ov_impacts(model, **kwargs).max().item()
+
+hist(ov_impacts(model).flatten(), title="OV Impact on Logits", xaxis="Logit diff (nonmin - min)", renderer='png')
+print(worst_ov_impact(model))
+
+# %% [markdown]
+#
+# Now we compute the copying behavior of OV, which handles the uniform sequences (all 0s, all 1s, all 2s, etc) and gives us a starting point for other sequences
+#
+# Let's first compute the sum of the OV matrices, as if 100% of the attention were paid to the minimum token, by both heads.
+
+# %%
+@torch.no_grad()
+def ov_copying_impacts_full_attention(model: HookedTransformer, sep_pos=dataset.list_len) -> t.Tensor:
+    EPVOU = compute_EPVOU(model)
+    # (head, pos, input, output)
+    EPVOU = EPVOU[:, :sep_pos, :-1, :]
+    EPVOU = EPVOU.sum(dim=0)
+    # (pos, input, output)
+    EPVOU = EPVOU - EPVOU.diagonal(dim1=-2, dim2=-1)[:, :, None]
+    # remove the diagonal
+    diag_mask = torch.zeros_like(EPVOU) + torch.eye(EPVOU.size(-2), EPVOU.size(-1)).to(EPVOU.device)
+    return EPVOU[diag_mask == 0]
+
+hist(ov_copying_impacts_full_attention(model))
+
+
+# %% [markdown]
+
+#
+# - Show that network correctly computes the min for the 50 sequences that are uniform (10 0s, 10 1s, 10 2s, etc)
+# - For each possible minimum sequence value ktokmin, each possible "worst case" alternate sequence token ktoknonmin, and each possible wrong answer outtok:
+# - For each head h:
+# - If OV outputting ktokmin is greater than OV outputting outtok, then we want to consider the minimal attention paid to this token across all positions and have as few copies as possible
+# - If OV outputting ktokmin is less than OV outputting outtok, then we want to consider the maximal attention paid to this token across all positions and have as many copies as possible
+# - Find minimal/maximal attention paid to ktokmin and ktoknonmin across all positions
+# - Softmax the attention according to which token should show up most
+# - Find the worst-case OVs across all positions, and take the weighted average of the OVs according to the softmaxed attention
+# - Validate that the
+#
+# - Find the minumum attention paid to this token across positions 0--9
+# - For each possible non-minimum token ktok:
+# - Find the ma
+
+# %%
+attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok')# , nanify_sep_loc=dataset.list_len)
+
+# %%
+print(f"Self attention with SEP: {attn_all[:, dataset.list_len, dataset.list_len, -1, -1]}")
+other_attn = attn_all[:, dataset.list_len, :dataset.list_len, -1, :-1]
+# (head, kpos, ktok)
+other_attn_min, other_attn_max = other_attn.min(dim=1).values, other_attn.max(dim=1).values
+other_attn_min_max = t.stack([other_attn_min, other_attn_max], dim=1)
+line(utils.to_numpy(other_attn_min_max[1].T))
+line(utils.to_numpy(other_attn_min_max[0].T))
 
 # %%
 
+# model([])
 
-# %%
-imshow(EPVOU)
+# # %% [markdown]
+# # ## Exploratory Plots
 
-# %%
-attention_pattern = cache['blocks.0.attn.hook_pattern'].shape
-cv.attention.attention_patterns(
-    tokens=dataset.str_toks,
-    attention=attention_pattern)
+# # %%
+# from training.analysis_utils import imshow, line, analyze_svd, layernorm_noscale, layernorm_scales
 
-# %%
-print(dataset.str_toks[0])
-for p in cache['blocks.0.attn.hook_pattern'][0]:
-    lbls = [f'{i}:{s}' for i, s in enumerate(dataset.str_toks[0])]
-    imshow(p, x=lbls, y=lbls)
+# # %%
+# print(dataset[0])
+# print(', '.join(dataset.str_toks[0]))
+# print(model(dataset[0]))
+# print(model(dataset[0]).argmax(dim=-1))
+# print([(i, v.item()) for i, v in enumerate(model(dataset[0]).argmax(dim=-1)[0])])
 
-# %%
-cache.keys()
-
-# %%
-model.blocks[0].ln1.b
-
-# %%
-print(model.W_E.shape)
-
-# %%
+# # %%
 
 
-# %%
+# # %%
+# imshow(EPVOU)
+
+# # %%
+# attention_pattern = cache['blocks.0.attn.hook_pattern'].shape
+# cv.attention.attention_patterns(
+#     tokens=dataset.str_toks,
+#     attention=attention_pattern)
+
+# # %%
+# print(dataset.str_toks[0])
+# for p in cache['blocks.0.attn.hook_pattern'][0]:
+#     lbls = [f'{i}:{s}' for i, s in enumerate(dataset.str_toks[0])]
+#     imshow(p, x=lbls, y=lbls)
+
+# # %%
+# cache.keys()
+
+# # %%
+# model.blocks[0].ln1.b
+
+# # %%
+# print(model.W_E.shape)
+
+# # %%
 
 
-# %%
-dataset[0]
-model(t.tensor([10, 15, 30, 15, 15, 40, 41, 42, 43, 44, 51, 10, 15, 15, 15, 30, 40, 41, 42, 43, 44])).argmax(dim=-1)
-
-# %%
-dataset.list_len
-
-# %%
-dataset.seq_len
-
-# %%
+# # %%
 
 
-# %%
-plt.imshow([[1,2,3],[4,5,6]])
+# # %%
+# dataset[0]
+# model(t.tensor([10, 15, 30, 15, 15, 40, 41, 42, 43, 44, 51, 10, 15, 15, 15, 30, 40, 41, 42, 43, 44])).argmax(dim=-1)
 
-# %%
-model.W_E.shape
+# # %%
+# dataset.list_len
 
-# %%
+# # %%
+# dataset.seq_len
 
-
-# %%
-
-
-# %%
+# # %%
 
 
-# %%
+# # %%
+# plt.imshow([[1,2,3],[4,5,6]])
+
+# # %%
+# model.W_E.shape
+
+# # %%
 
 
-# %%
-# Here you may want to determine an appropriate grid size based on the number of plots
-# For example, if you have a total of 12 plots, you might choose a 3x4 grid
-n_rows = 3  # Example value, adjust as needed
-n_cols = 4  # Example value, adjust as needed
-
-plot_idx = 0
-
-# Create a figure and a grid of subplots
-fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 10))
-
-# Flatten the 2D axis array to easily iterate over it in a single loop
-ax = ax.flatten()
+# # %%
 
 
-# Counter for the subplot index
+# # %%
+
+
+# # %%
+
+
+# # %%
+# # Here you may want to determine an appropriate grid size based on the number of plots
+# # For example, if you have a total of 12 plots, you might choose a 3x4 grid
+# n_rows = 3  # Example value, adjust as needed
+# n_cols = 4  # Example value, adjust as needed
+
 # plot_idx = 0
-attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok')
 
-for qpos in range(dataset.list_len, dataset.seq_len-1):
-    for kpos in range(qpos+1):
-        for h in range(2):
-            attn = attn_all[h, qpos, kpos].detach().cpu().numpy()
-            # Check if the counter exceeds the available subplots and create new figure if needed
-            if plot_idx >= n_rows * n_cols:
-                fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 15))
-                ax = ax.flatten()
-                plot_idx = 0
+# # Create a figure and a grid of subplots
+# fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 10))
 
-            # Plot heatmap
-            cax = ax[plot_idx].imshow(attn, cmap='viridis')
+# # Flatten the 2D axis array to easily iterate over it in a single loop
+# ax = ax.flatten()
 
-            # Set title and axis labels if desired
-
-            ax[plot_idx].set_title(f"{h}: {qpos} -> {kpos}")
-            ax[plot_idx].set_xlabel("key tok")
-            ax[plot_idx].set_ylabel("query tok")
-
-            # Optionally add a colorbar
-            plt.colorbar(cax, ax=ax[plot_idx])
-
-            # Increment the counter
-            plot_idx += 1
-
-            # You might want to save or display the plot here if you're iterating over many subplots
-            if plot_idx == 0:
-                plt.tight_layout()
-                plt.show()
-
-# %%
-# Here you may want to determine an appropriate grid size based on the number of plots
-# For example, if you have a total of 12 plots, you might choose a 3x4 grid
-n_rows = 4  # Example value, adjust as needed
-n_cols = 10  # Example value, adjust as needed
-
-# Create a figure and a grid of subplots
-fig, ax = plt.subplots(n_rows, n_cols, figsize=(20, 10))
-
-# Flatten the 2D axis array to easily iterate over it in a single loop
-ax = ax.flatten()
-
-attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok')
-
-def compute_attn_maps(qpos):
-    attn_maps = []
-    for kpos in range(qpos+1):
-        for h in range(2):
-            attn = attn_all[h, qpos, kpos, :, :]
-            attn = attn.detach().cpu().numpy()
-
-            attn_maps.append((h, kpos, attn))
-    return attn_maps
-
-def update(qpos):
-    # Clear previous plots
-    for a in ax:
-        a.clear()
-
-    attn_maps = compute_attn_maps(qpos)
-
-    for plot_idx, (h, kpos, attn) in enumerate(attn_maps):
-        plot_idx = h * n_cols * 2 + kpos
-            # break
-
-        # Plot heatmap
-        cax = ax[plot_idx].imshow(attn, cmap='viridis')
-
-        # Set title and axis labels if desired
-        ax[plot_idx].set_title(f"{h}:{kpos}")
-        # ax[plot_idx].set_xlabel("key tok")
-        # ax[plot_idx].set_ylabel("query tok")
-
-        # Optionally add a colorbar
-        # plt.colorbar(cax, ax=ax[plot_idx])
-
-    plt.tight_layout()
-
-# Create animation
-ani = FuncAnimation(fig, update, frames=tqdm(range(dataset.list_len, dataset.seq_len-1)), interval=1000)
-
-plt.show()
-
-from IPython.display import HTML
-HTML(ani.to_jshtml())
 
 # # Counter for the subplot index
 # # plot_idx = 0
+# attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok')
 
 # for qpos in range(dataset.list_len, dataset.seq_len-1):
 #     for kpos in range(qpos+1):
 #         for h in range(2):
-#             attn = model.blocks[0].ln1(model.W_pos[qpos,:] + model.W_E) @ model.W_Q[0,h,:,:] @ model.W_K[0,h,:,:].T @ model.blocks[0].ln1(model.W_pos[kpos,:] + model.W_E).T
-#             attn = attn - attn.max(dim=-1, keepdim=True).values
-#             attn = attn.detach().cpu().numpy()
+#             attn = attn_all[h, qpos, kpos].detach().cpu().numpy()
 #             # Check if the counter exceeds the available subplots and create new figure if needed
 #             if plot_idx >= n_rows * n_cols:
 #                 fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 15))
@@ -1021,365 +1047,456 @@ HTML(ani.to_jshtml())
 #                 plt.tight_layout()
 #                 plt.show()
 
-# %%
-model.ln_final
+# # %%
+# # Here you may want to determine an appropriate grid size based on the number of plots
+# # For example, if you have a total of 12 plots, you might choose a 3x4 grid
+# n_rows = 4  # Example value, adjust as needed
+# n_cols = 10  # Example value, adjust as needed
 
-# %%
-def ln_final_noscale(x):
-    return x - x.mean(axis=-1, keepdim=True)
+# # Create a figure and a grid of subplots
+# fig, ax = plt.subplots(n_rows, n_cols, figsize=(20, 10))
 
-# %%
-# Here you may want to determine an appropriate grid size based on the number of plots
-# For example, if you have a total of 12 plots, you might choose a 3x4 grid
-n_rows = 3  # Example value, adjust as needed
-n_cols = 4  # Example value, adjust as needed
+# # Flatten the 2D axis array to easily iterate over it in a single loop
+# ax = ax.flatten()
 
-# Create a figure and a grid of subplots
-fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 15))
-
-# Flatten the 2D axis array to easily iterate over it in a single loop
-ax = ax.flatten()
-
-# Counter for the subplot index
-plot_idx = 0
-
-for pos in range(dataset.seq_len-1):
-    for h in range(2):
-        EPVOU = ln_final_noscale(model.blocks[0].ln1(model.W_pos[pos,:] + model.W_E) @ model.W_V[0,h,:,:] @ model.W_O[0,h,:,:]) @ model.W_U
-        EPVOU = EPVOU - EPVOU.mean(dim=-1, keepdim=True)
-        EPVOU = EPVOU.detach().cpu().numpy()
-        # Check if the counter exceeds the available subplots and create new figure if needed
-        if plot_idx >= n_rows * n_cols:
-            fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 15))
-            ax = ax.flatten()
-            plot_idx = 0
+# attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok')
 
-        # Plot heatmap
-        cax = ax[plot_idx].imshow(EPVOU, cmap='RdBu', norm=colors.CenteredNorm())
+# def compute_attn_maps(qpos):
+#     attn_maps = []
+#     for kpos in range(qpos+1):
+#         for h in range(2):
+#             attn = attn_all[h, qpos, kpos, :, :]
+#             attn = attn.detach().cpu().numpy()
 
-        # Set title and axis labels if desired
+#             attn_maps.append((h, kpos, attn))
+#     return attn_maps
+
+# def update(qpos):
+#     # Clear previous plots
+#     for a in ax:
+#         a.clear()
 
-        ax[plot_idx].set_title(f"h{h} P{pos}: EVOU+PVOU ln_final_noscale")
-        ax[plot_idx].set_xlabel("output tok")
-        ax[plot_idx].set_ylabel("key tok")
+#     attn_maps = compute_attn_maps(qpos)
 
-        # Optionally add a colorbar
-        plt.colorbar(cax, ax=ax[plot_idx])
+#     for plot_idx, (h, kpos, attn) in enumerate(attn_maps):
+#         plot_idx = h * n_cols * 2 + kpos
+#             # break
 
-        # Increment the counter
-        plot_idx += 1
+#         # Plot heatmap
+#         cax = ax[plot_idx].imshow(attn, cmap='viridis')
 
-        # You might want to save or display the plot here if you're iterating over many subplots
-        if plot_idx == 0:
-            plt.tight_layout()
-            plt.show()
+#         # Set title and axis labels if desired
+#         ax[plot_idx].set_title(f"{h}:{kpos}")
+#         # ax[plot_idx].set_xlabel("key tok")
+#         # ax[plot_idx].set_ylabel("query tok")
 
-# %%
+#         # Optionally add a colorbar
+#         # plt.colorbar(cax, ax=ax[plot_idx])
 
+#     plt.tight_layout()
 
-# %%
-# Here you may want to determine an appropriate grid size based on the number of plots
-# For example, if you have a total of 12 plots, you might choose a 3x4 grid
-n_rows = 3  # Example value, adjust as needed
-n_cols = 4  # Example value, adjust as needed
+# # Create animation
+# ani = FuncAnimation(fig, update, frames=tqdm(range(dataset.list_len, dataset.seq_len-1)), interval=1000)
 
-# Create a figure and a grid of subplots
-fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 15))
+# plt.show()
 
-# Flatten the 2D axis array to easily iterate over it in a single loop
-ax = ax.flatten()
+# from IPython.display import HTML
+# HTML(ani.to_jshtml())
 
-# Counter for the subplot index
-plot_idx = 0
+# # # Counter for the subplot index
+# # # plot_idx = 0
 
-for pos in range(dataset.list_len, dataset.seq_len-1):
-    EUPU = ln_final_noscale(model.W_pos[pos,:] + model.W_E) @ model.W_U
-    EUPU = EUPU.detach().cpu().numpy()
-    # Check if the counter exceeds the available subplots and create new figure if needed
-    if plot_idx >= n_rows * n_cols:
-        fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 15))
-        ax = ax.flatten()
-        plot_idx = 0
+# # for qpos in range(dataset.list_len, dataset.seq_len-1):
+# #     for kpos in range(qpos+1):
+# #         for h in range(2):
+# #             attn = model.blocks[0].ln1(model.W_pos[qpos,:] + model.W_E) @ model.W_Q[0,h,:,:] @ model.W_K[0,h,:,:].T @ model.blocks[0].ln1(model.W_pos[kpos,:] + model.W_E).T
+# #             attn = attn - attn.max(dim=-1, keepdim=True).values
+# #             attn = attn.detach().cpu().numpy()
+# #             # Check if the counter exceeds the available subplots and create new figure if needed
+# #             if plot_idx >= n_rows * n_cols:
+# #                 fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 15))
+# #                 ax = ax.flatten()
+# #                 plot_idx = 0
 
-    # Plot heatmap
-    cax = ax[plot_idx].imshow(EUPU, cmap='RdBu')
+# #             # Plot heatmap
+# #             cax = ax[plot_idx].imshow(attn, cmap='viridis')
 
-    # Set title and axis labels if desired
+# #             # Set title and axis labels if desired
 
-    ax[plot_idx].set_title(f"{pos}")
-    ax[plot_idx].set_xlabel("output tok")
-    ax[plot_idx].set_ylabel("key tok")
+# #             ax[plot_idx].set_title(f"{h}: {qpos} -> {kpos}")
+# #             ax[plot_idx].set_xlabel("key tok")
+# #             ax[plot_idx].set_ylabel("query tok")
 
-    # Optionally add a colorbar
-    plt.colorbar(cax, ax=ax[plot_idx])
+# #             # Optionally add a colorbar
+# #             plt.colorbar(cax, ax=ax[plot_idx])
 
-    # Increment the counter
-    plot_idx += 1
+# #             # Increment the counter
+# #             plot_idx += 1
 
-    # You might want to save or display the plot here if you're iterating over many subplots
-    if plot_idx == 0:
-        plt.tight_layout()
-        plt.show()
+# #             # You might want to save or display the plot here if you're iterating over many subplots
+# #             if plot_idx == 0:
+# #                 plt.tight_layout()
+# #                 plt.show()
 
-# %%
-attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok')
+# # %%
+# model.ln_final
 
-# %%
-analyze_svd(attn_all[1,10,0])
+# # %%
+# def ln_final_noscale(x):
+#     return x - x.mean(axis=-1, keepdim=True)
 
-# %%
-s = layernorm_scales(model.W_pos[:,None,:] + model.W_E[None,:,:])[...,0]
-s = s / s.min()
-imshow(s)
-# resid = model.blocks[0].ln1(model.W_pos[:,None,:] + model.W_E[None,:,:])
-# q_all = einsum(resid,
-#                    model.W_Q[0,:,:,:],
-#                    'qpos qtok d_model_q, h d_model_q d_head -> qpos qtok h d_head') + model.b_Q[0]
-#     k_all = einsum(resid,
-#                    model.W_K[0,:,:,:],
-#                    'kpos ktok d_model_k, h d_model_k d_head -> kpos ktok h d_head') + model.b_K[0]
-#     attn_all = einsum(q_all, k_all, f'qpos qtok h d_head, kpos ktok h d_head -> {outdim}')
-#     attn_all_max = reduce(attn_all, f"{outdim} -> {outdim.replace('kpos', '()').replace('ktok', '()')}", 'max')
+# # %%
+# # Here you may want to determine an appropriate grid size based on the number of plots
+# # For example, if you have a total of 12 plots, you might choose a 3x4 grid
+# n_rows = 3  # Example value, adjust as needed
+# n_cols = 4  # Example value, adjust as needed
 
+# # Create a figure and a grid of subplots
+# fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 15))
+
+# # Flatten the 2D axis array to easily iterate over it in a single loop
+# ax = ax.flatten()
+
+# # Counter for the subplot index
+# plot_idx = 0
 
-# %%
-
-
-
-x = x - x.mean(axis=-1, keepdim=True)  # [batch, pos, length]
-        scale: Float[torch.Tensor, "batch pos 1"] = self.hook_scale(
-            (x.pow(2).mean(-1, keepdim=True) + self.eps).sqrt()
-        )
-        x = x / scale  # [batch, pos, length]
-
-# %%
-model.blocks[0].ln1
-
-# %%
-sys.path.append(f"{os.getcwd()}/training")
-import visualization
-from visualization import visualize_on_input
-
-# %%
-dataset.toks[0]
-
-# %%
-visualize_on_input(model, dataset.toks[0])
-
-# %%
-targets[326]
-
-# %%
-' '.join(dataset.str_toks[326])
-
-# %%
-
-imshow(logits[326])
-
-# %%
-ls = [5,6,33,40,41,42,43,44,45,46]
-# ls = [1, 1, 1, 1, 40, 40, 40, 40, 40]
-unsorted_list = t.tensor(ls)
-sorted_list = t.sort(unsorted_list).values
-toks = t.concat([unsorted_list, t.tensor([dataset.vocab.index("SEP")]), sorted_list], dim=-1)
-str_toks = [dataset.vocab[i] for i in toks]
-print(' '.join(str_toks))
-imshow(model(toks.unsqueeze(0))[0, dataset.list_len:-1, :])
-
-# %%
-probs_correct.min(dim=0,keepdim=True)
-
-
-# %%
-logits, cache = model.run_with_cache(dataset.toks)
-logits: t.Tensor = logits[:, dataset.list_len:-1, :]
-
-targets = dataset.toks[:, dataset.list_len+1:]
-
-logprobs = logits.log_softmax(-1) # [batch seq_len vocab_out]
-probs = logprobs.softmax(-1)
-
-
-# %%
-model.W_pos.shape
-
-# %%
-model.W_E.shape
-
-# %%
-from einops import reduce
-
-# %%
-
-
-# %%
-W_pos_reduced = model.W_pos[dataset.list_len+1:-1]
-W_pos_mean = W_pos_reduced.mean(dim=0)
-W_pos_centered = W_pos_reduced - W_pos_mean[None,:]
-line(W_pos_mean)
-imshow(W_pos_centered)
-
-# %%
-U, S, Vh = t.svd(model.W_pos.detach().cpu()[:10])
-imshow(U)
-imshow(Vh)
-line(S)
-U, S, Vh = t.svd(model.W_pos.detach().cpu()[11:])
-imshow(U)
-imshow(Vh)
-line(S)
-
-# %%
-with t.no_grad():
-    # print((model.blocks[0].ln1(model.W_pos[dataset.list_len:-1,None,:] + model.W_E[None,:,:])).shape)
-    # print(model.W_Q[0,:,:,:].shape)
-    # print(model.W_K[0,:,:,:].shape)
-    attn_all = einsum(model.blocks[0].ln1(model.W_pos[dataset.list_len:-1,None,:] + model.W_E[None,:,:]),
-                      model.W_Q[0,:,:,:],
-                      model.W_K[0,:,:,:],
-                      model.blocks[0].ln1(model.W_pos[:-1,None,:] + model.W_E[None,:,:]),
-                   'qpos qtok d_model_q, h d_model_q d_head, h d_model_k d_head, kpos ktok d_model_k -> h qpos kpos qtok ktok')
-    # for h in range(2):
-    #     for qpos in range(attn_all.shape[1]):
-    #         for qtok in range(attn_all.shape[3]):
-    #             attn_all[h,qpos,:,qtok,:] = attn_all[h,qpos,:,qtok,:] - attn_all[h,qpos,:,qtok,:].max()
-    # attn_all = attn_all - attn_all.max(dim=2, keepdim=True).values
-    print(attn_all.shape)
-    attn_all_reduced = attn_all.clone()
-    for qpos in range(attn_all.shape[1]):
-        attn_all_reduced[:,qpos,:,:] = attn_all[:,qpos,:qpos+11,:].mean(dim=1, keepdim=True)
-    attn_all_reduced = attn_all_reduced.mean(dim=2)[:,1:-1].mean(dim=1)
-    print(attn_all_reduced.shape)
-    # subtract off diagonal
-    for h in range(attn_all_reduced.shape[0]):
-        attn_all_reduced[h] = attn_all_reduced[h] - attn_all_reduced[h].diag()[:, None]
-    attn_all_reduced = attn_all_reduced - attn_all_reduced.max(dim=-1,keepdim=True).values
-    # attn_all_reduced = attn_all_reduced - attn_all_reduced.max(dim=-1, keepdim=True).values
-    for h, attn in enumerate(attn_all_reduced):
-        imshow(attn, title=f"h{h} attn_all_reduced")
-    for h, attn in enumerate(attn_all_reduced):
-        U, S, Vh = t.svd(attn)
-        imshow(U, title=f"h{h} U attn_all_reduced")
-        imshow(Vh, title=f"h{h} Vh attn_all_reduced")
-        line(S, title=f"h{h} S attn_all_reduced")
-
-    # print(attn_all_reduced.shape)
-
-    # attn_all_reduced = attn_all[:,].mean(dim=1)
-    # attn_all_reduced = reduce(attn_all[:,], 'h qpos kpos qtok ktok -> h qpos kpos qtok', 'sum')
-    # all_attn_by_gap = []
-    # #t.zeros(list(attn_all.shape[:-1]) + [attn_all.shape[-1], attn_all.shape[-1]])
-    # for h in range(2):
-    #     for qpos in range(attn_all.shape[1]):
-    #         for kpos in range(qpos+1):
-    #             for qtok in range(attn_all.shape[3]):
-    #                 for ktok1 in range(attn_all.shape[4]):
-    #                     for ktok2 in range(attn_all.shape[4]):
-    #                         all_attn_by_gap.append(attn_all[h,qpos,kpos,qtok,ktok])
-
-# %%
-
-
-# %%
-model.blocks[0].ln1(model.W_pos[qpos,:] + model.W_E) @ model.W_Q[0,h,:,:] @ model.W_K[0,h,:,:].T @ model.blocks[0].ln1(model.W_pos[kpos,:] + model.W_E).T
-
-# %%
-attn = model.blocks[0].ln1(model.W_pos[qpos,:] + model.W_E) @ model.W_Q[0,h,:,:] @ model.W_K[0,h,:,:].T @ model.blocks[0].ln1(model.W_pos[kpos,:] + model.W_E).T
-            attn = attn - attn.max(dim=-1, keepdim=True).values
-            attn = attn.detach().cpu().numpy()
-
-
-# %%
+# for pos in range(dataset.seq_len-1):
+#     for h in range(2):
+#         EPVOU = ln_final_noscale(model.blocks[0].ln1(model.W_pos[pos,:] + model.W_E) @ model.W_V[0,h,:,:] @ model.W_O[0,h,:,:]) @ model.W_U
+#         EPVOU = EPVOU - EPVOU.mean(dim=-1, keepdim=True)
+#         EPVOU = EPVOU.detach().cpu().numpy()
+#         # Check if the counter exceeds the available subplots and create new figure if needed
+#         if plot_idx >= n_rows * n_cols:
+#             fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 15))
+#             ax = ax.flatten()
+#             plot_idx = 0
+
+#         # Plot heatmap
+#         cax = ax[plot_idx].imshow(EPVOU, cmap='RdBu', norm=colors.CenteredNorm())
+
+#         # Set title and axis labels if desired
+
+#         ax[plot_idx].set_title(f"h{h} P{pos}: EVOU+PVOU ln_final_noscale")
+#         ax[plot_idx].set_xlabel("output tok")
+#         ax[plot_idx].set_ylabel("key tok")
+
+#         # Optionally add a colorbar
+#         plt.colorbar(cax, ax=ax[plot_idx])
+
+#         # Increment the counter
+#         plot_idx += 1
+
+#         # You might want to save or display the plot here if you're iterating over many subplots
+#         if plot_idx == 0:
+#             plt.tight_layout()
+#             plt.show()
+
+# # %%
+
+
+# # %%
+# # Here you may want to determine an appropriate grid size based on the number of plots
+# # For example, if you have a total of 12 plots, you might choose a 3x4 grid
+# n_rows = 3  # Example value, adjust as needed
+# n_cols = 4  # Example value, adjust as needed
+
+# # Create a figure and a grid of subplots
+# fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 15))
+
+# # Flatten the 2D axis array to easily iterate over it in a single loop
+# ax = ax.flatten()
+
+# # Counter for the subplot index
+# plot_idx = 0
+
+# for pos in range(dataset.list_len, dataset.seq_len-1):
+#     EUPU = ln_final_noscale(model.W_pos[pos,:] + model.W_E) @ model.W_U
+#     EUPU = EUPU.detach().cpu().numpy()
+#     # Check if the counter exceeds the available subplots and create new figure if needed
+#     if plot_idx >= n_rows * n_cols:
+#         fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 15))
+#         ax = ax.flatten()
+#         plot_idx = 0
+
+#     # Plot heatmap
+#     cax = ax[plot_idx].imshow(EUPU, cmap='RdBu')
+
+#     # Set title and axis labels if desired
+
+#     ax[plot_idx].set_title(f"{pos}")
+#     ax[plot_idx].set_xlabel("output tok")
+#     ax[plot_idx].set_ylabel("key tok")
+
+#     # Optionally add a colorbar
+#     plt.colorbar(cax, ax=ax[plot_idx])
+
+#     # Increment the counter
+#     plot_idx += 1
+
+#     # You might want to save or display the plot here if you're iterating over many subplots
+#     if plot_idx == 0:
+#         plt.tight_layout()
+#         plt.show()
+
+# # %%
+# attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok')
+
+# # %%
+# analyze_svd(attn_all[1,10,0])
+
+# # %%
+# s = layernorm_scales(model.W_pos[:,None,:] + model.W_E[None,:,:])[...,0]
+# s = s / s.min()
+# imshow(s)
+# # resid = model.blocks[0].ln1(model.W_pos[:,None,:] + model.W_E[None,:,:])
+# # q_all = einsum(resid,
+# #                    model.W_Q[0,:,:,:],
+# #                    'qpos qtok d_model_q, h d_model_q d_head -> qpos qtok h d_head') + model.b_Q[0]
+# #     k_all = einsum(resid,
+# #                    model.W_K[0,:,:,:],
+# #                    'kpos ktok d_model_k, h d_model_k d_head -> kpos ktok h d_head') + model.b_K[0]
+# #     attn_all = einsum(q_all, k_all, f'qpos qtok h d_head, kpos ktok h d_head -> {outdim}')
+# #     attn_all_max = reduce(attn_all, f"{outdim} -> {outdim.replace('kpos', '()').replace('ktok', '()')}", 'max')
+
+
+# # %%
+
+
+
+# x = x - x.mean(axis=-1, keepdim=True)  # [batch, pos, length]
+#         scale: Float[torch.Tensor, "batch pos 1"] = self.hook_scale(
+#             (x.pow(2).mean(-1, keepdim=True) + self.eps).sqrt()
+#         )
+#         x = x / scale  # [batch, pos, length]
+
+# # %%
+# model.blocks[0].ln1
+
+# # %%
+# sys.path.append(f"{os.getcwd()}/training")
+# import visualization
+# from visualization import visualize_on_input
+
+# # %%
+# dataset.toks[0]
+
+# # %%
+# visualize_on_input(model, dataset.toks[0])
+
+# # %%
+# targets[326]
+
+# # %%
+# ' '.join(dataset.str_toks[326])
+
+# # %%
+
+# imshow(logits[326])
+
+# # %%
+# ls = [5,6,33,40,41,42,43,44,45,46]
+# # ls = [1, 1, 1, 1, 40, 40, 40, 40, 40]
+# unsorted_list = t.tensor(ls)
+# sorted_list = t.sort(unsorted_list).values
+# toks = t.concat([unsorted_list, t.tensor([dataset.vocab.index("SEP")]), sorted_list], dim=-1)
+# str_toks = [dataset.vocab[i] for i in toks]
+# print(' '.join(str_toks))
+# imshow(model(toks.unsqueeze(0))[0, dataset.list_len:-1, :])
+
+# # %%
+# probs_correct.min(dim=0,keepdim=True)
+
+
+# # %%
+# logits, cache = model.run_with_cache(dataset.toks)
+# logits: t.Tensor = logits[:, dataset.list_len:-1, :]
+
+# targets = dataset.toks[:, dataset.list_len+1:]
+
+# logprobs = logits.log_softmax(-1) # [batch seq_len vocab_out]
+# probs = logprobs.softmax(-1)
+
+
+# # %%
+# model.W_pos.shape
+
+# # %%
+# model.W_E.shape
+
+# # %%
+# from einops import reduce
+
+# # %%
+
+
+# # %%
+# W_pos_reduced = model.W_pos[dataset.list_len+1:-1]
+# W_pos_mean = W_pos_reduced.mean(dim=0)
+# W_pos_centered = W_pos_reduced - W_pos_mean[None,:]
+# line(W_pos_mean)
+# imshow(W_pos_centered)
+
+# # %%
+# U, S, Vh = t.svd(model.W_pos.detach().cpu()[:10])
+# imshow(U)
+# imshow(Vh)
+# line(S)
+# U, S, Vh = t.svd(model.W_pos.detach().cpu()[11:])
+# imshow(U)
+# imshow(Vh)
+# line(S)
+
+# # %%
 # with t.no_grad():
+#     # print((model.blocks[0].ln1(model.W_pos[dataset.list_len:-1,None,:] + model.W_E[None,:,:])).shape)
+#     # print(model.W_Q[0,:,:,:].shape)
+#     # print(model.W_K[0,:,:,:].shape)
 #     attn_all = einsum(model.blocks[0].ln1(model.W_pos[dataset.list_len:-1,None,:] + model.W_E[None,:,:]),
 #                       model.W_Q[0,:,:,:],
 #                       model.W_K[0,:,:,:],
 #                       model.blocks[0].ln1(model.W_pos[:-1,None,:] + model.W_E[None,:,:]),
 #                    'qpos qtok d_model_q, h d_model_q d_head, h d_model_k d_head, kpos ktok d_model_k -> h qpos kpos qtok ktok')
+#     # for h in range(2):
+#     #     for qpos in range(attn_all.shape[1]):
+#     #         for qtok in range(attn_all.shape[3]):
+#     #             attn_all[h,qpos,:,qtok,:] = attn_all[h,qpos,:,qtok,:] - attn_all[h,qpos,:,qtok,:].max()
+#     # attn_all = attn_all - attn_all.max(dim=2, keepdim=True).values
+#     print(attn_all.shape)
+#     attn_all_reduced = attn_all.clone()
+#     for qpos in range(attn_all.shape[1]):
+#         attn_all_reduced[:,qpos,:,:] = attn_all[:,qpos,:qpos+11,:].mean(dim=1, keepdim=True)
+#     attn_all_reduced = attn_all_reduced.mean(dim=2)[:,1:-1].mean(dim=1)
+#     print(attn_all_reduced.shape)
+#     # subtract off diagonal
+#     for h in range(attn_all_reduced.shape[0]):
+#         attn_all_reduced[h] = attn_all_reduced[h] - attn_all_reduced[h].diag()[:, None]
+#     attn_all_reduced = attn_all_reduced - attn_all_reduced.max(dim=-1,keepdim=True).values
+#     # attn_all_reduced = attn_all_reduced - attn_all_reduced.max(dim=-1, keepdim=True).values
+#     for h, attn in enumerate(attn_all_reduced):
+#         imshow(attn, title=f"h{h} attn_all_reduced")
+#     for h, attn in enumerate(attn_all_reduced):
+#         U, S, Vh = t.svd(attn)
+#         imshow(U, title=f"h{h} U attn_all_reduced")
+#         imshow(Vh, title=f"h{h} Vh attn_all_reduced")
+#         line(S, title=f"h{h} S attn_all_reduced")
+
+#     # print(attn_all_reduced.shape)
+
+#     # attn_all_reduced = attn_all[:,].mean(dim=1)
+#     # attn_all_reduced = reduce(attn_all[:,], 'h qpos kpos qtok ktok -> h qpos kpos qtok', 'sum')
+#     # all_attn_by_gap = []
+#     # #t.zeros(list(attn_all.shape[:-1]) + [attn_all.shape[-1], attn_all.shape[-1]])
+#     # for h in range(2):
+#     #     for qpos in range(attn_all.shape[1]):
+#     #         for kpos in range(qpos+1):
+#     #             for qtok in range(attn_all.shape[3]):
+#     #                 for ktok1 in range(attn_all.shape[4]):
+#     #                     for ktok2 in range(attn_all.shape[4]):
+#     #                         all_attn_by_gap.append(attn_all[h,qpos,kpos,qtok,ktok])
+
+# # %%
 
 
-# %%
-model.W_O.shape
+# # %%
+# model.blocks[0].ln1(model.W_pos[qpos,:] + model.W_E) @ model.W_Q[0,h,:,:] @ model.W_K[0,h,:,:].T @ model.blocks[0].ln1(model.W_pos[kpos,:] + model.W_E).T
 
-# %%
-with t.no_grad():
-    EP = model.W_pos[:-1,None,:] + model.W_E[None,:,:]
-    EP = model.blocks[0].ln1(EP)
-    EPVO =  einsum(EP,
-                   model.W_V[0,:,:,:],
-                   model.W_O[0,:,:,:],
-                   '''pos vocab_in d_model_v,
-                    h d_model_v d_head,
-                    h d_head d_model_o
-                      -> h pos vocab_in d_model_o'''.replace('\n', ' '))
-    EPVO = ln_final_noscale(EPVO)
-    EPVOU = einsum(EPVO,
-                     model.W_U,
-                     '''h pos vocab_in d_model_o,
-                     d_model_o vocab_out
-                     -> h pos vocab_in vocab_out'''.replace('\n', ' '))
-    EPVOU_mean = t.cat([EPVOU[:,:dataset.list_len,:,:], EPVOU[:,dataset.list_len+1:-1,:,:]], dim=1).mean(dim=1,keepdim=True)
-    EPVOU = EPVOU - EPVOU_mean
-    # EPVOU_mean = EPVOU_mean - EPVOU_mean.max(dim=-1, keepdim=True).values
-    for h in range(2):
-        imshow(EPVOU_mean[h, 0], title=f"h{h} EPVOU.mean(dim=pos)")
+# # %%
+# attn = model.blocks[0].ln1(model.W_pos[qpos,:] + model.W_E) @ model.W_Q[0,h,:,:] @ model.W_K[0,h,:,:].T @ model.blocks[0].ln1(model.W_pos[kpos,:] + model.W_E).T
+#             attn = attn - attn.max(dim=-1, keepdim=True).values
+#             attn = attn.detach().cpu().numpy()
 
-    for h in range(2):
-        line(EPVOU_mean[h, 0].diag(), title=f"h{h} EPVOU.mean(dim=pos).diag()")
-    line(EPVOU_mean[:, 0].sum(dim=0).diag(), title=f"h{h} EPVOU.mean(dim=pos).sum(dim=head).diag()")
-    # Here you may want to determine an appropriate grid size based on the number of plots
-    # For example, if you have a total of 12 plots, you might choose a 3x4 grid
-    n_rows = 3  # Example value, adjust as needed
-    n_cols = 4  # Example value, adjust as needed
 
-    # Create a figure and a grid of subplots
-    fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 15))
+# # %%
+# # with t.no_grad():
+# #     attn_all = einsum(model.blocks[0].ln1(model.W_pos[dataset.list_len:-1,None,:] + model.W_E[None,:,:]),
+# #                       model.W_Q[0,:,:,:],
+# #                       model.W_K[0,:,:,:],
+# #                       model.blocks[0].ln1(model.W_pos[:-1,None,:] + model.W_E[None,:,:]),
+# #                    'qpos qtok d_model_q, h d_model_q d_head, h d_model_k d_head, kpos ktok d_model_k -> h qpos kpos qtok ktok')
 
-    # Flatten the 2D axis array to easily iterate over it in a single loop
-    ax = ax.flatten()
 
-    # Counter for the subplot index
-    plot_idx = 0
+# # %%
+# model.W_O.shape
 
-    for pos in range(EPVOU.shape[1]):
-        for h in range(2):
-            # Check if the counter exceeds the available subplots and create new figure if needed
-            if plot_idx >= n_rows * n_cols:
-                fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 15))
-                ax = ax.flatten()
-                plot_idx = 0
-
-            # Plot heatmap
-            cax = ax[plot_idx].imshow(EPVOU[h, pos].detach().cpu().numpy(), cmap='RdBu')
-
-            # Set title and axis labels if desired
-
-            ax[plot_idx].set_title(f"h{h} P{pos}: EVOU+PVOU ln_final_noscale")
-            ax[plot_idx].set_xlabel("output tok")
-            ax[plot_idx].set_ylabel("key tok")
-
-            # Optionally add a colorbar
-            plt.colorbar(cax, ax=ax[plot_idx])
-
-            # Increment the counter
-            plot_idx += 1
-
-            # You might want to save or display the plot here if you're iterating over many subplots
-            if plot_idx == 0:
-                plt.tight_layout()
-                plt.show()
-    # for pos in range(EPVOU.shape[1]):
-    #     for h in range(2):
-    #         imshow(EPVOU[h, pos], title=f"h{h} pos{pos} EPVOU")
-    #     break
-    # EPVOU_all = einsum()
-# for pos in range(dataset.seq_len-1):
+# # %%
+# with t.no_grad():
+#     EP = model.W_pos[:-1,None,:] + model.W_E[None,:,:]
+#     EP = model.blocks[0].ln1(EP)
+#     EPVO =  einsum(EP,
+#                    model.W_V[0,:,:,:],
+#                    model.W_O[0,:,:,:],
+#                    '''pos vocab_in d_model_v,
+#                     h d_model_v d_head,
+#                     h d_head d_model_o
+#                       -> h pos vocab_in d_model_o'''.replace('\n', ' '))
+#     EPVO = ln_final_noscale(EPVO)
+#     EPVOU = einsum(EPVO,
+#                      model.W_U,
+#                      '''h pos vocab_in d_model_o,
+#                      d_model_o vocab_out
+#                      -> h pos vocab_in vocab_out'''.replace('\n', ' '))
+#     EPVOU_mean = t.cat([EPVOU[:,:dataset.list_len,:,:], EPVOU[:,dataset.list_len+1:-1,:,:]], dim=1).mean(dim=1,keepdim=True)
+#     EPVOU = EPVOU - EPVOU_mean
+#     # EPVOU_mean = EPVOU_mean - EPVOU_mean.max(dim=-1, keepdim=True).values
 #     for h in range(2):
-#         EPVOU = ln_final_noscale(model.blocks[0].ln1(model.W_pos[qpos,:] + model.W_E) @ model.W_V[0,h,:,:] @ model.W_O[0,h,:,:]) @ model.W_U
-#         EPVOU = EPVOU.detach().cpu().numpy()
+#         imshow(EPVOU_mean[h, 0], title=f"h{h} EPVOU.mean(dim=pos)")
+
+#     for h in range(2):
+#         line(EPVOU_mean[h, 0].diag(), title=f"h{h} EPVOU.mean(dim=pos).diag()")
+#     line(EPVOU_mean[:, 0].sum(dim=0).diag(), title=f"h{h} EPVOU.mean(dim=pos).sum(dim=head).diag()")
+#     # Here you may want to determine an appropriate grid size based on the number of plots
+#     # For example, if you have a total of 12 plots, you might choose a 3x4 grid
+#     n_rows = 3  # Example value, adjust as needed
+#     n_cols = 4  # Example value, adjust as needed
+
+#     # Create a figure and a grid of subplots
+#     fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 15))
+
+#     # Flatten the 2D axis array to easily iterate over it in a single loop
+#     ax = ax.flatten()
+
+#     # Counter for the subplot index
+#     plot_idx = 0
+
+#     for pos in range(EPVOU.shape[1]):
+#         for h in range(2):
+#             # Check if the counter exceeds the available subplots and create new figure if needed
+#             if plot_idx >= n_rows * n_cols:
+#                 fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 15))
+#                 ax = ax.flatten()
+#                 plot_idx = 0
+
+#             # Plot heatmap
+#             cax = ax[plot_idx].imshow(EPVOU[h, pos].detach().cpu().numpy(), cmap='RdBu')
+
+#             # Set title and axis labels if desired
+
+#             ax[plot_idx].set_title(f"h{h} P{pos}: EVOU+PVOU ln_final_noscale")
+#             ax[plot_idx].set_xlabel("output tok")
+#             ax[plot_idx].set_ylabel("key tok")
+
+#             # Optionally add a colorbar
+#             plt.colorbar(cax, ax=ax[plot_idx])
+
+#             # Increment the counter
+#             plot_idx += 1
+
+#             # You might want to save or display the plot here if you're iterating over many subplots
+#             if plot_idx == 0:
+#                 plt.tight_layout()
+#                 plt.show()
+#     # for pos in range(EPVOU.shape[1]):
+#     #     for h in range(2):
+#     #         imshow(EPVOU[h, pos], title=f"h{h} pos{pos} EPVOU")
+#     #     break
+#     # EPVOU_all = einsum()
+# # for pos in range(dataset.seq_len-1):
+# #     for h in range(2):
+# #         EPVOU = ln_final_noscale(model.blocks[0].ln1(model.W_pos[qpos,:] + model.W_E) @ model.W_V[0,h,:,:] @ model.W_O[0,h,:,:]) @ model.W_U
+# #         EPVOU = EPVOU.detach().cpu().numpy()
 
 
-# %%
-model.b_K
+# # %%
+# model.b_K
 
-# %%
+# # %%
