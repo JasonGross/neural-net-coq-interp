@@ -867,7 +867,9 @@ fig.show()
 # # Finding the Minimum with query SEP in Position 10
 
 # %% [markdown]
-# Let's bound how much attention is paid to the minimum token, non-minimum tokens (in aggregate), and the SEP token
+# Let's bound how much attention is paid to the minimum token, non-minimum tokens (in aggregate), and the SEP token.
+#
+# First a plot.  We use green for "paying attention to the minimum token", red for "paying attention to the non-minimum token", and blue for "paying attention to the SEP token".
 
 # %%
 # swap the axes so that we have red for nonmin, green for min, and blue for sep
@@ -876,7 +878,7 @@ attn_patterns = torch.stack([compute_attention_patterns(model, num_min=num_min)[
 attn_patterns[attn_patterns.isnan()] = 1
 attn_patterns = utils.to_numpy(attn_patterns * 256)
 
-fig = make_subplots(rows=model.cfg.n_heads, cols=1, subplot_titles=[f"head {h}" for h in range(model.cfg.n_heads)])# {minmax} attn on mintok" for h in range(model.cfg.n_heads) for minmax in ('min', 'max')])
+fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=[f"head {h}" for h in range(model.cfg.n_heads)])# {minmax} attn on mintok" for h in range(model.cfg.n_heads) for minmax in ('min', 'max')])
 # fig.update_annotations(font_size=12)
 minmaxi_g = 0 # min attention, but it doesn't matter much
 fig.update_layout(title=f"Attention ({('min', 'max')[minmaxi_g]} on min tok)")
@@ -886,42 +888,43 @@ tickvals_indices = list(range(0, len(all_tickvals_text) - 1, 10)) + [len(all_tic
 tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
 tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
 
-# Generate custom hovertext
-all_hovertext = []
-kinds = ['Non-min', 'Min', 'SEP']
-for num_min in range(1, dataset.list_len):
-    hovertext_num_min = []
-    for h in range(model.cfg.n_heads):
-        hovertext_h = []
-        for minmaxi, minmax in enumerate(('min', 'max')):
-            hovertext_minmax = []
-            for mintok in range(attn_patterns.shape[-3]):
-                for nonmintok in range(attn_patterns.shape[-2]):
-                    value = attn_patterns[num_min - 1, h, minmaxi, mintok, nonmintok]
-                    label = f"Non-min token: {all_tickvals_text[nonmintok][1]}<br>Min token: {all_tickvals_text[mintok][1]}<br>{kinds[value.argmax().item()]} attn: {value.max().item() / 256 * 100}%<br>{kinds[value.argmin().item()]} attn: {value.min().item() / 256 * 100}%"
-                    hovertext_minmax.append(label)
-            hovertext_h.append(hovertext_minmax)
-        hovertext_num_min.append(hovertext_h)
-    all_hovertext.append(hovertext_num_min)
+# # Generate custom hovertext
+# all_hovertext = []
+# kinds = ['Non-min', 'Min', 'SEP']
+# for num_min in range(1, dataset.list_len):
+#     hovertext_num_min = []
+#     for h in range(model.cfg.n_heads):
+#         hovertext_h = []
+#         for minmaxi, minmax in enumerate(('min', 'max')):
+#             hovertext_minmax = []
+#             for mintok in range(attn_patterns.shape[-3]):
+#                 for nonmintok in range(attn_patterns.shape[-2]):
+#                     value = attn_patterns[num_min - 1, h, minmaxi, mintok, nonmintok]
+#                     label = f"Non-min token: {all_tickvals_text[nonmintok][1]}<br>Min token: {all_tickvals_text[mintok][1]}<br>{kinds[value.argmax().item()]} attn: {value.max().item() / 256 * 100}%<br>{kinds[value.argmin().item()]} attn: {value.min().item() / 256 * 100}%"
+#                     hovertext_minmax.append(label)
+#             hovertext_h.append(hovertext_minmax)
+#         hovertext_num_min.append(hovertext_h)
+#     all_hovertext.append(hovertext_num_min)
 
-    # fig.data[0].customdata = np.array(hovertext, dtype=object)
-    # fig.data[0].hovertemplate = '<b>%{customdata}</b>'
+#     # fig.data[0].customdata = np.array(hovertext, dtype=object)
+#     # fig.data[0].hovertemplate = '<b>%{customdata}</b>'
 
 
 def make_update(h, minmaxi, num_min):
     cur_attn_pattern = attn_patterns[num_min - 1, h, minmaxi]
-    cur_hovertext = all_hovertext[num_min - 1][h][minmaxi]
+    # cur_hovertext = all_hovertext[num_min - 1][h][minmaxi]
     return go.Image(z=cur_attn_pattern) #, customdata=cur_hovertext, hoverinfo="text", hovertext=cur_hovertext)
 
 def update(num_min, update_title=True):
     fig.data = []
     for h in range(model.cfg.n_heads):
         for minmaxi, minmax in list(enumerate(('min', 'max')))[:1]:
-            fig.add_trace(make_update(h, minmaxi, num_min), row=h+1, col=minmaxi+1)
-            fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', row=h+1, col=minmaxi+1, title_text="min tok") #, title_text="Output Logit Token"
-            fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, row=h+1, col=minmaxi+1, title_text="non-min tok")
+            col, row = h+1, minmaxi+1
+            fig.add_trace(make_update(h, minmaxi, num_min), col=col, row=row)
+            fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', col=col, row=row, title_text="non-min tok") #, title_text="Output Logit Token"
+            fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, col=col, row=row, title_text="min tok")
     if update_title: fig.update_layout(title=f"Attention distribution range ({num_min} copies of min tok)")
-    fig.update_traces(hovertemplate="Non-min token: %{y}<br>Min token: %{x}<br>%{color}<extra>head %{fullData.name}</extra>")
+    fig.update_traces(hovertemplate="Non-min token: %{x}<br>Min token: %{y}<br>%{color}<extra>head %{fullData.name}</extra>")
 
 # Create the initial heatmap
 update(1, update_title=True)
@@ -957,6 +960,67 @@ fig.update_layout(
 
 fig.show()
 
+# %% [markdown]
+#
+# There are some remarkable things about this plot.
+#
+# 1. For sequences where the minimum token is 19 or larger, the model should basically never get the first token correct, because it's paying too much attention to either the SEP token or the wrong non-min token.
+# 2. Even for sequences with 9 or 10 copies of the same number, if that number is 25--39, so much attention is paid to the SEP token (by both heads) that we predict that the model probably gets the wrong answer, even before analyzing OV.
+# 3. The plot probably overestimates the incorrect behavior when the non-min token is relatively close to the min token, because the OV matrices do (small) positive copying of numbers below the current one.  We don't analyze this behavior in enough depth here to put hard bounds on when it's enough to compensate for paying attention to the wrong token, but a more thorough analysis would.
+#
+# Before using the above distributions to place concrete bounds on what fraction of outputs the network gets correct, let's compute cutoffs for the OV behavior.
+#
+# But first, is this actually right?  Which uniform sequences does the model get wrong?  What fraction of sequences starting at 19 get the wrong minimum?
+
+# %%
+uniform_predictions = [model(t.tensor([i] * dataset.list_len + [len(dataset.vocab) - 1] + [i] * dataset.list_len))[0, dataset.list_len].argmax(dim=-1).item() for i in range(len(dataset.vocab) - 1)]
+wrong_uniform_predictions = [(i, p) for i, p in enumerate(uniform_predictions) if p != i]
+print(f"The model incorrectly predicts the minimum for {len(wrong_uniform_predictions)} sequences ({', '.join(str(i) for i, p in wrong_uniform_predictions)}):\n{' '.join([f'{i} (model: {p})' for i, p in wrong_uniform_predictions])}")
+
+# %% [markdown]
+# Interestingly, the model manages to get 35, 36, 37 right, despite paying most attention to SEP.
+
+# %%
+n_total_datapoints = 1000000
+datapoints_per_batch = 1000
+# Set a random seed, then generate n_datapoints sequences of length dataset.list_len of numbers between 19 and len(dataset.vocab) - 2, inclusive
+# Set random seed for reproducibility
+torch.manual_seed(42)
+all_predictions = t.zeros((0,), dtype=torch.long)
+all_minima = t.zeros((0,), dtype=torch.long)
+with torch.no_grad():
+    for _ in tqdm(range(n_total_datapoints // datapoints_per_batch)):
+        sequences = torch.randint(19, len(dataset.vocab) - 1, (datapoints_per_batch, dataset.list_len))
+        sorted_sequences = sequences.sort(dim=-1).values
+        sequences = torch.cat([sequences, torch.full((datapoints_per_batch, 1), len(dataset.vocab) - 1, dtype=torch.long), sorted_sequences], dim=-1)
+        # Compute the model's predictions for the minimum
+        predictions = model(sequences)[:, dataset.list_len, :].argmax(dim=-1)
+        # Compute the actual minimums
+        minima = sorted_sequences[:, 0]
+        all_predictions = torch.cat([all_predictions, predictions.cpu()])
+        all_minima = torch.cat([all_minima, minima.cpu()])
+    # Compute the fraction of correct predictions
+    correct = (predictions.cpu() == minima).float().mean().item()
+print(f"The model correctly predicts the minimum for {correct * 100}% of sequences of length {dataset.list_len} with numbers between 19 and {len(dataset.vocab) - 2} inclusive")
+# plot predictions - minima against minima
+scatter(all_minima, all_predictions - all_minima, title="Predicted - Actual Minimum vs Actual Minimum", xaxis="Actual Minimum", yaxis="Predicted - Actual Minimum")
+scatter(all_minima, all_predictions, title="Actual Minimum vs Predicted Minimum", xaxis="Actual Minimum", yaxis="Predicted - Actual Minimum")
+
+# print(sequences)
+
+
+# %% [markdown]
+# ## OV Cutoffs
+#
+# For each pair of minimum and non-minimum tokens, we can ask: how much attention needs to be paid to the minimum token to ensure that the correct output logit is highest?
+# We ask this question separately for when the remainder of the attention is paid to the non-min token vs paid to the SEP token.
+# Note that there will be a complicated non-linear bounding argument necessary: it may be the case that a larger non-min token would be worse to pay attention to but also has less attention paid to it; we could do a distributional analysis, but for the October challenge, we'll simply make some simplifying cutoffs.
+
+# %%
+
+
+# %%
+model(t.tensor([34] * 10 + [51] + [34] * 10))[0].argmax(dim=-1)
 
 # %% [markdown]
 # ## When the sequence contains nothing in $S$
