@@ -425,7 +425,8 @@ def compute_attn_all(model, outdim='h qpos kpos qtok ktok', nanify_sep_loc=None,
     k_all = einsum(resid,
                    model.W_K[0,:,:,:],
                    'kpos ktok d_model_k, h d_model_k d_head -> kpos ktok h d_head') + model.b_K[0]
-    attn_all = einsum(q_all, k_all, f'qpos qtok h d_head, kpos ktok h d_head -> {outdim}')
+    attn_all = einsum(q_all, k_all, f'qpos qtok h d_head, kpos ktok h d_head -> {outdim}') \
+        / model.blocks[0].attn.attn_scale
     attn_all_max = reduce(attn_all, f"{outdim} -> {outdim.replace('kpos', '()').replace('ktok', '()')}", 'max')
     # print(attn_all_max.shape)
     # print(attn_all.shape)
@@ -433,11 +434,71 @@ def compute_attn_all(model, outdim='h qpos kpos qtok ktok', nanify_sep_loc=None,
     attn_all = attn_all - attn_all_max
     if nanify_sep_loc is not None: attn_all = nanify_attn_sep_loc(attn_all, outdim=outdim, sep_loc=nanify_sep_loc, nanify_bad_self_attention=nanify_bad_self_attention)
     return attn_all
+
+# %%
+@torch.no_grad()
+def compute_attention_patterns(model, sep_pos=dataset.list_len, nanify_impossible_nonmin=True, num_min=1):
+    '''
+    returns post-softmax attention paid to the minimum token, the nonminimum token, and to the sep token
+    in shape (head, 2, mintok, nonmintok, 3)
+
+    The 2 is for computing both the min attention paid to the min tok and the max attention paid to the min tok
+    The 3 is for mintok, nonmintok, and sep
+    '''
+    attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok', nanify_sep_loc=dataset.list_len)
+    n_heads, _, _, d_vocab, _ = attn_all.shape
+    d_vocab -= 1 # remove sep token
+    num_nonmin = sep_pos - num_min
+    attn_all = attn_all[:, sep_pos, :sep_pos+1, -1, :]
+    # (h, kpos, ktok)
+    # scores is presoftmax
+    # print(attn_all[:, :, 22])
+    # print(attn_all[:, -1:, -1])
+    attn_scores = t.zeros((n_heads, 2, d_vocab, d_vocab, sep_pos+1), device=attn_all.device)
+    # set attention paid to sep token
+    attn_scores[:, :, :, :, -1] = attn_all[:, None, None, None, -1, -1]
+    # remove sep token
+    attn_all = attn_all[:, :-1, :-1]
+    # sort attn_all along dim=1
+    attn_all, _ = attn_all.sort(dim=1)
+    # set min attention paid to min token across all positions
+    attn_scores[:, 0, :, :, :num_min] = rearrange(attn_all[:, :num_min, :, None], 'h kpos ktokmin ktoknonmin -> h ktokmin ktoknonmin kpos')
+    # set max attention paid to min token across all positions
+    attn_scores[:, 1, :, :, :num_min] = rearrange(attn_all[:, -num_min:, :, None], 'h kpos ktokmin ktoknonmin -> h ktokmin ktoknonmin kpos')
+    # set max attention paid to non-min-token across all positions (corresponds to min attention paid to min token)
+    attn_scores[:, 0, :, :, num_min:-1] = rearrange(attn_all[:, -num_nonmin:, :, None], 'h kpos ktoknonmin ktokmin -> h ktokmin ktoknonmin kpos')
+    # set min attention paid to non-min-token across all positions (corresponds to max attention paid to min token)
+    attn_scores[:, 1, :, :, num_min:-1] = rearrange(attn_all[:, :num_nonmin, :, None], 'h kpos ktoknonmin ktokmin -> h ktokmin ktoknonmin kpos')
+
+    # compute softmax
+    # first subtract off the max to avoid overflow
+    attn_scores = attn_scores - attn_scores.max(dim=-1, keepdim=True).values
+    # exponentiate
+    attn_pattern_expanded = attn_scores.exp()
+    # for min = nonmin, move all attention to min
+    for mintok in range(d_vocab):
+        attn_pattern_expanded[:, :, mintok, mintok, 0] *= sep_pos
+        attn_pattern_expanded[:, :, mintok, mintok, 1:-1] = 0
+    # divide by the sum to get the softmax
+    attn_pattern_expanded = attn_pattern_expanded / attn_pattern_expanded.sum(dim=-1, keepdim=True)
+
+    # remove rows corresponding to impossible non-min tokens
+    if nanify_impossible_nonmin:
+        for mintok in range(d_vocab):
+            attn_pattern_expanded[:, :, mintok, :mintok, :] = float('nan')
+
+    attn_pattern = t.zeros((n_heads, 2, d_vocab, d_vocab, 3), device=attn_all.device)
+    attn_pattern[:, :, :, :, 0] = attn_pattern_expanded[:, :, :, :, :num_min].sum(dim=-1)
+    attn_pattern[:, :, :, :, 1] = attn_pattern_expanded[:, :, :, :, num_min:-1].sum(dim=-1)
+    attn_pattern[:, :, :, :, 2] = attn_pattern_expanded[:, :, :, :, -1]
+
+    return attn_pattern
 # %%
 def compute_EPVOU(model, nanify_sep_position=dataset.list_len):
     EPV = model.blocks[0].ln1(model.W_pos[:, None, :] + model.W_E[None, :, :])[None, :, :, :] @ model.W_V[0,:,None,:,:] + model.b_V[0, :, None, None, :]
     # (head, pos, input, d_head)
-    EPVO = EPV @ model.W_O[0,:,None,:,:] + model.b_O[0, None, None, None, :]
+    # b_O is not split amongst the heads, so we distribute it evenly amongst heads
+    EPVO = EPV @ model.W_O[0,:,None,:,:] + model.b_O[0, None, None, None, :] / model.cfg.n_heads
     # (head, pos, input, d_model)
     EPVOU = layernorm_noscale(EPVO) @ model.W_U
     # (head, pos, input, output)
@@ -806,8 +867,101 @@ fig.show()
 # # Finding the Minimum with query SEP in Position 10
 
 # %% [markdown]
-# ## When the sequence contains nothing in $S$
+# Let's bound how much attention is paid to the minimum token, non-minimum tokens (in aggregate), and the SEP token
 
+# %%
+# swap the axes so that we have red for nonmin, green for min, and blue for sep
+attn_patterns = torch.stack([compute_attention_patterns(model, num_min=num_min)[:, :, :, :, (1, 0, 2)] for num_min in range(1, dataset.list_len)], dim=0)
+# (num_min, head, 2, mintok, nonmintok, 3)
+attn_patterns[attn_patterns.isnan()] = 1
+attn_patterns = utils.to_numpy(attn_patterns * 256)
+
+fig = make_subplots(rows=model.cfg.n_heads, cols=1, subplot_titles=[f"head {h}" for h in range(model.cfg.n_heads)])# {minmax} attn on mintok" for h in range(model.cfg.n_heads) for minmax in ('min', 'max')])
+# fig.update_annotations(font_size=12)
+minmaxi_g = 0 # min attention, but it doesn't matter much
+fig.update_layout(title=f"Attention ({('min', 'max')[minmaxi_g]} on min tok)")
+
+all_tickvals_text = list(enumerate(dataset.vocab[:-1]))
+tickvals_indices = list(range(0, len(all_tickvals_text) - 1, 10)) + [len(all_tickvals_text) - 1]
+tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
+tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
+
+# Generate custom hovertext
+all_hovertext = []
+kinds = ['Non-min', 'Min', 'SEP']
+for num_min in range(1, dataset.list_len):
+    hovertext_num_min = []
+    for h in range(model.cfg.n_heads):
+        hovertext_h = []
+        for minmaxi, minmax in enumerate(('min', 'max')):
+            hovertext_minmax = []
+            for mintok in range(attn_patterns.shape[-3]):
+                for nonmintok in range(attn_patterns.shape[-2]):
+                    value = attn_patterns[num_min - 1, h, minmaxi, mintok, nonmintok]
+                    label = f"Non-min token: {all_tickvals_text[nonmintok][1]}<br>Min token: {all_tickvals_text[mintok][1]}<br>{kinds[value.argmax().item()]} attn: {value.max().item() / 256 * 100}%<br>{kinds[value.argmin().item()]} attn: {value.min().item() / 256 * 100}%"
+                    hovertext_minmax.append(label)
+            hovertext_h.append(hovertext_minmax)
+        hovertext_num_min.append(hovertext_h)
+    all_hovertext.append(hovertext_num_min)
+
+    # fig.data[0].customdata = np.array(hovertext, dtype=object)
+    # fig.data[0].hovertemplate = '<b>%{customdata}</b>'
+
+
+def make_update(h, minmaxi, num_min):
+    cur_attn_pattern = attn_patterns[num_min - 1, h, minmaxi]
+    cur_hovertext = all_hovertext[num_min - 1][h][minmaxi]
+    return go.Image(z=cur_attn_pattern) #, customdata=cur_hovertext, hoverinfo="text", hovertext=cur_hovertext)
+
+def update(num_min, update_title=True):
+    fig.data = []
+    for h in range(model.cfg.n_heads):
+        for minmaxi, minmax in list(enumerate(('min', 'max')))[:1]:
+            fig.add_trace(make_update(h, minmaxi, num_min), row=h+1, col=minmaxi+1)
+            fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', row=h+1, col=minmaxi+1, title_text="min tok") #, title_text="Output Logit Token"
+            fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, row=h+1, col=minmaxi+1, title_text="non-min tok")
+    if update_title: fig.update_layout(title=f"Attention distribution range ({num_min} copies of min tok)")
+    fig.update_traces(hovertemplate="Non-min token: %{y}<br>Min token: %{x}<br>%{color}<extra>head %{fullData.name}</extra>")
+
+# Create the initial heatmap
+update(1, update_title=True)
+
+# Create frames for each position
+frames = [go.Frame(
+    data=[make_update(h, minmaxi, num_min) for h in range(model.cfg.n_heads) for minmaxi in (minmaxi_g, )],
+    name=str(num_min)
+) for num_min in range(1, dataset.list_len)]
+
+fig.frames = frames
+
+# Create slider
+sliders = [dict(
+    active=0,
+    yanchor='top',
+    xanchor='left',
+    currentvalue=dict(font=dict(size=20), prefix='# copies of min token:', visible=True, xanchor='right'),
+    transition=dict(duration=0),
+    pad=dict(b=10, t=50),
+    len=0.9,
+    x=0.1,
+    y=0,
+    steps=[dict(args=[[frame.name], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
+                method='animate',
+                label=str(num_min+1)) for num_min, frame in enumerate(fig.frames)]
+)]
+
+fig.update_layout(
+    sliders=sliders
+)
+
+
+fig.show()
+
+
+# %% [markdown]
+# ## When the sequence contains nothing in $S$
+# %%
+_, cachev = model.run_with_cache(t.tensor([22] * 10 + [51] + [22] * 10))
 # %% [markdown]
 # ### More attention is paid to the minimum by head 1 than to anything else
 #
@@ -863,7 +1017,8 @@ def ov_impacts(model: HookedTransformer, sep_pos=dataset.list_len) -> t.Tensor:
 def worst_ov_impact(model: HookedTransformer, **kwargs) -> float:
     return ov_impacts(model, **kwargs).max().item()
 
-hist(ov_impacts(model).flatten(), title="OV Impact on Logits", xaxis="Logit diff (nonmin - min)", renderer='png')
+for h, ov in enumerate(ov_impacts(model)):
+    hist(ov.flatten(), title=f"OV Impact on Logits (head {h})", xaxis="Logit diff (nonmin - min)", renderer='png')
 print(worst_ov_impact(model))
 
 # %% [markdown]
@@ -887,6 +1042,87 @@ def ov_copying_impacts_full_attention(model: HookedTransformer, sep_pos=dataset.
 
 hist(ov_copying_impacts_full_attention(model))
 
+# %% [markdown]
+# How much attention gets paid to non-minimum tokens?
+
+
+# %%
+attn_pattern = compute_attention_patterns(model)
+
+# %%
+for h in range(attn_pattern.shape[0]):
+    for min_max, min_max_str in enumerate(('min', 'max')):
+        imshow(attn_pattern[h, min_max, :, :, 0], title=f"{min_max_str} attention paid to min token (head {h})", xaxis="Non-minimum Token", x=dataset.vocab[:-1], yaxis="Minimum Token", y=dataset.vocab[:-1])
+
+# %%
+for h in range(attn_pattern.shape[0]):
+    for min_max, min_max_str in enumerate(('min', 'max')):
+        imshow(attn_pattern[h, min_max, :, :, 2], title=f"{min_max_str} attention paid to sep token (head {h})", xaxis="Non-minimum Token", x=dataset.vocab[:-1], yaxis="Minimum Token", y=dataset.vocab[:-1])
+
+
+# %%
+attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok', nanify_sep_loc=dataset.list_len)
+attn_all = attn_all[:, dataset.list_len, :dataset.list_len+1, -1, :]
+attn_by_head_distances = [[] for _ in range(attn_all.shape[0])]
+attn_by_head_attns = [[] for _ in range(attn_all.shape[0])]
+for h in range(attn_all.shape[0]):
+    for pos in range(dataset.list_len):
+        for mintok in range(model.cfg.)
+print(attn_all.shape)
+
+# %%
+dataset.str_toks[0]
+list(enumerate(i.item() for i in model(torch.tensor([21, 48, 48, 48, 48, 48, 48, 48, 48, 48, 51, 21, 48, 48, 48, 48, 48, 48, 48, 48, 48])).argmax(dim=-1)[0]))
+# %%
+min_min_tok, max_min_tok = 20, 50
+# get 100 samples of numbers between min_min_tok and max_min_tok
+min_toks = torch.randint(min_min_tok, max_min_tok, (100,))
+# for each sample, get 100 samples of dataset.list_len - 1 numbers between mintok+1 and dataset.vocab_size-1 inclusive, then shuffle
+# Initialize a list to store the results
+samples = []
+# For each value in min_toks
+for min_tok in min_toks:
+    for _ in range(100):
+        # Generate dataset.list_len - 1 numbers between min_tok+1 and dataset.vocab_size-1
+        sample = torch.randint(min_tok + 1, len(dataset.vocab) - 1, (dataset.list_len - 1,))
+        # Append the min_tok to the sample
+        sample = torch.cat((sample, torch.tensor([min_tok])))
+        # Shuffle the sample
+        sample = sample[torch.randperm(sample.size(0))]
+        # sort sample
+        sorted_sample = torch.sort(sample).values
+        sample = torch.cat((sample, torch.tensor([len(dataset.vocab) - 1]), sorted_sample))
+        samples.append(sample)
+# Convert samples list to a PyTorch tensor
+samples = torch.stack(samples)
+# %%
+results = model(samples)
+# %%
+print(samples.shape, results.shape)
+# %%
+predictions = results[:, dataset.list_len].argmax(dim=-1)
+expecteds = samples[:, :dataset.list_len].max(dim=-1).values
+print((predictions.cpu() == expecteds.cpu()).float().mean())
+# %%
+EPVOU = compute_EPVOU(model)
+EUPU = compute_EUPU(model)
+print(EUPU.shape)
+# for h in range(2):
+line(EPVOU[:, dataset.list_len, -1].sum(dim=0) + EUPU[dataset.list_len, -1])
+# %%
+print(EPVOU.shape)
+line(EPVOU[:, 0, 25].T)
+# %%
+EPVOU = compute_EPVOU(model, nanify_sep_position=dataset.list_len)
+test = EPVOU[:, :dataset.list_len, :-1]
+test = test - test.max(dim=-1, keepdim=True).values
+result = torch.zeros(test.shape[:-1], device=test.device)
+for h in range(test.shape[0]):
+    for pos in range(test.shape[1]):
+        for tok in range(test.shape[2]):
+            result[h, pos, tok] = test[h, pos, tok, tok]
+for h in range(result.shape[0]):
+    imshow(result[h], title=f"logit of input - max logit (head {h})", xaxis="Input Token", x=dataset.vocab[:-1], yaxis="Position", y=list(range(dataset.list_len)))
 
 # %% [markdown]
 
