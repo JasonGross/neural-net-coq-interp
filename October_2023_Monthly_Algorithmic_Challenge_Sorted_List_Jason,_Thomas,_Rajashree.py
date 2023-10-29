@@ -364,6 +364,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from transformer_lens import HookedTransformer
+import math
 
 # %% [markdown]
 # ## Utils
@@ -494,6 +495,7 @@ def compute_attention_patterns(model, sep_pos=dataset.list_len, nanify_impossibl
 
     return attn_pattern
 # %%
+@torch.no_grad()
 def compute_EPVOU(model, nanify_sep_position=dataset.list_len):
     EPV = model.blocks[0].ln1(model.W_pos[:, None, :] + model.W_E[None, :, :])[None, :, :, :] @ model.W_V[0,:,None,:,:] + model.b_V[0, :, None, None, :]
     # (head, pos, input, d_head)
@@ -510,6 +512,7 @@ def compute_EPVOU(model, nanify_sep_position=dataset.list_len):
         EPVOU[:, :nanify_sep_position, -1, :], EPVOU[:, nanify_sep_position+1:, -1, :] = float('nan'), float('nan')
     return EPVOU
 # %%
+@torch.no_grad()
 def compute_EUPU(model, nanify_sep_position=dataset.list_len):
     EUPU = layernorm_noscale(model.W_pos[:, None, :] + model.W_E[None, :, :]) @ model.W_U + model.b_U[None, None, :]
     EUPU = EUPU - EUPU.mean(dim=-1, keepdim=True)
@@ -519,6 +522,18 @@ def compute_EUPU(model, nanify_sep_position=dataset.list_len):
         # SEP never occurs in positions other than the SEP position
         EUPU[:nanify_sep_position, -1, :], EUPU[nanify_sep_position+1:, -1, :] = float('nan'), float('nan')
     return EUPU
+
+# %%
+@torch.no_grad()
+def compute_EPVOU_EUPU(model, nanify_sep_position=dataset.list_len, qtok=-1, qpos=dataset.list_len):
+    '''
+    return indexed by (head, n_ctx_k, d_vocab_k, d_vocab_out)
+    '''
+    EPVOU = compute_EPVOU(model, nanify_sep_position=nanify_sep_position)
+    # (head, pos, input, output)
+    EUPU = compute_EUPU(model, nanify_sep_position=nanify_sep_position)
+    # (pos, input, output)
+    return EPVOU + EUPU[qpos, qtok, None, None, None, :] / EPVOU.shape[0]
 
 # %% [markdown]
 # # Exploratory Plots
@@ -867,6 +882,29 @@ fig.show()
 # # Finding the Minimum with query SEP in Position 10
 
 # %% [markdown]
+# ## State Space Reduction
+#
+# **Lemma**: For a single attention head, it suffices to consider sequences with at most two distinct tokens.
+#
+# Note that we are comparing sequences by pre-final-layernorm-scaling gap between the logit of the minimum token and the logit of any other fixed token.
+# Layernorm scaling is non-linear, but if we only care about accuracy and not log-loss, then we can ignore it (neither scaling nor softmax changes which logit is the largest).
+#
+# **Proof sketch**:
+# We show that any sequence with three token values, $x < y < z$, is strictly dominated either by a sequence with just $x$ and $y$ or a sequence with just $x$ and $z$.
+#
+# Suppose we have $k$ copies of $x$, $n$ copies of $y$, and $\ell - k - n$ copies of $z$, the attention scores are $s_x$, $s_y$, and $s_z$, and the differences between the logit of $x$ and our chosen comparison logit (as computed by the OV circuit for each token) are $v_x$, $v_y$, and $v_z$.
+# Then the difference in logit between $x$ and the comparison token is
+# $$\left(k e^{s_x} v_x + n e^{s_y} v_y + (\ell - k - n)e^{s_z}v_z \right)\left(k e^{s_x} + n e^{s_y} + (\ell - k - n)e^{s_z}\right)^{-1}$$
+# Rearrangement gives
+# $$\left(\left(k e^{s_x} v_x + (\ell - k) e^{s_z} v_z\right) + n \left(e^{s_y} v_y - e^{s_z}v_z\right) \right)\left(\left(k e^{s_x} + (\ell - k) e^{s_z}\right) + n \left(e^{s_y} - e^{s_z}\right)\right)^{-1}$$
+# This is a fraction of the form $\frac{a + bn}{c + dn}$.  Taking the derivative with respect to $n$ gives $\frac{bc - ad}{(c + dn)^2}$.  Noting that $c + dn$ cannot equal zero for any valid $n$, we get the the derivative never changes sign.  Hence our logit difference is maximized either at $n = 0$ or at $n = \ell - k$, and the sequence with just two values dominates the one with three.
+#
+# This proof generalizes straightforwardly to sequences with more than three values.
+#
+# Similarly, this proof shows that, when considering only a single attention head, it suffices to consider sequences of $\ell$ copies of the minimum token and sequences with one copy of the minimum token and $\ell - 1$ copies of the non-minimum token, as intermediate values are dominated by the extremes.
+#
+
+# %% [markdown]
 # Let's bound how much attention is paid to the minimum token, non-minimum tokens (in aggregate), and the SEP token.
 #
 # First a plot.  We use green for "paying attention to the minimum token", red for "paying attention to the non-minimum token", and blue for "paying attention to the SEP token".
@@ -913,7 +951,7 @@ tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
 def make_update(h, minmaxi, num_min):
     cur_attn_pattern = attn_patterns[num_min - 1, h, minmaxi]
     # cur_hovertext = all_hovertext[num_min - 1][h][minmaxi]
-    return go.Image(z=cur_attn_pattern) #, customdata=cur_hovertext, hoverinfo="text", hovertext=cur_hovertext)
+    return go.Image(z=cur_attn_pattern, customdata=cur_attn_pattern / 256 * 100) #, customdata=cur_hovertext, hoverinfo="text", hovertext=cur_hovertext)
 
 def update(num_min, update_title=True):
     fig.data = []
@@ -924,7 +962,8 @@ def update(num_min, update_title=True):
             fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', col=col, row=row, title_text="non-min tok") #, title_text="Output Logit Token"
             fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, col=col, row=row, title_text="min tok")
     if update_title: fig.update_layout(title=f"Attention distribution range ({num_min} copies of min tok)")
-    fig.update_traces(hovertemplate="Non-min token: %{x}<br>Min token: %{y}<br>%{color}<extra>head %{fullData.name}</extra>")
+    fig.update_traces(hovertemplate="Non-min token: %{x}<br>Min token: %{y}<br>Min token attn: %{customdata[1]:.1f}%<br>Nonmin tok attn: %{customdata[0]:.1f}%<br>Sep attn: %{customdata[0]:.1f}%<extra>head %{fullData.name}</extra>")
+    # %{color}
 
 # Create the initial heatmap
 update(1, update_title=True)
@@ -981,32 +1020,70 @@ print(f"The model incorrectly predicts the minimum for {len(wrong_uniform_predic
 # Interestingly, the model manages to get 35, 36, 37 right, despite paying most attention to SEP.
 
 # %%
-n_total_datapoints = 1000000
+n_total_datapoints = 10000
 datapoints_per_batch = 1000
 # Set a random seed, then generate n_datapoints sequences of length dataset.list_len of numbers between 19 and len(dataset.vocab) - 2, inclusive
 # Set random seed for reproducibility
 torch.manual_seed(42)
 all_predictions = t.zeros((0,), dtype=torch.long)
 all_minima = t.zeros((0,), dtype=torch.long)
+low = 19
+# true minimum, predicted minimum, # copies of minimum
+results = t.zeros((len(dataset.vocab) - 1, len(dataset.vocab) - 1, dataset.list_len + 1))
 with torch.no_grad():
     for _ in tqdm(range(n_total_datapoints // datapoints_per_batch)):
-        sequences = torch.randint(19, len(dataset.vocab) - 1, (datapoints_per_batch, dataset.list_len))
-        sorted_sequences = sequences.sort(dim=-1).values
-        sequences = torch.cat([sequences, torch.full((datapoints_per_batch, 1), len(dataset.vocab) - 1, dtype=torch.long), sorted_sequences], dim=-1)
-        # Compute the model's predictions for the minimum
-        predictions = model(sequences)[:, dataset.list_len, :].argmax(dim=-1)
-        # Compute the actual minimums
-        minima = sorted_sequences[:, 0]
-        all_predictions = torch.cat([all_predictions, predictions.cpu()])
-        all_minima = torch.cat([all_minima, minima.cpu()])
+        for real_low in range(low, len(dataset.vocab) - 1):
+            sequences = torch.randint(real_low, len(dataset.vocab) - 1, (datapoints_per_batch, dataset.list_len))
+            sorted_sequences = sequences.sort(dim=-1).values
+            minima = sorted_sequences[:, 0]
+            n_copies = (sequences == minima.unsqueeze(-1)).sum(dim=-1)
+            sequences = torch.cat([sequences, torch.full((datapoints_per_batch, 1), len(dataset.vocab) - 1, dtype=torch.long), sorted_sequences], dim=-1)
+            # Compute the model's predictions for the minimum
+            predictions = model(sequences)[:, dataset.list_len, :].argmax(dim=-1)
+            # Compute the actual minimums
+            all_predictions = torch.cat([all_predictions, predictions.cpu()])
+            all_minima = torch.cat([all_minima, minima.cpu()])
+            # count the number of copies of the minimum
+            results[minima.cpu(), predictions.cpu(), n_copies.cpu()] += 1
+            # if real_low == 45:
+            #     good_sequences = sequences
+            #     print(set(sequences.cpu()[(minima.cpu() == 45) & (predictions.cpu() == minima.cpu())]))
     # Compute the fraction of correct predictions
     correct = (predictions.cpu() == minima).float().mean().item()
-print(f"The model correctly predicts the minimum for {correct * 100}% of sequences of length {dataset.list_len} with numbers between 19 and {len(dataset.vocab) - 2} inclusive")
-# plot predictions - minima against minima
-scatter(all_minima, all_predictions - all_minima, title="Predicted - Actual Minimum vs Actual Minimum", xaxis="Actual Minimum", yaxis="Predicted - Actual Minimum")
-scatter(all_minima, all_predictions, title="Actual Minimum vs Predicted Minimum", xaxis="Actual Minimum", yaxis="Predicted - Actual Minimum")
-
+# (true minimum, # copies of minimum)
+fraction_correct = (results / results.sum(dim=1, keepdim=True)).diagonal(dim1=0, dim2=1)
+# print(f"The model correctly predicts the minimum for {correct * 100}% of sequences of length {dataset.list_len} with numbers between {low} and {len(dataset.vocab) - 2} inclusive")
+# # plot predictions - minima against minima
+# scatter(all_minima, all_predictions - all_minima, title="Predicted - Actual Minimum vs Actual Minimum", xaxis="Actual Minimum", yaxis="Predicted - Actual Minimum")
+# scatter(all_minima, all_predictions, title="Actual Minimum vs Predicted Minimum", xaxis="Actual Minimum", yaxis="Predicted - Actual Minimum")
+# scatter(list(range(low, len(dataset.vocab) - 1)), [(all_predictions[all_minima == i] == i).float().mean().item() for i in range(low, len(dataset.vocab) - 1)], title="Fraction Correct vs Actual Minimum", xaxis="Actual Minimum", yaxis="Fraction Correct")
+imshow(fraction_correct, title="Fraction Correct vs Actual Minimum and # Copies of Minimum", xaxis="Actual Minimum", yaxis="# Copies of Minimum")
 # print(sequences)
+
+# %% [markdown]
+# So we see that with enough copies of the minimum, we can get things correct, but with only one or two copies, we tend not to.
+#
+# This makes sense, though.  Consider what fraction of sequences start at 19 or higher.
+
+# %%
+total_sequences = (len(dataset.vocab) - 1) ** dataset.list_len
+# (minimum, n copies of minimum)
+count_of_sequences = torch.zeros((len(dataset.vocab) - 1, dataset.list_len + 1), dtype=torch.long)
+count_of_sequences[:, dataset.list_len] = 1 # one sequence for each min tok when everything is the same
+for mintok in range(len(dataset.vocab) - 1):
+    for n_copies in range(1, dataset.list_len):
+        count_of_sequences[mintok, n_copies] = math.comb(dataset.list_len, n_copies) * (len(dataset.vocab) - 1 - mintok - 1)**(dataset.list_len - n_copies)
+assert count_of_sequences.sum().item() == total_sequences, f"{np.abs(count_of_sequences.sum().item() - total_sequences)} != 0"
+fraction_of_sequences = count_of_sequences.float() / total_sequences
+imshow(fraction_of_sequences, title="Fraction of Sequences vs Actual Minimum and # Copies of Minimum", yaxis="Actual Minimum", xaxis="# Copies of Minimum")
+fraction_of_sequences_all_counts = fraction_of_sequences.sum(dim=-1)
+cumulative_fraction_of_sequences_all_counts = fraction_of_sequences_all_counts.cumsum(dim=0)
+significant = cumulative_fraction_of_sequences_all_counts[cumulative_fraction_of_sequences_all_counts <= 0.99]
+print(f"{cumulative_fraction_of_sequences_all_counts[significant.shape[0]+1] * 100:.1f}% of sequences start at or below {significant.shape[0] + 1}")
+
+# %% [markdown]
+#
+# So since more than 99% of cases have their minimum at or below 19, it seem fine to only explain the behavior on sequences with minimum at or below 19.
 
 
 # %% [markdown]
@@ -1014,13 +1091,225 @@ scatter(all_minima, all_predictions, title="Actual Minimum vs Predicted Minimum"
 #
 # For each pair of minimum and non-minimum tokens, we can ask: how much attention needs to be paid to the minimum token to ensure that the correct output logit is highest?
 # We ask this question separately for when the remainder of the attention is paid to the non-min token vs paid to the SEP token.
-# Note that there will be a complicated non-linear bounding argument necessary: it may be the case that a larger non-min token would be worse to pay attention to but also has less attention paid to it; we could do a distributional analysis, but for the October challenge, we'll simply make some simplifying cutoffs.
+# Note that to make use of the proof above about considering only sequences with at most two distinct tokens, we need to consider the behavior of the two heads independently.
+
+# %% [markdown]
+# Let's first find the worst-case OV behavior for head 0, indexed by (minimum token, output logit)
+# %%
+@torch.no_grad()
+def compute_worst_OV(model, sep_pos=dataset.list_len, num_min=1):
+    '''
+    returns (n_heads, d_vocab_min, d_vocab_nonmin, d_vocab_out)
+    '''
+    EPVOU_EUPU = compute_EPVOU_EUPU(model, nanify_sep_position=sep_pos, qtok=-1, qpos=sep_pos)
+    # (head, pos, input, output)
+    EPVOU_EUPU_sep = EPVOU_EUPU[:, sep_pos, -1, :]
+    EPVOU_EUPU = EPVOU_EUPU[:, :sep_pos, :-1, :]
+    attn_patterns = compute_attention_patterns(model, sep_pos=sep_pos, num_min=num_min)
+    # (head, 2, mintok, nonmintok, 3)
+    # 2 is for max attn on min vs nonmin, 3 is for min, nonmin, sep
+    results = t.zeros(tuple(list(attn_patterns.shape[:-1]) + [model.cfg.d_vocab_out]), device=attn_patterns.device)
+    for mintok in range(model.cfg.d_vocab - 1):
+        # center on the logit for the minimum token
+        cur_EPVOU_EUPU = EPVOU_EUPU - EPVOU_EUPU[:, :, :, mintok].unsqueeze(dim=-1)
+        # (head, pos, input, output)
+        # reduce along position, since they're all nearly identical
+        cur_EPVOU_EUPU = cur_EPVOU_EUPU.max(dim=1).values
+        # (head, input, output)
+
+        cur_EPVOU_EUPU_sep = EPVOU_EUPU_sep - EPVOU_EUPU_sep[:, mintok].unsqueeze(dim=-1)
+        # (head, output)
+
+        cur_attn_patterns = attn_patterns[:, :, mintok, :, :]
+        # (head, 2, nonmintok, 3)
+
+        results[:, :, mintok, :, :] = \
+            einsum(cur_attn_patterns[..., 0], cur_EPVOU_EUPU[:, mintok, :],
+                    "head minmax nonmintok, head output -> head minmax nonmintok output") \
+            + einsum(cur_attn_patterns[..., 1], cur_EPVOU_EUPU,
+                    "head minmax nonmintok, head nonmintok output -> head minmax nonmintok output") \
+            + einsum(cur_attn_patterns[..., 2], cur_EPVOU_EUPU_sep,
+                    "head minmax nonmintok, head output -> head minmax nonmintok output")
+        # re-center on output logit for minimum token
+        results[:, :, mintok, :, :] -= results[:, :, mintok, :, mintok].unsqueeze(dim=-1)
+
+    return results.max(dim=1).values
+
+@torch.no_grad()
+def reduce_worst_OV(worst_OV):
+    '''
+    returns (n_heads, d_vocab_min)
+    '''
+    worst_OV = worst_OV.clone()
+    results = torch.zeros_like(worst_OV[:, :, 0, 0])
+    assert len(results.shape) == 2
+    for mintok in range(worst_OV.shape[1]):
+        # set diagonal to min to avoid including the logit of the min in the worst non-min logit
+        worst_OV[:, mintok, :, mintok] = worst_OV[:, mintok, :, :].min(dim=-1).values
+        # reduce for worst logit
+        results[:, mintok] = worst_OV[:, mintok, mintok:, :].max(dim=-1).values.max(dim=-1).values
+    return results
+
+@torch.no_grad()
+def compute_worst_OV_reduced(model, **kwargs):
+    '''
+    returns (n_heads, d_vocab_min)
+    '''
+    return reduce_worst_OV(compute_worst_OV(model, **kwargs))
+
 
 # %%
+line(compute_worst_OV_reduced(model).T, title="Worst OV behavior per head, Value vs Min Token")
 
+# %% [markdown]
+#
+# Now let's compute, for each minimum and non-minimum token, whether or not the attention from head 1 is enough to overcome the worst behavior from head 0
 
 # %%
-model(t.tensor([34] * 10 + [51] + [34] * 10))[0].argmax(dim=-1)
+@torch.no_grad()
+def compute_slack(model, good_head_num_min=1, **kwargs):
+    '''
+    returns (n_heads, d_vocab_min, d_vocab_nonmin, d_vocab_out)
+    '''
+    # we consider the worst behavior of the bad heads with only one copy of the minimum (except for the diagonal, which has the maximum number of copies)
+    worst_OV = compute_worst_OV(model, num_min=1, **kwargs)
+    # for the good head, we pass in the number of copies of the minimum token
+    worst_OV_good = compute_worst_OV(model, num_min=good_head_num_min, **kwargs)
+    # (n_heads, d_vocab_min, d_vocab_nonmin, d_vocab_out)
+    results = worst_OV_good.clone()
+    for good_head in range(worst_OV.shape[0]):
+        # reduce along nonmin tokens in other heads and add them in
+        other_worst_OV = torch.cat((worst_OV[:good_head], worst_OV[good_head+1:]), dim=0)
+        # (n_heads, d_vocab_min, d_vocab_nonmin, d_vocab_out)
+        for mintok in range(worst_OV.shape[1]):
+            results[good_head, mintok] += \
+                reduce(other_worst_OV[:, mintok, mintok:, :],
+                       "head nonmintok output -> head () output", reduction="max").sum(dim=0)
+    return results
+
+@torch.no_grad()
+def compute_slack_reduced(model, good_head_num_min=1, **kwargs):
+    '''
+    returns (n_heads, d_vocab_min, d_vocab_nonmin)
+    '''
+    slack = compute_slack(model, good_head_num_min=good_head_num_min, **kwargs)
+    # (n_heads, d_vocab_min, d_vocab_nonmin, d_vocab_out)
+    for mintok in range(slack.shape[1]):
+        # assert centered
+        test_slack = slack[:, mintok, :, mintok]
+        test_slack = test_slack[~test_slack.isnan()]
+        assert (test_slack == 0).all(), test_slack.max().item()
+        # set diagonal to min to avoid including the logit of the min in the worst non-min logit
+        slack[:, mintok, :, mintok] = slack[:, mintok, :, :].min(dim=-1).values
+    return slack.max(dim=-1).values
+
+# %%
+slacks = torch.stack([compute_slack_reduced(model, good_head_num_min=num_min) for num_min in range(1, dataset.list_len)], dim=0)
+# (num_min, head, mintok, nonmintok)
+zmax = slacks[~slacks.isnan()].abs().max().item()
+# negate for coloring
+slacks_sign = slacks.sign()
+slacks_full = -utils.to_numpy(slacks)
+slacks_sign = -utils.to_numpy(slacks_sign)
+
+for slacks in (slacks_full, slacks_sign):
+    fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=[f"slack on head {h}" for h in range(model.cfg.n_heads)])# {minmax} attn on mintok" for h in range(model.cfg.n_heads) for minmax in ('min', 'max')])
+    fig.update_layout(title=f"Slack (positive for either head ⇒ model is correct)")
+
+    all_tickvals_text = list(enumerate(dataset.vocab[:-1]))
+    tickvals_indices = list(range(0, len(all_tickvals_text) - 1, 10)) + [len(all_tickvals_text) - 1]
+    tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
+    tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
+
+
+    def make_update(h, num_min, showscale=True):
+        cur_slack = slacks[num_min - 1, h]
+        return go.Heatmap(z=cur_slack,  colorscale='RdBu', zmin=-zmax, zmax=zmax, showscale=showscale)
+
+    def update(num_min):
+        fig.data = []
+        for h in range(model.cfg.n_heads):
+            col, row = h+1, 1
+            fig.add_trace(make_update(h, num_min), col=col, row=row)
+            fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', col=col, row=row, title_text="non-min tok") #, title_text="Output Logit Token"
+            fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, col=col, row=row, title_text="min tok")
+        fig.update_traces(hovertemplate="Non-min token: %{x}<br>Min token: %{y}<br>Slack: %{z}<extra>head %{fullData.name}</extra>")
+
+    # Create the initial heatmap
+    update(1)
+
+    # Create frames for each position
+    frames = [go.Frame(
+        data=[make_update(h, num_min) for h in range(model.cfg.n_heads)],
+        name=str(num_min)
+    ) for num_min in range(1, dataset.list_len)]
+
+    fig.frames = frames
+
+    # Create slider
+    sliders = [dict(
+        active=0,
+        yanchor='top',
+        xanchor='left',
+        currentvalue=dict(font=dict(size=20), prefix='# copies of min token:', visible=True, xanchor='right'),
+        transition=dict(duration=0),
+        pad=dict(b=10, t=50),
+        len=0.9,
+        x=0.1,
+        y=0,
+        steps=[dict(args=[[frame.name], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
+                    method='animate',
+                    label=str(num_min+1)) for num_min, frame in enumerate(fig.frames)]
+    )]
+
+    fig.update_layout(
+        sliders=sliders
+    )
+
+
+    fig.show()
+
+# %% [markdown]
+# Let's count what fraction of sequences we can now explain the computation of the minimum on.
+
+# %%
+@torch.no_grad()
+def calculate_correct_minimum_lower_bound(model, sep_pos=dataset.list_len):
+    count = 0
+    for min_token_copies in range(1, sep_pos):
+        slack = compute_slack_reduced(model, good_head_num_min=min_token_copies, sep_pos=sep_pos)
+        # (n_heads, d_vocab_min, d_vocab_nonmin)
+        # find where we have slack
+        slack = (slack < 0)
+        for mintok in range(slack.shape[1]):
+            # count the number of sequences with the specified number of copies of mintok and with other tokens drawn from the values where we have slack
+            # we reduce along heads to find out which head permits us the most values with slack;
+            # since the proof of convexity only works when we fix which head we're analyzing, we can't union permissible values across heads
+            n_allowed_values = slack[:, mintok, mintok+1:].sum(dim=-1).max().item()
+            if n_allowed_values > 0:
+                count += math.comb(sep_pos, min_token_copies) * n_allowed_values ** (sep_pos - min_token_copies)
+        if min_token_copies == sep_pos - 1:
+            # add in the diagonal on this last round
+            count += slack.any(dim=0).diagonal(dim1=-2, dim2=-1).sum().item()
+
+    return count
+
+@torch.no_grad()
+def calculate_correct_minimum_lower_bound_fraction(model, sep_pos=dataset.list_len, **kwargs):
+    total_sequences = (model.cfg.d_vocab - 1) ** sep_pos
+    return calculate_correct_minimum_lower_bound(model, sep_pos=sep_pos, **kwargs) / total_sequences
+
+# %%
+print(f"Assuming no errors in our argument, we can prove that the model computes the correct minimum of the sequence in at least {calculate_correct_minimum_lower_bound(model)} cases ({100 * calculate_correct_minimum_lower_bound_fraction(model):.1f}% of the sequences).")
+
+# %% [markdown]
+# ## Summary of Results for First Sequence Token Predictions
+#
+# We've managed to prove a lower bound on correctness of the first token at 32%.  While this isn't great (the model in fact seems to do much better than this), this is only a preliminary analysis of the behavior.
+#
+# Recaping: We found that head 1 does positive copying on numbers outside of 25--39.  For numbers below 20, head 1 frequently manages to pay most attention to the smallest number.  Since fewer than 1% of sequences have a minimum above 19, we largely neglect the behavior on sequences with large minima.  We compute for each head the largest logit gap between the actual minima and any other logit, separately for each number of copies of the minimum token.  We then compute the worst-case behavior of the other heads.  We pessimize over position, which mostly does not matter.  We folded the computation of skip connection into the computation of the attention head.  We made a convexity argument that, as long as we consider each head's behavior independently, we can restrict our attention to sequences with at most two distinct tokens and still bound the behavior of other sequences.
+#
+# Although we don't do a more in-depth analysis of the prediction of the first token for the October challenge, we (Jason Gross and Rajashree Agrwal, and Thomas Kwa) are working on a project involving more deeply anlyzing the behavior of even smaller models (1 attention head, no layer norm, only computing the maximum of a list) in more detail, with proofs formalized in the proof assistant Coq.  We're in the process of writing up preliminary results, including connections with heuristic arguments, and hope to post on LessWrong and/or the Alignment Forum soon.  Keep an eye out!
 
 # %% [markdown]
 # ## When the sequence contains nothing in $S$
