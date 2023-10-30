@@ -1312,6 +1312,56 @@ print(f"Assuming no errors in our argument, we can prove that the model computes
 # Although we don't do a more in-depth analysis of the prediction of the first token for the October challenge, we (Jason Gross and Rajashree Agrwal, and Thomas Kwa) are working on a project involving more deeply anlyzing the behavior of even smaller models (1 attention head, no layer norm, only computing the maximum of a list) in more detail, with proofs formalized in the proof assistant Coq.  We're in the process of writing up preliminary results, including connections with heuristic arguments, and hope to post on LessWrong and/or the Alignment Forum soon.  Keep an eye out!
 
 # %% [markdown]
+# # Analysis of first token prediction with different independence assumptions
+#
+# Currently our analysis treats head 0 and head 1 completely independently.  This likely leads to loss of tightness in the bounds we're able to prove, since head 0 does negative copying on the tokens it pays attention to, plausibly giving head 1 more slack.
+#
+# In fact it looks like head 0 pays mostly uniform attention (except for 1, 2, and numbers around 27--37), so we we may get a better result if we can keep the OV behavior of head 0 coupled to the OV behavior (& attention) of head 1, but allow the attention behavior to vary independently.
+#
+# To do this, we need to prove that it still suffices to consider only sequences with at most two distinct tokens.
+#
+# **Lemma**: With two attention heads, any sequences with three token values $x < y < z$ is strictly dominated by a sequence just with $x$ and $y$ or a sequence just with $x$ and $z$, when we allow head 0 the option to pay attention to $y$ as if it were $z$ and vice versa.
+#
+# **Proof**: Suppose we have $k$ copies of $x$, $n$ copies of $y$, and $\ell - k - n$ copies of $z$, the attention scores are $s_{h,x}$, $s_{h,y}$, and $s_{h,z}$, and the differences between the logit of $x$ and our chosen comparison logit (as computed by the OV circuit for each token) are $v_{h,x}$, $v_{h,y}$, and $v_{h,z}$, where $h$ is the head index.
+# Let $s_{0,b,y}$ be $s_{0,y}$ when $b$ is true (i.e. when head 0 is paying attention to $y$ as if it were $y$) and $s_{0,z}$ when $b$ is false (i.e. when head 0 is paying attention to $y$ as if it were $z$), and similarly for $s_{0,b,z}$.
+#
+# Then the difference in logit between $x$ and the comparison token is
+# $$\left(k e^{s_{0,x}} v_{0,x} + n e^{s_{0,b,y}} v_{0,y} + (\ell - k - n)e^{s_{0,b,z}}v_{0,z} \right)\left(k e^{s_{0,x}} + n e^{s_{0,b,y}} + (\ell - k - n)e^{s_{0,b,z}}\right)^{-1}$$
+# $${} + \left(k e^{s_{1,x}} v_{1,x} + n e^{s_{1,y}} v_{1,y} + (\ell - k - n)e^{s_{1,z}}v_{1,z} \right)\left(k e^{s_{1,x}} + n e^{s_{1,y}} + (\ell - k - n)e^{s_{1,z}}\right)^{-1}$$
+#
+# We want to show that the minimum and maximum of this expression occur at $n = 0$ and $n = \ell - k$ (with $b$ allowed to be either true or false on each of these).
+#
+# Rearrangement gives
+# $$\frac{\left(k e^{s_{0,x}} v_{0,x} + (\ell - k) e^{s_{0,b,z}} v_{0,z}\right) + n \left(e^{s_{0,b,y}} v_{0,y} - e^{s_{0,b,z}}v_{0,z}\right)}{\left(k e^{s_{0,x}} + (\ell - k) e^{s_{0,b,z}}\right) + n \left(e^{s_{0,b,y}} - e^{s_{0,b,z}}\right)}$$
+# $${}+ \frac{\left(k e^{s_{1,x}} v_{1,x} + (\ell - k) e^{s_{1,z}} v_{1,z}\right) + n \left(e^{s_{1,y}} v_{1,y} - e^{s_{1,z}}v_{1,z}\right)}{\left(k e^{s_{1,x}} + (\ell - k) e^{s_{1,z}}\right) + n \left(e^{s_{1,y}} - e^{s_{1,z}}\right)}$$
+
+# %% [markdown]
+# OLD
+#
+# For a single attention head, it suffices to consider sequences with at most two distinct tokens.
+#
+# Note that we are comparing sequences by pre-final-layernorm-scaling gap between the logit of the minimum token and the logit of any other fixed token.
+# Layernorm scaling is non-linear, but if we only care about accuracy and not log-loss, then we can ignore it (neither scaling nor softmax changes which logit is the largest).
+#
+# **Proof sketch**:
+# We show that any sequence with three token values, $x < y < z$, is strictly dominated either by a sequence with just $x$ and $y$ or a sequence with just $x$ and $z$.
+#
+# Suppose we have $k$ copies of $x$, $n$ copies of $y$, and $\ell - k - n$ copies of $z$, the attention scores are $s_x$, $s_y$, and $s_z$, and the differences between the logit of $x$ and our chosen comparison logit (as computed by the OV circuit for each token) are $v_x$, $v_y$, and $v_z$.
+# Then the difference in logit between $x$ and the comparison token is
+# $$\left(k e^{s_x} v_x + n e^{s_y} v_y + (\ell - k - n)e^{s_z}v_z \right)\left(k e^{s_x} + n e^{s_y} + (\ell - k - n)e^{s_z}\right)^{-1}$$
+# Rearrangement gives
+# $$\left(\left(k e^{s_x} v_x + (\ell - k) e^{s_z} v_z\right) + n \left(e^{s_y} v_y - e^{s_z}v_z\right) \right)\left(\left(k e^{s_x} + (\ell - k) e^{s_z}\right) + n \left(e^{s_y} - e^{s_z}\right)\right)^{-1}$$
+# This is a fraction of the form $\frac{a + bn}{c + dn}$.  Taking the derivative with respect to $n$ gives $\frac{bc - ad}{(c + dn)^2}$.  Noting that $c + dn$ cannot equal zero for any valid $n$, we get the the derivative never changes sign.  Hence our logit difference is maximized either at $n = 0$ or at $n = \ell - k$, and the sequence with just two values dominates the one with three.
+#
+# This proof generalizes straightforwardly to sequences with more than three values.
+#
+# Similarly, this proof shows that, when considering only a single attention head, it suffices to consider sequences of $\ell$ copies of the minimum token and sequences with one copy of the minimum token and $\ell - 1$ copies of the non-minimum token, as intermediate values are dominated by the extremes.
+#
+
+
+
+
+# %% [markdown]
 # # Analysis of the middle token predictions
 
 
@@ -2093,3 +2143,5 @@ print(f"Assuming no errors in our argument, we can prove that the model computes
 # # model.b_K
 
 # # # %%
+
+# %%
