@@ -6,8 +6,8 @@ From NeuralNetInterp.Util Require Import Wf_Uint63 PArray.Proofs List.Proofs Def
 Import Util.Nat.Notations.
 Import Util.Wf_Uint63.LoopNotation.
 Import Util.Wf_Uint63.Reduction.
-Import Arith.Classes.
 Import Instances.Uint63.
+Import Arith.Classes.
 Local Open Scope list_scope.
 Set Implicit Arguments.
 Import ListNotations.
@@ -1072,6 +1072,9 @@ Definition unreshape_all {r} {s : Shape r} {A} (t : tensor (Shape.reshape s) A) 
 Definition reshape {A r1 r2} {s1 : Shape r1} (t : tensor s1 A) (s2 : Shape r2) : tensor s2 A
   := unreshape_m1 (reshape_m1 t : tensor (Shape.reshape s2) A).
  *)
+
+Definition relu {r} {s : Shape r} {A} {zeroA : has_zero A} {maxA : has_max A} (xs : tensor s A) : tensor s A
+  := map (max 0) xs.
 
 Section reduce_axis_m1.
   Context {r} {s1 : Shape r} {s2 : ShapeType} {keepdim : with_default "keepdim" bool false}

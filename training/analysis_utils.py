@@ -4,7 +4,7 @@
 # from training.Proving_How_A_Transformer_Takes_Max import linear_func
 
 
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Tuple
 import einops
 from fancy_einsum import einsum
 import matplotlib.pyplot as plt
@@ -16,6 +16,7 @@ from transformer_lens import HookedTransformer
 import transformer_lens.utils as utils
 import plotly.express as px
 
+# %%
 
 def linear_func(x, a, b):
     """Linear function: f(x) = a * x + b"""
@@ -1049,9 +1050,8 @@ def display_size_direction_stats(size_direction: torch.Tensor, QK: torch.Tensor,
             summarize(size_direction, fit_function=fit_func, renderer=renderer, name="Size Direction")
 
 
-
 @torch.no_grad()
-def find_size_direction(model: HookedTransformer, plot_heatmaps=False, renderer=None):
+def find_size_and_query_direction(model: HookedTransformer, plot_heatmaps=False, renderer=None) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Approximates the size direction of the model.
     """
@@ -1072,11 +1072,28 @@ def find_size_direction(model: HookedTransformer, plot_heatmaps=False, renderer=
     size_direction = Vh[:, 0] * U[:, 0].mean() * S[0]
     size_direction = size_direction / size_direction.norm()
 
+    # query direction is the first column of U times the mean of the first column of Vh (to account for sign) times the first singular value, normalized
+    query_direction = U[:, 0] * Vh[:, 0].mean() * S[0]
+    query_direction = query_direction / query_direction.norm()
+
     if plot_heatmaps: display_size_direction_stats(size_direction, QK, U, Vh, S, renderer=renderer)
 
-    return size_direction
+    return size_direction, query_direction
 
 
+@torch.no_grad()
+def find_size_direction(model: HookedTransformer, plot_heatmaps=False, renderer=None):
+    """
+    Approximates the size direction of the model.
+    """
+    return find_size_and_query_direction(model, plot_heatmaps=plot_heatmaps, renderer=renderer)[0]
+
+@torch.no_grad()
+def find_query_direction(model: HookedTransformer, plot_heatmaps=False, renderer=None):
+    """
+    Approximates the query direction of the model.
+    """
+    return find_size_and_query_direction(model, plot_heatmaps=plot_heatmaps, renderer=renderer)[1]
 
 # if __name__ == '__main__':
 #     from train_max_of_2 import get_model
@@ -1086,4 +1103,7 @@ def find_size_direction(model: HookedTransformer, plot_heatmaps=False, renderer=
 #     model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
 
 #     find_size_direction(model, plot_heatmaps=True)#, renderer='png')
+#     size_direction, query_direction = find_size_and_query_direction(model)
+#     W_pos, W_Q, W_K, W_E = model.W_pos, model.W_Q, model.W_K, model.W_E
+#     line(query_direction @ (W_E + W_pos[-1]) @ W_Q[0, 0, :, :] @ W_K[0, 0, :, :].T)
 # %%

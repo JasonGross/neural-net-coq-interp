@@ -427,6 +427,23 @@ Qed.
   #[export] Instance unreshape_all_Proper {r s A R} : Proper (eqfR R ==> eqfR R) (@unreshape_all r s A).
   Proof. apply unreshape_all_Proper_dep. Qed.
 
+  #[export] Instance relu_Proper_dep {r s}
+    : Dependent.Proper
+        (Dependent.idR
+           ==> (Dependent.idR ==> Dependent.idR ==> Dependent.idR)
+           ==> eqfR
+           ==> eqfR)
+        (@relu r s).
+  Proof.
+    repeat intro; cbv [relu].
+    cbv -[RawIndex tensor Shape map] in *.
+    eapply map_Proper_dep; repeat intro; hnf in *; eauto.
+  Qed.
+
+  #[export] Instance relu_Proper {r s A zeroA maxA}
+    : Proper (eqf ==> eqf) (@relu r s A zeroA maxA).
+  Proof. apply relu_Proper_dep; repeat intro; subst; reflexivity. Qed.
+
   #[export] Instance sum_dim_m1_Proper_dep {r s1 s2 keepdim}
     : Dependent.Proper
         (Dependent.idR
