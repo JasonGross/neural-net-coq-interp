@@ -965,34 +965,13 @@ tickvals_indices = list(range(0, len(all_tickvals_text) - 1, 10)) + [len(all_tic
 tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
 tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
 
-# # Generate custom hovertext
-# all_hovertext = []
-# kinds = ['Non-min', 'Min', 'SEP']
-# for num_min in range(1, dataset.list_len):
-#     hovertext_num_min = []
-#     for h in range(model.cfg.n_heads):
-#         hovertext_h = []
-#         for minmaxi, minmax in enumerate(('min', 'max')):
-#             hovertext_minmax = []
-#             for mintok in range(attn_patterns.shape[-3]):
-#                 for nonmintok in range(attn_patterns.shape[-2]):
-#                     value = attn_patterns[num_min - 1, h, minmaxi, mintok, nonmintok]
-#                     label = f"Non-min token: {all_tickvals_text[nonmintok][1]}<br>Min token: {all_tickvals_text[mintok][1]}<br>{kinds[value.argmax().item()]} attn: {value.max().item() / 256 * 100}%<br>{kinds[value.argmin().item()]} attn: {value.min().item() / 256 * 100}%"
-#                     hovertext_minmax.append(label)
-#             hovertext_h.append(hovertext_minmax)
-#         hovertext_num_min.append(hovertext_h)
-#     all_hovertext.append(hovertext_num_min)
-
-#     # fig.data[0].customdata = np.array(hovertext, dtype=object)
-#     # fig.data[0].hovertemplate = '<b>%{customdata}</b>'
-
 
 def make_update(h, minmaxi, num_min):
     cur_attn_pattern = attn_patterns[num_min - 1, h, minmaxi]
     # cur_hovertext = all_hovertext[num_min - 1][h][minmaxi]
-    return go.Image(z=cur_attn_pattern, customdata=cur_attn_pattern / 256 * 100) #, customdata=cur_hovertext, hoverinfo="text", hovertext=cur_hovertext)
+    return go.Image(z=cur_attn_pattern, customdata=cur_attn_pattern / 256 * 100, hovertemplate="Non-min token: %{x}<br>Min token: %{y}<br>Min token attn: %{customdata[1]:.1f}%<br>Nonmin tok attn: %{customdata[0]:.1f}%<br>SEP attn: %{customdata[0]:.1f}%<extra>" + f"head {h}" + "</extra>")
 
-def update(num_min, update_title=True):
+def update(num_min):
     fig.data = []
     for h in range(model.cfg.n_heads):
         for minmaxi, minmax in list(enumerate(('min', 'max')))[:1]:
@@ -1000,12 +979,9 @@ def update(num_min, update_title=True):
             fig.add_trace(make_update(h, minmaxi, num_min), col=col, row=row)
             fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', col=col, row=row, title_text="non-min tok") #, title_text="Output Logit Token"
             fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, col=col, row=row, title_text="min tok")
-    if update_title: fig.update_layout(title=f"Attention distribution range ({num_min} copies of min tok)")
-    fig.update_traces(hovertemplate="Non-min token: %{x}<br>Min token: %{y}<br>Min token attn: %{customdata[1]:.1f}%<br>Nonmin tok attn: %{customdata[0]:.1f}%<br>Sep attn: %{customdata[0]:.1f}%<extra>head %{fullData.name}</extra>")
-    # %{color}
 
 # Create the initial heatmap
-update(1, update_title=True)
+update(1)
 
 # Create frames for each position
 frames = [go.Frame(
