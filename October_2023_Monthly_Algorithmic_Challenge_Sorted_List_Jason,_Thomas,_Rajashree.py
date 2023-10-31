@@ -1647,6 +1647,58 @@ slacks_3way = compute_slack_3way_reduced(model)
 
 #     fig.show()
 
+# %%
+@torch.no_grad()
+def calculate_correct_minimum_lower_bound_3way(model, sep_pos=dataset.list_len, slacks_3way=None):
+    count = 0
+    if slacks_3way is None: slacks_3way = compute_slack_3way_reduced(model, sep_pos=sep_pos, good_head_max_num_min=sep_pos-2, good_head_max_num_nonmin1=sep_pos-2)
+    # (num_min, num_nonmin1, n_heads, d_vocab_min, d_vocab_nonmin1, d_vocab_nonmin2)
+    slacks_3way = (slacks_3way < 0)
+    for min_token_copies in tqdm(range(1, sep_pos)):
+        slack = compute_slack_reduced(model, good_head_num_min=min_token_copies, sep_pos=sep_pos)
+        # (n_heads, d_vocab_min, d_vocab_nonmin)
+        # find where we have slack
+        slack = (slack < 0)
+        for mintok in range(slack.shape[1]):
+            # count the number of sequences with the specified number of copies of mintok and with other tokens drawn from the values where we have slack
+            # we reduce along heads to find out which head permits us the most values with slack;
+            # since the proof of convexity only works when we fix which head we're analyzing, we can't union permissible values across heads
+            n_allowed_values, maxhead = slack[:, mintok, mintok+1:].sum(dim=-1).max(dim=0)
+            n_allowed_values = n_allowed_values.item()
+            if n_allowed_values > 0:
+                count += math.comb(sep_pos, min_token_copies) * n_allowed_values ** (sep_pos - min_token_copies)
+                for nonmin_token1_copies in range(1, sep_pos - min_token_copies):
+                    # find all disallowed values which have enough slack on all allowed values as the nonmintok2
+                    cur_3way_slack = slacks_3way[min_token_copies - 1, nonmin_token1_copies - 1, :, mintok, mintok+1:, mintok+1:]
+                    # (head, d_vocab_nonmin1, d_vocab_nonmin2)
+                    # subset the 3-way slack values to the ones where mintok1 is a token without enough (2-way) slack, and consider the cases where it does have enough (3-way) slack on all tokens with enough 2-way slack
+                    # pytorch slicing is arcane; we want cur_3way_slack[:, ~slack[maxhead, mintok, mintok+1:], slack[maxhead, mintok, mintok+1:]], but this is not how pytorch does boolean slicing (which can only produce flat tensors), and we need to broadcast tensor int indices
+                    cur_3way_slack = cur_3way_slack[torch.arange(0, cur_3way_slack.shape[0], device=cur_3way_slack.device)[:, None, None],
+                                                    torch.arange(0, cur_3way_slack.shape[1], device=cur_3way_slack.device)[~slack[maxhead, mintok, mintok+1:]][None, :, None],
+                                                    torch.arange(0, cur_3way_slack.shape[2], device=cur_3way_slack.device)[slack[maxhead, mintok, mintok+1:]][None, None, :]].all(dim=-1)
+                    # (head, d_vocab_nonmin1)
+                    # count how many tokens for nonmintok1 have enough slack in this way
+                    n_allowed_nonmintok1_values = cur_3way_slack.sum(dim=-1).max().item()
+                    if n_allowed_nonmintok1_values > 0:
+                        count += math.comb(sep_pos, min_token_copies) * math.comb(sep_pos - min_token_copies, nonmin_token1_copies) * n_allowed_nonmintok1_values ** nonmin_token1_copies * n_allowed_values ** (sep_pos - min_token_copies - nonmin_token1_copies)
+        if min_token_copies == sep_pos - 1:
+            # add in the diagonal on this last round
+            count += slack.any(dim=0).diagonal(dim1=-2, dim2=-1).sum().item()
+
+    return count
+
+@torch.no_grad()
+def calculate_correct_minimum_lower_bound_fraction_3way(model, sep_pos=dataset.list_len, **kwargs):
+    total_sequences = (model.cfg.d_vocab - 1) ** sep_pos
+    return calculate_correct_minimum_lower_bound_3way(model, sep_pos=sep_pos, **kwargs) / total_sequences
+
+# # %%
+# slacks_3way = compute_slack_3way_reduced(model)
+# # %%
+# print(f"Assuming no errors in our argument, we can now prove that the model computes the correct minimum of the sequence in at least {calculate_correct_minimum_lower_bound(model)} cases ({100 * calculate_correct_minimum_lower_bound_fraction_3way(model, slacks_3way=slacks_3way):.1f}% of the sequences).")
+# %%
+print(f"Assuming no errors in our argument, we can now prove that the model computes the correct minimum of the sequence in at least {calculate_correct_minimum_lower_bound(model)} cases ({100 * calculate_correct_minimum_lower_bound_fraction_3way(model):.1f}% of the sequences).")
+
 
 # # %%
 # import sys
