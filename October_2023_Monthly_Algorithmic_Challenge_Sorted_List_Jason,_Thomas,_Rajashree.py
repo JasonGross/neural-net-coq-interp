@@ -472,16 +472,7 @@ def compute_attention_patterns(model, sep_pos=dataset.list_len, nanify_impossibl
     attn_scores[:, 1, :, :, num_min:-1] = rearrange(attn_all[:, :num_nonmin, :, None], 'h kpos ktoknonmin ktokmin -> h ktokmin ktoknonmin kpos')
 
     # compute softmax
-    # first subtract off the max to avoid overflow
-    attn_scores = attn_scores - attn_scores.max(dim=-1, keepdim=True).values
-    # exponentiate
-    attn_pattern_expanded = attn_scores.exp()
-    # for min = nonmin, move all attention to min
-    for mintok in range(d_vocab):
-        attn_pattern_expanded[:, :, mintok, mintok, 0] *= sep_pos
-        attn_pattern_expanded[:, :, mintok, mintok, 1:-1] = 0
-    # divide by the sum to get the softmax
-    attn_pattern_expanded = attn_pattern_expanded / attn_pattern_expanded.sum(dim=-1, keepdim=True)
+    attn_pattern_expanded = attn_scores.softmax(dim=-1)
 
     # remove rows corresponding to impossible non-min tokens
     if nanify_impossible_nonmin:
@@ -493,7 +484,126 @@ def compute_attention_patterns(model, sep_pos=dataset.list_len, nanify_impossibl
     attn_pattern[:, :, :, :, 1] = attn_pattern_expanded[:, :, :, :, num_min:-1].sum(dim=-1)
     attn_pattern[:, :, :, :, 2] = attn_pattern_expanded[:, :, :, :, -1]
 
+    # for min = nonmin, move all attention to min
+    for mintok in range(d_vocab):
+        attn_pattern[:, :, mintok, mintok, 0] += attn_pattern[:, :, mintok, mintok, 1]
+        attn_pattern[:, :, mintok, mintok, 1] = 0
+
     return attn_pattern
+# %%
+@torch.no_grad()
+def compute_3way_attention_patterns(model, sep_pos=dataset.list_len, nanify_impossible_nonmin=True, num_min=1, num_nonmin1=1, attn_all=None, attn_all_outdim=None):
+    '''
+    returns post-softmax attention paid to the minimum token, two nonminimum tokens, and to the sep token
+    in shape (head, 3, 2, mintok, nonmintok1, nonmintok2, 4)
+
+    The 3, 2 is for the permutations of attention ordering by position, min vs nonmin1 vs nonmin2 in the lowest attention positions, and then which of the remaining two is in the highest attention position.
+    The 4 is for mintok, nonmintok1, nonmintok2, and sep
+    '''
+    desired_attn_all_outdim = 'h qpos kpos qtok ktok'
+    if attn_all is None:
+        return compute_3way_attention_patterns(
+            model, sep_pos=sep_pos, nanify_impossible_nonmin=nanify_impossible_nonmin, num_min=num_min, num_nonmin1=num_nonmin1,
+            attn_all=compute_attn_all(model, outdim=desired_attn_all_outdim, nanify_sep_loc=sep_pos), attn_all_outdim=desired_attn_all_outdim)
+    assert attn_all_outdim is not None
+    attn_all = rearrange(attn_all, f'{attn_all_outdim} -> {desired_attn_all_outdim}')
+    n_heads, _, _, d_vocab, _ = attn_all.shape
+    d_vocab -= 1 # remove sep token
+    num_nonmin2 = sep_pos - num_min
+    attn_all = attn_all[:, sep_pos, :sep_pos+1, -1, :]
+    # (h, kpos, ktok)
+    # scores is presoftmax
+    attn_scores = t.zeros((n_heads, 3, 2, d_vocab, d_vocab, d_vocab, sep_pos+1), device=attn_all.device)
+    # set attention paid to sep token
+    attn_scores[:, :, :, :, :, :, -1] = attn_all[:, None, None, None, None, None, -1, -1]
+    # remove sep token
+    attn_all = attn_all[:, :-1, :-1]
+    # sort attn_all along dim=1
+    attn_all, _ = attn_all.sort(dim=1)
+    # set min attention paid to min token across all positions
+    attn_scores[:, 0, :, :, :, :, :num_min] = rearrange(attn_all[:, :num_min, :, None, None, None], 'h kpos ktokmin ktoknonmin1 ktoknonmin2 minpos -> h minpos ktokmin ktoknonmin1 ktoknonmin2 kpos')
+    # set max attention paid to min token across all positions
+    attn_scores[:, 1:, 0, :, :, :, :num_min] = rearrange(attn_all[:, -num_min:, :, None, None, None], 'h kpos ktokmin ktoknonmin1 ktoknonmin2 minpos -> h minpos ktokmin ktoknonmin1 ktoknonmin2 kpos')
+    # set middle attention paid to min token across all positions
+    attn_scores[:, 1, 1, :, :, :, :num_min] = rearrange(attn_all[:, num_nonmin1:num_nonmin1+num_min, :, None, None], 'h kpos ktokmin ktoknonmin1 ktoknonmin2 -> h ktokmin ktoknonmin1 ktoknonmin2 kpos')
+    attn_scores[:, 2, 1, :, :, :, :num_min] = rearrange(attn_all[:, -(num_nonmin1+num_min):-num_nonmin1, :, None, None], 'h kpos ktokmin ktoknonmin1 ktoknonmin2 -> h ktokmin ktoknonmin1 ktoknonmin2 kpos')
+
+    # set min attention paid to nonmin2 token across all positions
+    attn_scores[:, -1, :, :, :, :, -(num_nonmin2+1):-1] = rearrange(attn_all[:, :num_nonmin2, :, None, None, None], 'h kpos ktoknonmin2 ktokmin ktoknonmin1 minpos -> h minpos ktokmin ktoknonmin1 ktoknonmin2 kpos')
+    # set max attention paid to nonmin2 token across all positions
+    attn_scores[:, :-1, -1, :, :, :, -(num_nonmin2+1):-1] = rearrange(attn_all[:, -num_nonmin2:, :, None, None, None], 'h kpos ktoknonmin2 ktokmin ktoknonmin1 minpos -> h minpos ktokmin ktoknonmin1 ktoknonmin2 kpos')
+    # set middle attention paid to nonmin2 token across all positions
+    attn_scores[:, 0, 0, :, :, :, -(num_nonmin2+1):-1] = rearrange(attn_all[:, num_min:num_min+num_nonmin2, :, None, None], 'h kpos ktoknonmin2 ktokmin ktoknonmin1 -> h ktokmin ktoknonmin1 ktoknonmin2 kpos')
+    attn_scores[:, 1, 0, :, :, :, -(num_nonmin2+1):-1] = rearrange(attn_all[:, -(num_min+num_nonmin2):-num_min, :, None, None], 'h kpos ktoknonmin2 ktokmin ktoknonmin1 -> h ktokmin ktoknonmin1 ktoknonmin2 kpos')
+
+    # set min attention paid to nonmin1 token across all positions
+    attn_scores[:, -1, :, :, :, :, num_min:num_min+num_nonmin1] = rearrange(attn_all[:, :num_nonmin1, :, None, None, None], 'h kpos ktoknonmin1 ktokmin ktoknonmin2 minpos -> h minpos ktokmin ktoknonmin1 ktoknonmin2 kpos')
+    # set max attention paid to nonmin1 token across all positions
+    attn_scores[:, :-1, -1, :, :, :, num_min:num_min+num_nonmin1] = rearrange(attn_all[:, -num_nonmin1:, :, None, None, None], 'h kpos ktoknonmin1 ktokmin ktoknonmin2 minpos -> h minpos ktokmin ktoknonmin1 ktoknonmin2 kpos')
+    # set middle attention paid to nonmin1 token across all positions
+    attn_scores[:, 0, 1, :, :, :, num_min:num_min+num_nonmin1] = rearrange(attn_all[:, num_min:num_min+num_nonmin1, :, None, None], 'h kpos ktoknonmin1 ktokmin ktoknonmin2 -> h ktokmin ktoknonmin1 ktoknonmin2 kpos')
+    attn_scores[:, -1, 0, :, :, :, num_min:num_min+num_nonmin1] = rearrange(attn_all[:, -(num_min+num_nonmin1):-num_min, :, None, None], 'h kpos ktoknonmin1 ktokmin ktoknonmin2 -> h ktokmin ktoknonmin1 ktoknonmin2 kpos')
+
+    # compute softmax
+    attn_pattern_expanded = attn_scores.softmax(dim=-1)
+
+    # remove rows corresponding to impossible non-min tokens
+    if nanify_impossible_nonmin:
+        for mintok in range(d_vocab):
+            attn_pattern_expanded[:, :, :, mintok, :mintok, :, :] = float('nan')
+            attn_pattern_expanded[:, :, :, mintok, :, :mintok, :] = float('nan')
+
+    attn_pattern = t.zeros((n_heads, 3, 2, d_vocab, d_vocab, d_vocab, 4), device=attn_all.device)
+    attn_pattern[:, :, :, :, :, :, 0] = attn_pattern_expanded[:, :, :, :, :, :, :num_min].sum(dim=-1)
+    attn_pattern[:, :, :, :, :, :, 1] = attn_pattern_expanded[:, :, :, :, :, :, num_min:num_min+num_nonmin1].sum(dim=-1)
+    attn_pattern[:, :, :, :, :, :, 2] = attn_pattern_expanded[:, :, :, :, :, :, num_min+num_nonmin1:-1].sum(dim=-1)
+    attn_pattern[:, :, :, :, :, :, 3] = attn_pattern_expanded[:, :, :, :, :, :, -1]
+
+    # remove rows corresponding to impossible non-min tokens
+    if nanify_impossible_nonmin:
+        for mintok in range(d_vocab):
+            attn_pattern_expanded[:, :, :, mintok, :mintok, :, :] = float('nan')
+            attn_pattern_expanded[:, :, :, mintok, :, :mintok, :] = float('nan')
+
+    for mintok in range(d_vocab):
+        # for min = nonmin1, move all attention to min
+        attn_pattern[:, :, :, mintok, mintok, :, 0] += attn_pattern[:, :, :, mintok, mintok, :, 1]
+        attn_pattern[:, :, :, mintok, mintok, :, 1] = 0
+        # for min = nonmin2, move all attention to min
+        attn_pattern[:, :, :, mintok, :, mintok, 0] += attn_pattern[:, :, :, mintok, :, mintok, 2]
+        attn_pattern[:, :, :, mintok, :, mintok, 2] = 0
+        # for nonmin1 = nonmin2, move all attention to nonmin1
+        attn_pattern[:, :, :, :, mintok, mintok, 1] += attn_pattern[:, :, :, :, mintok, mintok, 2]
+        attn_pattern[:, :, :, :, mintok, mintok, 2] = 0
+
+    return attn_pattern
+
+@torch.no_grad()
+def compute_3way_attention_patterns_all_counts(model, sep_pos=dataset.list_len, nanify_impossible_nonmin=True, max_num_min=dataset.list_len-2, max_num_nonmin1=dataset.list_len-2, attn_all=None, attn_all_outdim='h qpos kpos qtok ktok'):
+    '''
+    returns post-softmax attention paid to the minimum token, two nonminimum tokens, and to the sep token
+    in shape (num_min, num_nonmin1, head, 3, 2, mintok, nonmintok1, nonmintok2, 4)
+
+    The 3, 2 is for the permutations of attention ordering by position, min vs nonmin1 vs nonmin2 in the lowest attention positions, and then which of the remaining two is in the highest attention position.
+    The 4 is for mintok, nonmintok1, nonmintok2, and sep
+    '''
+    if attn_all is None:
+        return compute_3way_attention_patterns_all_counts(
+            model, sep_pos=sep_pos, nanify_impossible_nonmin=nanify_impossible_nonmin, max_num_min=max_num_min, max_num_nonmin1=max_num_nonmin1,
+            attn_all=compute_attn_all(model, outdim=attn_all_outdim, nanify_sep_loc=sep_pos), attn_all_outdim=attn_all_outdim)
+
+    n_heads, _, _, d_vocab, _ = attn_all.shape
+    d_vocab -= 1 # remove sep token
+    default = t.zeros((n_heads, 3, 2, d_vocab, d_vocab, d_vocab, 4), device=attn_all.device)
+    default[...] = float('nan')
+
+    return torch.stack([torch.stack([
+        compute_3way_attention_patterns(model, sep_pos=sep_pos, nanify_impossible_nonmin=nanify_impossible_nonmin, num_min=num_min, num_nonmin1=num_nonmin1, attn_all=attn_all, attn_all_outdim=attn_all_outdim)
+        if num_min + num_nonmin1 + 1 <= sep_pos else default
+        for num_nonmin1 in range(1, max_num_nonmin1+1)
+    ], dim=0)
+    for num_min in range(1, max_num_min+1)], dim=0) # tqdm
+
 # %%
 @torch.no_grad()
 def compute_EPVOU(model, nanify_sep_position=dataset.list_len):
@@ -1310,6 +1420,263 @@ print(f"Assuming no errors in our argument, we can prove that the model computes
 # Recaping: We found that head 1 does positive copying on numbers outside of 25--39.  For numbers below 20, head 1 frequently manages to pay most attention to the smallest number.  Since fewer than 1% of sequences have a minimum above 19, we largely neglect the behavior on sequences with large minima.  We compute for each head the largest logit gap between the actual minima and any other logit, separately for each number of copies of the minimum token.  We then compute the worst-case behavior of the other heads.  We pessimize over position, which mostly does not matter.  We folded the computation of skip connection into the computation of the attention head.  We made a convexity argument that, as long as we consider each head's behavior independently, we can restrict our attention to sequences with at most two distinct tokens and still bound the behavior of other sequences.
 #
 # Although we don't do a more in-depth analysis of the prediction of the first token for the October challenge, we (Jason Gross and Rajashree Agrwal, and Thomas Kwa) are working on a project involving more deeply anlyzing the behavior of even smaller models (1 attention head, no layer norm, only computing the maximum of a list) in more detail, with proofs formalized in the proof assistant Coq.  We're in the process of writing up preliminary results, including connections with heuristic arguments, and hope to post on LessWrong and/or the Alignment Forum soon.  Keep an eye out!
+
+# %% [markdown]
+# ## More fine-grained analysis of first token prediction
+#
+# We currently are making very loose approximations when the model outputs the wrong minimum on $n$ copies of the minimum and $10 - n$ copies of some non-minimum token; we throw away all sequences that contain any copies of that token.  For example, the model outputs the wrong minimum for `[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]`:
+
+# %%
+print(f"The model predicts {model(t.tensor([0] + [1] * (dataset.list_len - 1) + [len(dataset.vocab) - 1] + [0] + [1] * (dataset.list_len - 1))).argmax(dim=-1)[0, dataset.list_len].item()} instead of 0.")
+
+# %% [markdown]
+# But then we throw away all sequences that contain a 0, any number of 1s, and any other non-zero numbers!  But the model predicts the minimum correctly for many of these!
+
+# %%
+n_samples = 10000
+sequences = torch.randint(2, len(dataset.vocab) - 2, (n_samples, dataset.list_len))
+zero_idxs = torch.randint(0, dataset.list_len - 1, (n_samples,))
+one_idxs = (zero_idxs + torch.randint(1, dataset.list_len - 1, (n_samples,))) % dataset.list_len
+sequences[torch.arange(n_samples), zero_idxs], sequences[torch.arange(n_samples), one_idxs] = 0, 1
+sorted_sequences, _ = sequences.sort(dim=-1)
+# add sep
+sequences = torch.cat([sequences, torch.full((n_samples, 1), len(dataset.vocab) - 1, dtype=torch.long), sorted_sequences], dim=-1)
+# compute predictions
+predictions = model(sequences)[:, dataset.list_len, :].argmax(dim=-1)
+print(f"The model gets a {(predictions == 0).float().mean().item() * 100}% correct predictions of the minimum from a random sample of {n_samples} sequences with one 0, one 1, and the remainder of numbers above 2.")
+
+# %% [markdown]
+# So we can do much better.
+#
+# For each count of copies of the minimum, for each minimum token, we can divide the remaining token values into ones that are okay to have all copies of, and ones that are not.  Then we can consider each number of copies of each token that is not okay to have all copies of, and compute which other tokens it's okay to to fill the remainder of the sequence with.  We can then attempt to use this to compute the fraction of sequences that the model gets correct.
+
+# %%
+@torch.no_grad()
+def compute_worst_OV_3way_shared_data(model, sep_pos=dataset.list_len, max_num_min=dataset.list_len-2, max_num_nonmin1=dataset.list_len-2):
+    EPVOU_EUPU = compute_EPVOU_EUPU(model, nanify_sep_position=sep_pos, qtok=-1, qpos=sep_pos)
+    # (head, pos, input, output)
+    EPVOU_EUPU_sep = EPVOU_EUPU[:, sep_pos, -1, :]
+    EPVOU_EUPU = EPVOU_EUPU[:, :sep_pos, :-1, :]
+    attn_patterns = compute_3way_attention_patterns_all_counts(model, sep_pos=sep_pos, max_num_min=max_num_min, max_num_nonmin1=max_num_nonmin1)
+    # (num_min, num_nonmin1, head, 3, 2, mintok, nonmintok1, nonmintok2, 4)
+    # The 3, 2 is for the permutations of attention ordering by position, min vs nonmin1 vs nonmin2 in the lowest attention positions, and then which of the remaining two is in the highest attention position.
+    # The 4 is for mintok, nonmintok1, nonmintok2, and sep
+    return EPVOU_EUPU, EPVOU_EUPU_sep, attn_patterns
+
+@torch.no_grad()
+def compute_worst_OV_3way(model, mintok, sep_pos=dataset.list_len, max_num_min=dataset.list_len-2, max_num_nonmin1=dataset.list_len-2, EPVOU_EUPU=None, EPVOU_EUPU_sep=None, attn_patterns=None):
+    '''
+    returns (num_min, num_nonmin1, n_heads, d_vocab_nonmin1, d_vocab_nonmin2, d_vocab_out)
+    '''
+    if EPVOU_EUPU is None or EPVOU_EUPU_sep is None or attn_patterns is None:
+        EPVOU_EUPU, EPVOU_EUPU_sep, attn_patterns = compute_worst_OV_3way_shared_data(model, sep_pos=sep_pos, max_num_min=max_num_min, max_num_nonmin1=max_num_nonmin1)
+        return compute_worst_OV_3way(model, mintok, sep_pos=sep_pos, max_num_min=max_num_min, max_num_nonmin1=max_num_nonmin1, EPVOU_EUPU=EPVOU_EUPU, EPVOU_EUPU_sep=EPVOU_EUPU_sep, attn_patterns=attn_patterns)
+
+    results = t.zeros(tuple(list(attn_patterns.shape[:-4]) + list(attn_patterns.shape[-3:-1]) + [model.cfg.d_vocab_out]), device=attn_patterns.device)
+    # center on the logit for the minimum token
+    cur_EPVOU_EUPU = EPVOU_EUPU - EPVOU_EUPU[:, :, :, mintok].unsqueeze(dim=-1)
+    # (head, pos, input, output)
+    # reduce along position, since they're all nearly identical
+    cur_EPVOU_EUPU = cur_EPVOU_EUPU.max(dim=1).values
+    # (head, input, output)
+
+    cur_EPVOU_EUPU_sep = EPVOU_EUPU_sep - EPVOU_EUPU_sep[:, mintok].unsqueeze(dim=-1)
+    # (head, output)
+
+    cur_attn_patterns = attn_patterns[:, :, :, :, :, mintok, :, :, :]
+    # (num_min, num_nommin, head, 3, 2, nonmintok1, nonmintok2, 4)
+
+    results = \
+        einsum(cur_attn_patterns[..., 0], cur_EPVOU_EUPU[:, mintok, :],
+                "num_min num_nonmin head mini maxi nonmintok1 nonmintok2, head output -> num_min num_nonmin head mini maxi nonmintok1 nonmintok2 output") \
+        + einsum(cur_attn_patterns[..., 1], cur_EPVOU_EUPU,
+                "num_min num_nonmin head mini maxi nonmintok1 nonmintok2, head nonmintok1 output -> num_min num_nonmin head mini maxi nonmintok1 nonmintok2 output") \
+        + einsum(cur_attn_patterns[..., 2], cur_EPVOU_EUPU,
+                "num_min num_nonmin head mini maxi nonmintok1 nonmintok2, head nonmintok2 output -> num_min num_nonmin head mini maxi nonmintok1 nonmintok2 output") \
+        + einsum(cur_attn_patterns[..., -1], cur_EPVOU_EUPU_sep,
+                "num_min num_nonmin head mini maxi nonmintok1 nonmintok2, head output -> num_min num_nonmin head mini maxi nonmintok1 nonmintok2 output")
+    # re-center on output logit for minimum token
+    results -= results[:, :, :, :, :, :, :, mintok].unsqueeze(dim=-1)
+
+    return reduce(results, "num_min num_nonmin head mini maxi nonmintok1 nonmintok2 output -> num_min num_nonmin head nonmintok1 nonmintok2 output", reduction="max")
+
+@torch.no_grad()
+def compute_slack_3way_reduced(model, good_head_max_num_min=dataset.list_len-2, good_head_max_num_nonmin1=dataset.list_len-2, **kwargs):
+    '''
+    returns (num_min, num_nonmin1, n_heads, d_vocab_min, d_vocab_nonmin1, d_vocab_nonmin2)
+    '''
+    # we consider the worst behavior of the bad heads with only one copy of the minimum (except for the diagonal, which has the maximum number of copies)
+    worst_OV = compute_worst_OV(model, num_min=1, **kwargs)
+    # (n_heads, d_vocab_min, d_vocab_nonmin, d_vocab_out)
+
+    results = []
+    EPVOU_EUPU, EPVOU_EUPU_sep, attn_patterns = compute_worst_OV_3way_shared_data(model, max_num_min=good_head_max_num_min, max_num_nonmin1=good_head_max_num_nonmin1, **kwargs)
+
+    for mintok in tqdm(range(worst_OV.shape[1])):
+        # for the good head, we pass in the number of copies of the minimum token
+        worst_OV_good = compute_worst_OV_3way(model, mintok, max_num_min=good_head_max_num_min, max_num_nonmin1=good_head_max_num_nonmin1, EPVOU_EUPU=EPVOU_EUPU, EPVOU_EUPU_sep=EPVOU_EUPU_sep, **kwargs)
+
+        # (num_min, num_nonmin1, n_heads, d_vocab_nonmin1, d_vocab_nonmin2, d_vocab_out)
+        cur_results = worst_OV_good.clone()
+        for good_head in range(worst_OV.shape[0]):
+            # reduce along nonmin tokens in other heads and add them in
+            other_worst_OV = torch.cat((worst_OV[:good_head], worst_OV[good_head+1:]), dim=0)
+            # (n_heads, d_vocab_min, d_vocab_nonmin, d_vocab_out)
+
+            # # assert centered 1
+            # test_slack = cur_results[:, :, good_head, :, :, mintok]
+            # test_slack = test_slack[~test_slack.isnan()]
+            # assert (test_slack == 0).all(), f"cur_results 1 (good_head={good_head}): {test_slack.max().item()}"
+
+            # # assert centered other
+            # test_slack = other_worst_OV[:, mintok, mintok:, mintok]
+            # test_slack = test_slack[~test_slack.isnan()]
+            # assert (test_slack == 0).all(), f"other_worst_OV: {test_slack.max().item()}"
+
+            cur_results[:, :, good_head] += \
+                reduce(other_worst_OV[:, mintok, mintok:, :],
+                    "head nonmintok output -> head () () () () output", reduction="max").sum(dim=0)
+
+        # assert centered
+        test_slack = cur_results[:, :, :, :, :, mintok]
+        test_slack = test_slack[~test_slack.isnan()]
+        assert (test_slack == 0).all(), f"cur_results: {test_slack.max().item()}"
+
+        # set diagonal to min to avoid including the logit of the min in the worst non-min logit
+        cur_results[:, :, :, :, :, mintok] = cur_results[:, :, :, :, :, :].min(dim=-1).values
+
+        results.append(cur_results.max(dim=-1).values)
+    return torch.stack(results, dim=3)
+
+# %%
+slacks_3way = compute_slack_3way_reduced(model)
+# (num_min, num_nonmin1, n_heads, d_vocab_min, d_vocab_nonmin1, d_vocab_nonmin2)
+# %%
+# XXX TODO Figure out visualization https://stackoverflow.com/questions/77392813/how-do-i-make-interacting-updates-in-plotly
+# zmax = slacks_3way[~slacks_3way.isnan()].abs().max().item()
+# # negate for coloring
+# slacks_3way_sign = slacks_3way.sign()
+# slacks_3way_full = -utils.to_numpy(slacks_3way)
+# slacks_3way_sign = -utils.to_numpy(slacks_3way_sign)
+
+# all_tickvals_text = list(enumerate(dataset.vocab[:-1]))
+# tickvals_indices = list(range(0, len(all_tickvals_text) - 1, 10)) + [len(all_tickvals_text) - 1]
+# tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
+# tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
+
+# for slacks_kind in (slacks_3way_full, slacks_3way_sign):
+#     fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=[f"slack on head {h}" for h in range(model.cfg.n_heads)])
+#     fig.update_layout(title=f"Slack (positive for either head ⇒ model is correct)")
+
+#     def make_update(h, num_min, num_nonmin1, mintok, showscale=True):
+#         cur_slack = slacks_kind[num_min - 1, num_nonmin1 - 1, h, mintok]
+#         return go.Heatmap(z=cur_slack, colorscale='RdBu', zmin=-zmax, zmax=zmax, showscale=showscale)
+
+#     def update(num_min, num_nonmin1, mintok):
+#         fig.data = []
+#         for h in range(model.cfg.n_heads):
+#             col, row = h+1, 1
+#             fig.add_trace(make_update(h, num_min, num_nonmin1, mintok), col=col, row=row)
+#             fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', col=col, row=row, title_text="non-min tok 2") #, title_text="Output Logit Token"
+#             fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, col=col, row=row, title_text="non min tok 1")
+#         fig.update_traces(hovertemplate="Non-min token 1: %{y}<br>Non-min token 2: %{x}<br>Slack: %{z}<extra>head %{fullData.name}</extra>")
+
+#     # Create the initial heatmap
+#     update(1, 1, 0)
+
+#     # Create frames for each combination of mintok, num_min, and num_nonmin1
+#     frames = [go.Frame(
+#         data=[make_update(h, num_min, num_nonmin1, mintok) for h in range(model.cfg.n_heads)],
+#         name=f"{num_min}-{num_nonmin1}-{mintok}"
+#     ) for num_min in range(1, dataset.list_len - 1) for num_nonmin1 in range(1, dataset.list_len - 1) for mintok in range(len(dataset.vocab[:-1]))]
+
+#     fig.frames = frames
+
+#     # Create three sliders
+#     sliders = [
+#         # Slider for num_min
+#         dict(
+#             active=0,
+#             yanchor='top',
+#             xanchor='left',
+#             currentvalue=dict(font=dict(size=20), prefix='# copies of min token:', visible=True, xanchor='right'),
+#             transition=dict(duration=0),
+#             pad=dict(b=10, t=50),
+#             len=0.3,
+#             x=0.1,
+#             y=0,
+#             steps=[dict(args=[[f"{num_min}-{num_nonmin1}-{mintok}"], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
+#                         method='animate',
+#                         label=str(num_min)) for num_min, num_nonmin1, mintok, frame in enumerate(fig.frames) if num_min == mintok]
+#         ),
+#         # Slider for num_nonmin1
+#         dict(
+#             active=0,
+#             yanchor='top',
+#             xanchor='left',
+#             currentvalue=dict(font=dict(size=20), prefix='Num nonmin1:', visible=True, xanchor='right'),
+#             transition=dict(duration=0),
+#             pad=dict(b=10, t=150),
+#             len=0.3,
+#             x=0.1,
+#             y=0.4,
+#             steps=[dict(args=[[f"{num_min}-{num_nonmin1}-{mintok}"], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
+#                         method='animate',
+#                         label=str(num_nonmin1)) for num_min, num_nonmin1, mintok, frame in enumerate(fig.frames) if num_nonmin1 == mintok]
+#         ),
+#         # Slider for mintok
+#         dict(
+#             active=0,
+#             yanchor='top',
+#             xanchor='left',
+#             currentvalue=dict(font=dict(size=20), prefix='Mintok:', visible=True, xanchor='right'),
+#             transition=dict(duration=0),
+#             pad=dict(b=10, t=250),
+#             len=0.3,
+#             x=0.1,
+#             y=0.8,
+#             steps=[dict(args=[[f"{num_min}-{num_nonmin1}-{mintok}"], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
+#                         method='animate',
+#                         label=str(mintok)) for num_min, num_nonmin1, mintok, frame in enumerate(fig.frames)]
+#         )
+#     ]
+
+#     fig.update_layout(
+#         sliders=sliders
+#     )
+
+#     fig.show()
+
+
+# # %%
+# import sys
+# def sizeof_fmt(num, suffix='B'):
+#     ''' by Fred Cirera,  https://stackoverflow.com/a/1094933/1870254, modified'''
+#     for unit in ['','Ki','Mi','Gi','Ti','Pi','Ei','Zi']:
+#         if abs(num) < 1024.0:
+#             return "%3.1f %s%s" % (num, unit, suffix)
+#         num /= 1024.0
+#     return "%.1f %s%s" % (num, 'Yi', suffix)
+
+# for name, size in sorted(((name, sys.getsizeof(value)) for name, value in list(
+#                           locals().items())), key= lambda x: -x[1])[:100]:
+#     print("{:>30}: {:>8}".format(name, sizeof_fmt(size)))
+# # %%
+# import torch
+# import gc
+# def torch_objs():
+#     for obj in gc.get_objects():
+#         try:
+#             if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+#                 yield (obj, type(obj), obj.size(), np.prod(obj.size()), obj.device)
+#         except:
+#             pass
+
+# for obj, obj_type, obj_size, obj_prod, obj_device in sorted([i for i in torch_objs() if 'cuda' in str(i[-1])], key=lambda x: (str(x[-1]), -x[3]))[:100]:
+#     print(obj.name, obj_type, obj_size, obj_prod, obj_device)
+
+# %% [markdown]
+# # OLD STUFF
 
 # %% [markdown]
 # # Analysis of first token prediction with different independence assumptions
