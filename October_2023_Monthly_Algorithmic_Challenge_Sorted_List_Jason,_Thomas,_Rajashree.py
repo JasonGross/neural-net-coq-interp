@@ -370,8 +370,8 @@ import math
 # ## Utils
 
 # %%
-def imshow(tensor, renderer=None, xaxis="", yaxis="", **kwargs):
-    px.imshow(utils.to_numpy(tensor), color_continuous_midpoint=0.0, color_continuous_scale="RdBu", labels={"x":xaxis, "y":yaxis}, **kwargs).show(renderer)
+def imshow(tensor, renderer=None, xaxis="", yaxis="", color_continuous_scale="RdBu", **kwargs):
+    px.imshow(utils.to_numpy(tensor), color_continuous_midpoint=0.0, color_continuous_scale=color_continuous_scale, labels={"x":xaxis, "y":yaxis}, **kwargs).show(renderer)
 
 
 def line(tensor, renderer=None, xaxis="", yaxis="", line_labels=None, **kwargs):
@@ -387,6 +387,12 @@ def scatter(x, y, xaxis="", yaxis="", caxis="", renderer=None, **kwargs):
 def hist(tensor, renderer=None, xaxis="", yaxis="", **kwargs):
     px.histogram(utils.to_numpy(tensor), labels={"x":xaxis, "y":yaxis}, **kwargs).show(renderer)
 
+def make_tickvals_text(step=10, include_lastn=1, skip_lastn=0, dataset=dataset):
+    all_tickvals_text = list(enumerate(dataset.vocab))
+    tickvals_indices = list(range(0, len(all_tickvals_text) - 1 - include_lastn - skip_lastn, step)) + list(range(len(all_tickvals_text) - 1 - include_lastn, len(all_tickvals_text)))
+    tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
+    ticktext = [all_tickvals_text[i][1] for i in tickvals_indices]
+    return tickvals, ticktext
 
 # %% [markdown]
 # # Computation of Matrices (used in both visualization and as a cached computation in proofs)
@@ -645,14 +651,6 @@ def compute_EPVOU_EUPU(model, nanify_sep_position=dataset.list_len, qtok=-1, qpo
     # (pos, input, output)
     return EPVOU + EUPU[qpos, qtok, None, None, None, :] / EPVOU.shape[0]
 
-# %% [markdown]
-# # Exploratory Plots
-#
-# Before diving into the proof, we provide some plots that may help with understanding the above claims.  These are purely exploratory (aimed at hypothesis generation) and are not required for hypothesis validation.
-
-# %% [markdown]
-# ## Initial Layernorm Scaling
-
 # %%
 @torch.no_grad()
 def layernorm_noscale(x: torch.Tensor) -> torch.Tensor:
@@ -665,6 +663,15 @@ def layernorm_scales(x: torch.Tensor, eps: float = 1e-5, recip: bool = True) -> 
     if recip: scale = 1 / scale
     return scale
 
+# %% [markdown]
+# # Exploratory Plots
+#
+# Before diving into the proof, we provide some plots that may help with understanding the above claims.  These are purely exploratory (aimed at hypothesis generation) and are not required for hypothesis validation.
+
+# %% [markdown]
+# ## Initial Layernorm Scaling
+
+
 # %%
 s = layernorm_scales(model.W_pos[:,None,:] + model.W_E[None,:,:])[...,0]
 # the only token in position 10 is SEP
@@ -674,206 +681,127 @@ s[:dataset.list_len, -1:], s[dataset.list_len+1:, -1:] = float('nan'), float('na
 # we don't actually care about the prediction in the last position
 s = s[:-1, :]
 smin = s[~s.isnan()].min()
-s = s / smin
-imshow(s, xaxis="Token Value", x=dataset.vocab, yaxis="Position", title=f"Layer Norm Scaling (multiplied by {smin:.3f})")
+# s = s / smin
+px.imshow(utils.to_numpy(s), color_continuous_scale='Sunsetdark', labels={"x":"Token Value", "y":"Position"}, title=f"Layer Norm Scaling", x=dataset.vocab).show(None)
 
 # %% [markdown]
 # ## Attention Plots
 
 # %%
+# Attention
 attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok', nanify_sep_loc=dataset.list_len)
-fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=("Head 0", "Head 1"))
-fig.update_layout(title="Attention from SEP to other tokens and positions")
-all_tickvals_text = list(enumerate(dataset.vocab))
-tickvals_indices = list(range(0, len(all_tickvals_text) - 2, 10)) + [len(all_tickvals_text) - 2, len(all_tickvals_text) - 1]
-tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
-tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
 attn_subset = attn_all[:, dataset.list_len, :dataset.list_len+1, -1, :]
 zmin, zmax = attn_subset[~attn_subset.isnan()].min().item(), attn_subset[~attn_subset.isnan()].max().item()
+
+fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=("Head 0", "Head 1"))
+fig.update_layout(title="Attention (pre-softmax) from SEP to other tokens and positions")
+tickvals, ticktext = make_tickvals_text(step=10, include_lastn=0, skip_lastn=1, dataset=dataset)
 for h in range(model.cfg.n_heads):
-    fig.add_trace(go.Heatmap(z=utils.to_numpy(attn_subset[h]), colorscale='Viridis', zmin=zmin, zmax=zmax), row=1, col=h+1)
-    fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, title_text="Key Token", row=1, col=h+1)
+    fig.add_trace(go.Heatmap(z=utils.to_numpy(attn_subset[h]), colorscale='Plasma', zmin=zmin, zmax=zmax, hovertemplate="Token: %{x}<br>Position: %{y}<br>Attention: %{z}<extra>Head " + str(h) + "</extra>"), row=1, col=h+1)
+    fig.update_xaxes(tickvals=tickvals, ticktext=ticktext, title_text="Key Token", row=1, col=h+1)
     fig.update_yaxes(title_text="Position of Key", row=1, col=h+1)
 fig.show()
 
-# imshow(attn_all[], cmap='viridis')
-
 # %%
-# Here you may want to determine an appropriate grid size based on the number of plots
-# For example, if you have a total of 12 plots, you might choose a 3x4 grid
-n_rows = 4  # Example value, adjust as needed
-n_cols = dataset.list_len  # Example value, adjust as needed
-
-# Create a figure and a grid of subplots
-fig, ax = plt.subplots(n_rows, n_cols, figsize=(20, 10))
-fig.suptitle(f"Attention from:to")
-# Flatten the 2D axis array to easily iterate over it in a single loop
-ax = ax.flatten()
-
+# Attention Across Positions
 attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok', nanify_sep_loc=dataset.list_len)
+zmax = attn_all[~attn_all.isnan()].max().item()
+zmin = attn_all[~attn_all.isnan()].min().item()
 
 default_attn = t.zeros_like(attn_all[0, 0, 0])
 default_attn[:, :] = float('nan')
-default_attn = default_attn.detach().cpu().numpy()
-for r in range(n_rows):
-    for c in range(n_cols):
-        ax[r * n_rows + c].imshow(default_attn, cmap='viridis')
-        ax[r * n_rows + c].set_title(f"")
+default_attn = utils.to_numpy(default_attn)
 
-def compute_attn_maps(qpos):
-    attn_maps = []
-    for kpos in range(qpos+1):
-        for h in range(2):
-            attn = attn_all[h, qpos, kpos, :, :]
-            attn = attn.detach().cpu().numpy()
+n_cols = 10
+n_rows_per_head = (dataset.seq_len - 1 - 1) // n_cols + 1
+n_rows = n_rows_per_head * model.cfg.n_heads
 
-            attn_maps.append((h, kpos, attn))
-    return attn_maps
+tickvals, ticktext = make_tickvals_text(step=20, include_lastn=0, skip_lastn=0, dataset=dataset)
+
+subplot_titles = []
+for h in range(model.cfg.n_heads):
+    subplot_titles += [f"{h}:{kpos}" for kpos in range(dataset.seq_len - 1)]
+    subplot_titles += ["" for _ in range(dataset.seq_len - 1, n_cols * n_rows_per_head)]
+fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=subplot_titles)
+fig.update_annotations(font_size=5)
+fig.update_layout(title="Attention head:key_position, x=key token, y=query token")
+
+def make_update(qpos, h=None, kpos=None, showscale=False, include_tickvals_ticktext=False):
+    if h is None or kpos is None:
+        return [make_update(qpos, h, kpos, include_tickvals_ticktext=include_tickvals_ticktext) for h in range(model.cfg.n_heads) for kpos in range(n_cols * n_rows_per_head)]
+    cur_attn = attn_all[h, qpos, kpos] if kpos <= qpos else default_attn
+    x = dataset.vocab
+    cur_tickvals, cur_ticktext = tickvals, ticktext
+    if kpos == dataset.list_len:
+        cur_attn = cur_attn[:, -1:]
+        # nan_column = torch.full((cur_attn.shape[0], 1), float('nan'), device=cur_attn.device, dtype=cur_attn.dtype)
+        # cur_attn = torch.cat([nan_column, cur_attn, nan_column], dim=1)
+        # x, cur_tickvals, cur_ticktext = [float('nan'), x[-1], float('nan')], [float('nan'), cur_tickvals[-1], float('nan')], ['', cur_ticktext[-1], '']
+        x, cur_tickvals, cur_ticktext = x[-1:], cur_tickvals[-1:], cur_ticktext[-1:]
+    trace = go.Heatmap(z=utils.to_numpy(cur_attn), colorscale='Plasma', zmin=zmin, zmax=zmax, showscale=showscale, x=x, y=dataset.vocab, hovertemplate="Key: %{x}<br>Query: %{y}<br>Attention: %{z}<extra>" + f"Head {h}<br>Key Pos {kpos}<br>Query Pos {qpos}" + "</extra>")
+    if include_tickvals_ticktext: return trace, cur_tickvals, cur_ticktext
+    return trace
 
 def update(qpos):
-    # Clear previous plots
-    for a in ax:
-        a.clear()
+    fig.data = []
+    for i, (trace, cur_tickvals, cur_ticktext) in enumerate(make_update(qpos, include_tickvals_ticktext=True)):
+        row, col = i // n_cols + 1, i % n_cols + 1
+        fig.add_trace(trace, row=row, col=col)
+        fig.update_xaxes(tickvals=cur_tickvals, ticktext=cur_ticktext, constrain='domain', row=row, col=col, tickfont=dict(size=5), title_font=dict(size=5))
+        fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, row=row, col=col, tickvals=tickvals, ticktext=ticktext, tickfont=dict(size=5), title_font=dict(size=5))
 
-    attn_maps = compute_attn_maps(qpos)
-    fig.suptitle(f"Attention head:key_position, x=key token, y=query token, query position={qpos}")
+# Create the initial heatmap
+update(dataset.seq_len-2)
 
-    for plot_idx, (h, kpos, attn) in enumerate(attn_maps):
-        plot_idx = h * n_cols * 2 + kpos
-            # break
+# Create frames for each position
+frames = [go.Frame(
+    data=make_update(qpos),
+    name=str(qpos)
+) for qpos in range(dataset.list_len+1, dataset.seq_len - 1)]
 
-        # Plot heatmap
-        cax = ax[plot_idx].imshow(attn, cmap='viridis')
+fig.frames = frames
 
-        # Set title and axis labels if desired
-        ax[plot_idx].set_title(f"{h}:{kpos}")
-        # ax[plot_idx].set_xlabel("key tok")
-        # ax[plot_idx].set_ylabel("query tok")
+# # Add animation controls
+# animation_settings = dict(
+#     frame=dict(duration=1000, redraw=True),
+#     fromcurrent=True,
+#     transition=dict(duration=0)
+# )
 
-        # Optionally add a colorbar
-        # plt.colorbar(cax, ax=ax[plot_idx])
+# Create slider
+sliders = [dict(
+    active=len(fig.frames) - 1,
+    yanchor='top',
+    xanchor='left',
+    currentvalue=dict(font=dict(size=20), prefix='Query Position:', visible=True, xanchor='right'),
+    transition=dict(duration=0),
+    pad=dict(b=10, t=50),
+    len=0.9,
+    x=0.1,
+    y=0,
+    steps=[dict(args=[[frame.name], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
+                method='animate',
+                label=frame.name) for frame in fig.frames]
+)]
 
-    plt.tight_layout()
+fig.update_layout(
+    sliders=sliders
+)
 
-# Create animation
-ani = FuncAnimation(fig, update, frames=tqdm(range(dataset.list_len+1, dataset.seq_len-1)), interval=1000)
-# ani = FuncAnimation(fig, update, frames=tqdm(range(dataset.list_len, dataset.list_len+2)))#, interval=1000)
+# fig.update_layout(
+#     updatemenus=[dict(
+#         type='buttons',
+#         showactive=False,
+#         buttons=[dict(label='Play',
+#                       method='animate',
+#                       args=[None, animation_settings])]
+#     )]
+# )
 
-# plt.show()
-HTML(ani.to_jshtml())
-
-# # Counter for the subplot index
-# # plot_idx = 0
-
-# for qpos in range(dataset.list_len, dataset.seq_len-1):
-#     for kpos in range(qpos+1):
-#         for h in range(2):
-#             attn = model.blocks[0].ln1(model.W_pos[qpos,:] + model.W_E) @ model.W_Q[0,h,:,:] @ model.W_K[0,h,:,:].T @ model.blocks[0].ln1(model.W_pos[kpos,:] + model.W_E).T
-#             attn = attn - attn.max(dim=-1, keepdim=True).values
-#             attn = attn.detach().cpu().numpy()
-#             # Check if the counter exceeds the available subplots and create new figure if needed
-#             if plot_idx >= n_rows * n_cols:
-#                 fig, ax = plt.subplots(n_rows, n_cols, figsize=(15, 15))
-#                 ax = ax.flatten()
-#                 plot_idx = 0
-
-#             # Plot heatmap
-#             cax = ax[plot_idx].imshow(attn, cmap='viridis')
-
-#             # Set title and axis labels if desired
-
-#             ax[plot_idx].set_title(f"{h}: {qpos} -> {kpos}")
-#             ax[plot_idx].set_xlabel("key tok")
-#             ax[plot_idx].set_ylabel("query tok")
-
-#             # Optionally add a colorbar
-#             plt.colorbar(cax, ax=ax[plot_idx])
-
-#             # Increment the counter
-#             plot_idx += 1
-
-#             # You might want to save or display the plot here if you're iterating over many subplots
-#             if plot_idx == 0:
-#                 plt.tight_layout()
-#                 plt.show()
+fig.show()
 
 # %% [markdown]
 # ## OV Attention Head Plots
-
-# %%
-n_rows_per_head = 4
-n_rows = n_rows_per_head * model.cfg.n_heads
-n_cols = 1 + (dataset.seq_len - 1) // n_rows_per_head
-subplot_titles = [(f"h{h},p{pos}" if pos < dataset.seq_len - 1 else "") for h in range(model.cfg.n_heads) for pos in range(n_cols * n_rows_per_head)]
-fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=subplot_titles)
-fig.update_annotations(font_size=12)
-# fig.update_layout(
-#     annotations=[
-#         dict(font=dict(size=5))
-#         for _ in subplot_titles
-#     ]
-# )
-fig.update_layout(title="OV Logit Impact: x=Ouput Logit Token, y=Input Token<br>LN_noscale(LN1(W_pos[pos,:] + W_E) @ W_V[0,h] @ W_O[0, h]) @ W_U",
-                  height=800)
-all_tickvals_text = list(enumerate(dataset.vocab))
-tickvals_indices = list(range(0, len(all_tickvals_text) - 1, 20)) + [len(all_tickvals_text) - 1]
-tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
-tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
-
-EPVOU = compute_EPVOU(model, nanify_sep_position=dataset.list_len)
-zmax = EPVOU[~EPVOU.isnan()].abs().max().item()
-EPVOU = utils.to_numpy(EPVOU)
-
-for h in range(model.cfg.n_heads):
-    for i, pos in enumerate(range(dataset.seq_len-1)):
-        r, c = h * n_rows_per_head + i // n_cols, i % n_cols
-        cur_EPVOU = EPVOU[h, pos]
-        if pos == dataset.list_len: cur_EPVOU = cur_EPVOU[-1:, :]
-        fig.add_trace(go.Heatmap(z=utils.to_numpy(cur_EPVOU), colorscale='RdBu', zmin=-zmax, zmax=zmax, showscale=(i==0 and h == 0)), row=r+1, col=c+1)
-        fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', row=r+1, col=c+1) #, title_text="Output Logit Token"
-        if pos == dataset.list_len:
-            fig.update_yaxes(range=[-1,1], row=r+1, col=c+1)
-        else:
-            fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, row=r+1, col=c+1)
-fig.show()
-
-# %%
-EPVOU = compute_EPVOU(model, nanify_sep_position=dataset.list_len)
-zmax = EPVOU[~EPVOU.isnan()].abs().max().item()
-EPVOU = utils.to_numpy(EPVOU)
-
-fig, ax = plt.subplots(1, model.cfg.n_heads, figsize=(20, 10))
-fig.suptitle(f"OV Logit Impact: x=Ouput Logit Token, y=Input Token\nLN_noscale(LN1(W_pos[pos,:] + W_E) @ W_V[0,h] @ W_O[0, h]) @ W_U")
-# Flatten the 2D axis array to easily iterate over it in a single loop
-ax = ax.flatten()
-
-colorbar_added = False
-def update(pos):
-    global colorbar_added
-    # Clear previous plots
-    for a in ax:
-        a.clear()
-
-    fig.suptitle(f"OV Logit Impact: x=Ouput Logit Token, y=Input Token\nLN_noscale(LN1(W_pos[{pos},:] + W_E) @ W_V[0,h] @ W_O[0, h]) @ W_U")
-
-    for h, cur_EPVOU in enumerate(EPVOU[:, pos]):
-        cax = ax[h].imshow(cur_EPVOU, cmap='RdBu', vmin=-zmax, vmax=zmax)
-        ax[h].set_title(f"head {h}")
-        # ax[h].set_xlabel("output tok")
-        # ax[h].set_ylabel("input tok")
-        # Optionally add a colorbar
-        if not colorbar_added:
-            fig.colorbar(cax, ax=ax[h], fraction=0.05, pad=0.05)
-    colorbar_added = True
-
-    # plt.tight_layout()
-
-# Create animation
-ani = FuncAnimation(fig, update, frames=tqdm(range(dataset.seq_len-1)), interval=1000)
-# ani = FuncAnimation(fig, update, frames=tqdm(range(2)))#, interval=1000)
-
-# plt.show()
-HTML(ani.to_jshtml())
 
 # %%
 EPVOU = compute_EPVOU(model, nanify_sep_position=dataset.list_len)
@@ -884,34 +812,38 @@ fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=[f"head {h}" 
 # fig.update_annotations(font_size=12)
 fig.update_layout(title="OV Logit Impact: x=Ouput Logit Token, y=Input Token<br>LN_noscale(LN1(W_pos[pos,:] + W_E) @ W_V[0,h] @ W_O[0, h]) @ W_U")
 
-all_tickvals_text = list(enumerate(dataset.vocab))
-tickvals_indices = list(range(0, len(all_tickvals_text) - 1, 10)) + [len(all_tickvals_text) - 1]
-tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
-tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
+tickvals, ticktext = make_tickvals_text(step=10, include_lastn=0, skip_lastn=1, dataset=dataset)
 
 def make_update(pos, h, adjust_sep=True):
     cur_EPVOU = EPVOU[h, pos]
-    if adjust_sep and pos == dataset.list_len: cur_EPVOU = cur_EPVOU[-1:, :]
-    return go.Heatmap(z=utils.to_numpy(cur_EPVOU), colorscale='RdBu', zmin=-zmax, zmax=zmax, showscale=(h == 0))
+    y = dataset.vocab
+    if adjust_sep and pos == dataset.list_len:
+        cur_EPVOU = cur_EPVOU[-1:, :]
+        y = y[-1:]
+    elif pos != dataset.list_len:
+        cur_EPVOU = cur_EPVOU[:-1, :]
+        y = y[:-1]
+    return go.Heatmap(z=utils.to_numpy(cur_EPVOU), colorscale='Picnic_r', x=dataset.vocab, y=y, zmin=-zmax, zmax=zmax, showscale=(h == 0), hovertemplate="Input Token: %{y}<br>Output Token: %{x}<br>Logit: %{z}<extra>" + f"Head {h}<br>Pos {pos}" + "</extra>")
 
-def update(pos, update_title=True):
+def update(pos):
     fig.data = []
     for h in range(model.cfg.n_heads):
         fig.add_trace(make_update(pos, h), row=1, col=h+1)
-        fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', row=1, col=h+1) #, title_text="Output Logit Token"
+        fig.update_xaxes(constrain='domain', row=1, col=h+1) #, title_text="Output Logit Token"
         if pos == dataset.list_len:
             fig.update_yaxes(range=[-1,1], row=1, col=h+1)
         else:
-            fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, row=1, col=h+1)
-    if update_title: fig.update_layout(title=f"OV Logit Impact: x=Ouput Logit Token, y=Input Token<br>LN_noscale(LN1(W_pos[{pos},:] + W_E) @ W_V[0,h] @ W_O[0, h]) @ W_U")
+            fig.update_yaxes(autorange='reversed', row=1, col=h+1)
 
 # Create the initial heatmap
-update(0, update_title=False)  # Assuming 0 is a valid starting position
+update(0)
 
 # Create frames for each position
 frames = [go.Frame(
-    data=[make_update(pos, h, adjust_sep=False) for h in range(model.cfg.n_heads)],
-    name=str(pos)
+    data=[make_update(pos, h, adjust_sep=True) for h in range(model.cfg.n_heads)],
+    name=str(pos),
+    layout={'yaxis': {'range': ([-1, 1] if pos == dataset.list_len else [len(dataset.vocab)-2, 0])},
+        'yaxis2': {'range': ([-1, 1] if pos == dataset.list_len else [len(dataset.vocab)-2, 0])}},
 ) for pos in range(dataset.seq_len-1)]
 
 fig.frames = frames
@@ -955,10 +887,6 @@ fig.update_layout(
 
 fig.show()
 
-# ani = FuncAnimation(fig, update, frames=tqdm(range(dataset.seq_len-1)), interval=1000)
-
-# HTML(ani.to_jshtml())
-
 # %% [markdown]
 # ## Skip Connection / Residual Stream Plots
 
@@ -966,11 +894,7 @@ fig.show()
 n_rows = 2
 n_cols = 1 + (dataset.list_len - 1) // n_rows
 fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=[f"pos={pos}" for pos in range(dataset.list_len, dataset.seq_len - 1)])
-fig.update_layout(title="Logit Impact from the embedding (without layernorm scaling): LN_noscale(W_pos[pos,:] + W_E) @ W_U, x=Ouput Logit Token, y=Input Token")
-all_tickvals_text = list(enumerate(dataset.vocab))
-tickvals_indices = list(range(0, len(all_tickvals_text) - 2, 10)) + [len(all_tickvals_text) - 2, len(all_tickvals_text) - 1]
-tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
-tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
+fig.update_layout(title="Logit Impact from the embedding (without layernorm scaling)<br>LN_noscale(W_pos[pos,:] + W_E) @ W_U, y=Input, x=Ouput Logit Token")
 
 EUPU = compute_EUPU(model, nanify_sep_position=dataset.list_len)
 zmax = EUPU[~EUPU.isnan()].abs().max().item()
@@ -978,15 +902,20 @@ EUPU = utils.to_numpy(EUPU)
 for i, pos in enumerate(range(dataset.list_len, dataset.seq_len-1)):
     r, c = i // n_cols, i % n_cols
     cur_EUPU = EUPU[pos]
-    if pos == dataset.list_len: cur_EUPU = cur_EUPU[-1:, :]
-    fig.add_trace(go.Heatmap(z=utils.to_numpy(cur_EUPU), colorscale='RdBu', zmin=-zmax, zmax=zmax, showscale=(i==0)), row=r+1, col=c+1)
-    fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', row=r+1, col=c+1) #, title_text="Output Logit Token"
+    y = dataset.vocab
+    if pos == dataset.list_len:
+        cur_EUPU = cur_EUPU[-1:, :]
+        y = y[-1:]
+    else:
+        cur_EUPU = cur_EUPU[:-1, :]
+        y = y[:-1]
+    fig.add_trace(go.Heatmap(z=utils.to_numpy(cur_EUPU), x=dataset.vocab, y=y, colorscale='Picnic_r', zmin=-zmax, zmax=zmax, showscale=(i==0), hovertemplate="Input Token: %{y}<br>Output Token: %{x}<br>Logit: %{z}<extra>" + f"Pos {pos}" + "</extra>"), row=r+1, col=c+1)
+    fig.update_xaxes(constrain='domain', row=r+1, col=c+1) #, title_text="Output Logit Token"
     if pos == dataset.list_len:
         fig.update_yaxes(range=[-1,1], row=r+1, col=c+1)
     else:
         fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, row=r+1, col=c+1)
 fig.show()
-
 
 # %% [markdown]
 # # Finding the Minimum with query SEP in Position 10
