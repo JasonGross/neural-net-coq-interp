@@ -4,16 +4,20 @@
 # %% [markdown]
 # # October 2023 Mechanistic Interpretability Challange: Sorted List
 #
-# The <a href="https://colab.research.google.com/drive/1IygYxp98JGvMRLNmnEbHjEGUBAxBkLeU">problem</a> is to interpret a model which has been trained to sort a list. The model is fed sequences like:```[11, 2, 5, 0, 3, 9, SEP, 0, 2, 3, 5, 9, 11]```and has been trained to predict each element in the sorted list (in other words, the output at the `SEP` token should be a prediction of `0`, the output at `0` should be a prediction of `2`, etc).
+# The <a href="https://colab.research.google.com/drive/1IygYxp98JGvMRLNmnEbHjEGUBAxBkLeU">problem</a> is to interpret a model which has been trained to sort a list. The model is fed sequences like:```[11, 2, 5, 0, 3, 9, SEP, 0, 2, 3, 5, 9, 11]``` and has been trained to predict each element in the sorted list (in other words, the output at the `SEP` token should be a prediction of `0`, the output at `0` should be a prediction of `2`, etc).
 #
 #
-# **TL;DR**: We’re obsessed with the question “what if we gear our interpretability analysis at making formal guarantees about model behavior”. We present a sketch of a formal guarantee that P(model outputs the first token (of ten tokens) correctly) >=  59%. 
+# **TL;DR**: We’re obsessed with the question “what if we gear our interpretability analysis at making formal guarantees about model behavior”. We present a sketch of a formal guarantee that P(model outputs the first token (of ten tokens) correctly) >= 59%. 
 #
 #
 # <img src="https://raw.githubusercontent.com/callummcdougall/computational-thread-art/master/example_images/misc/sorted-problem.png" width="350">
+#
+# Content flow: Our Approach, Set up, Graphs, Proofs, Conclusion.
 
 # %% [markdown]
-# ## Approach
+# # Our Approach
+#
+# ## Introduction
 #
 # Given a model M, and output behavior B that we care about, the standard workflow for mechanistic interpretability goes something like this: 
 #
@@ -26,14 +30,12 @@
 #
 # On the other hand, a formal guarantee is a **precise** statement about M wrt B that can be **verified**. We think that usefulness towards making a formal guarantee can be a metric for evaluating interpretability analyses!
 #
-# The following interpretability analyses are geared towards making guarantees. As usual, we’ll present a hypothesis for how the model works, and gesture at evidence for our hypothesis. Then we’ll identify the computation that would tie up the evidence into a guarantee. Finally, we’ll demonstrate how we iteratively develop our independence relaxations and classifying properties to make stronger guarantees. 
+# The following interpretability analyses are geared towards making guarantees. As usual, we’ll present a hypothesis for how the model works, and gesture at evidence for our hypothesis. Beyond this, we’ll identify the computation that would tie up the evidence into a guarantee. Finally, we’ll demonstrate how we iteratively develop our independence relaxations and classifying properties to make stronger guarantees. 
 #
 # The methodology used here is being developed as a part of a larger project of Jason Gross, Rajashree Agrawal, and Thomas Kwa investigating formalizations of tiny transformers. We’ll publish an in depth analysis soon. This post is a short attempt at applying the methodology for fun.
 
-# %% [markdown]
-# ## Hypothesis
-# The algorithm the transformer seems to run is roughly:
-# **Find the smallest value not smaller than the current token, which hasn't been "cancelled" by an equivalent copy appearing already in the sorted list**
+# ## Initial Hypothesis
+# To start off, the rough algorithm for the model seems to be: find the smallest value not smaller than the current token, which hasn't been "cancelled" by an equivalent copy appearing already in the sorted list
 #
 # Head 0 is mostly doing the cancelling, while head 1 is mostly doing the copying, except for token values around 28--37 where head 0 is doing copying and head 1 is doing nothing.
 #
@@ -42,46 +44,60 @@
 # - The layernorm scaling is fairly uniform at positions on the unsorted list but a bit less uniform on the sorted prefix (after the SEP token)
 # - It seems like the cancelling doesn't work that well when there are tokens in the range where the head behavior is swapped, so most of the computation should work even in the absence of cancelling.  The cancelling presumably just tips the scales in marginal cases (and cases where there are duplicates), since most of the head's capacity is devoted to positive copying when such tokens are present.
 
-# %% [markdown]
-# ## Methodology
-# To validate this hypothesis, we need to establish a couple of assertions:
+# ## Formal Assertions
+# 
+# To validate the hypothesis, we need to establish a the following assertions:
 #
 # Let $S$ be the range of swapped tokens, $S = [28, 29, 30, 31, 32, 33, 34, 35, 36, 37]$.
 #
 # Let $h_{k}$ denote head 0 for tokens $k \in S$ and head 1 otherwise.
 #
-# 1. When the query token is SEP in position 10, we find the minimum of the sequence
-# 2. When the query token is 50 in position 19, we emit 50
-# 3. When the query token is anything other than 50 in position 19, we emit the maximum of the sequence
-# 4. When the query is in positions between 11 and 18 inclusive, we follow the rough algorithm above.
+# 1. When the query token is SEP in position 10, we find the minimum of the sequence. (A1)
+# 2. When the query token is 50 in position 19, we emit 50. (A2)
+# 3. When the query token is anything other than 50 in position 19, we emit the maximum of the sequence. (A3)
+# 4. When the query is in positions between 11 and 18 inclusive, we follow the rough algorithm above. (A4)
 #
-# We can break down:
-# 1. Breakdown:
-#    1. Attention by head $h_{k}$ is mostly monotonic decreasing in the value of the token $k$
-#    2. The OV circuit on head $h_{k}$ copies the value $k$ more than anything else
-#    3. We pay enough more attention to the smallest token than to everything else combined and copy $k$ enough more than anything else that when we combine the effects of the two heads on other tokens, we still manage to copy the correct token.
-# 2. Breakdown:
-#    1. The copying effects from attending to 50 in position 19 and one additional 50 in some position before 10 gives enough difference between 50 and anything else that we don't care what happens elsewhere.
-# 3. Breakdown (TODO: Check if this is right, it might not be)
-#    1. Attention by head $h_{k}$ in position 19 is mostly monotonic increasing in the value of the token $k$
-#    2. The OV circuit on head $h_{k}$ copies the value $k$ more than anything else
-#    3. We pay enough more attention to the largest token than to everything else combined and copy $k$ enough more than anything else that when we combine the effects of the two heads on other tokens, we still manage to copy the correct token.
-# 4. Breakdown:
-#    1. For $k_1, k_2, q \not\in S$ with $k_1 < q \le k_2$, head 1 pays more attention to $k_2$ in positions before 10 than to $k_1$ in any position
-#    2. For $k_1, k_2, q \not\in S$ with $k_1 = q \le k_2$, head 1 pays more attention to $k_2$ in positions before 10 than to $k_1$ in positions after 10
-#    3. For $k_1, k_2, q \not\in S$ with $q \le k_1 < k_2$, head 1 pays more attention to $k_1$ in positions before 10 than to $k_2$ in positions before 10
-#    4. For $k_2 \in S$ with $k_1 < q \le k_2$, head 0 pays more attention to $k_2$ in positions before 10 than to $k_1$ in any position
-#    5. For $k_2 \in S$ with $k_1 = q \le k_2$, head 0 pays more attention to $k_2$ in positions before 10 than to $k_1$ in positions after 10
-#    6. For $k_1 \in S$ with $q \le k_1 < k_2$, head 0 pays more attention to $k_1$ in positions before 10 than to $k_2$ in positions before 10
-#    7. TODO more stuff
-
-
-# %% [markdown]
-# ## Setup
+# ## Guarantees Methodology
 #
-# The model is attention-only, with 1 layer, and 2 attention heads per layer. It was trained with layernorm, weight decay, and an Adam optimizer with linearly decaying learning rate.
+# We breakdown each of the assertions by evidence and computation required to make a formal guarantee.
 #
+# Argument of A1:
+# 1. Attention by head $h_{k}$ is mostly monotonic decreasing in the value of the token $k$. Evidence: See graph of attention from SEP position.
+# 2. The OV circuit on head $h_{k}$ copies the value $k$ more than anything else. Evidence: See graphs of OV circuits.
+# 3. We pay enough more attention to the smallest token than to everything else combined and copy $k$ enough more than anything else that when we combine the effects of the two heads on other tokens, we still manage to copy the correct token. Computation: See attempts. 
 # 
+#
+# Argument of A2:
+#
+# 1. The copying effects from attending to 50 in position 19 and one additional 50 in some position before 10 gives enough difference between 50 and anything else that we don't care what happens elsewhere. Evidence: See graph of layernorm scaling. 
+# 2. Computation: TODO.
+# 
+#
+# Argument of A3:
+#
+# 1. Attention by head $h_{k}$ in position 19 is mostly monotonic increasing in the value of the token $k$. Evidence: See graphs of attention. 
+# 2. The OV circuit on head $h_{k}$ copies the value $k$ more than anything else. Evidence: See graphs of OV circuits.
+# 3. We pay enough more attention to the largest token than to everything else combined and copy $k$ enough more than anything else that when we combine the effects of the two heads on other tokens, we still manage to copy the correct token. Computation: TODO.
+# 
+#
+# Argument of A4:
+#
+# For all of the following, evidence is in graphs of attention, and the computation is a TODO.
+# 1. For $k_1, k_2, q \not\in S$ with $k_1 < q \le k_2$, head 1 pays more attention to $k_2$ in positions before 10 than to $k_1$ in any position.
+# 2. For $k_1, k_2, q \not\in S$ with $k_1 = q \le k_2$, head 1 pays more attention to $k_2$ in positions before 10 than to $k_1$ in positions after 10. 
+# 3. For $k_1, k_2, q \not\in S$ with $q \le k_1 < k_2$, head 1 pays more attention to $k_1$ in positions before 10 than to $k_2$ in positions before 10. 
+# 4. For $k_2 \in S$ with $k_1 < q \le k_2$, head 0 pays more attention to $k_2$ in positions before 10 than to $k_1$ in any position. 
+# 5. For $k_2 \in S$ with $k_1 = q \le k_2$, head 0 pays more attention to $k_2$ in positions before 10 than to $k_1$ in positions after 10. 
+# 6. For $k_1 \in S$ with $q \le k_1 < k_2$, head 0 pays more attention to $k_1$ in positions before 10 than to $k_2$ in positions before 10. 
+#
+#
+# %% [markdown]
+# # Code
+# Can be run without reading. Results are in a separate section.
+#
+# %% [markdown]
+# ## Model
+# The model is attention-only, with 1 layer, and 2 attention heads per layer. It was trained with layernorm, weight decay, and an Adam optimizer with linearly decaying learning rate.
 #
 
 # %%
@@ -175,13 +191,10 @@ dataset = SortedListDataset(size=N, list_len=10, max_value=50, seed=43)
 
 
 # %% [markdown]
-# # Setup
+# ## Analysis Utils
 #
-
-# %% [markdown]
-# ## Imports
-
 # %%
+#imports
 from einops import einsum, rearrange, reduce
 import torch
 from matplotlib.widgets import Slider
@@ -199,10 +212,10 @@ from plotly.subplots import make_subplots
 from transformer_lens import HookedTransformer
 import math
 
-# %% [markdown]
 # ## Utils
 
 # %%
+# image utils
 def imshow(tensor, renderer=None, xaxis="", yaxis="", color_continuous_scale="RdBu", **kwargs):
     px.imshow(utils.to_numpy(tensor), color_continuous_midpoint=0.0, color_continuous_scale=color_continuous_scale, labels={"x":xaxis, "y":yaxis}, **kwargs).show(renderer)
 
@@ -228,7 +241,8 @@ def make_tickvals_text(step=10, include_lastn=1, skip_lastn=0, dataset=dataset):
     return tickvals, ticktext
 
 # %% [markdown]
-# # Computation of Matrices (used in both visualization and as a cached computation in proofs)
+# ## Computation of Matrices
+# Used in both visualization and as a cached computation in proofs)
 
 # %%
 @torch.no_grad()
