@@ -1,5 +1,5 @@
 # %% [markdown]
-# <a href="https://colab.research.google.com/github/JasonGross/neural-net-coq-interp/blob/main/October_2023_Monthly_Algorithmic_Challenge_Sorted_List_Jason%2C_Thomas%2C_Rajashree.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
+# <a href="https://colab.research.google.com/github/JasonGross/neural-net-coq-interp/blob/main/October_2023_Monthly_Algorithmic_Challenge_Sorted_List_Rajashree_and_Jason.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 
 # %% [markdown]
 # # October 2023 Mechanistic Interpretability Challange: Sorted List
@@ -892,7 +892,7 @@ def display_slacks(model, dataset, compute_slack_reduced):
 # %% [markdown]
 # # Visualizations
 #
-# The following plots are referenced as evidence for our hypotheses. 
+# The following plots are referenced as evidence for our hypotheses.
 # These are purely exploratory, by which me mean that they are useful to hypothesis generation and intuition building but are not required for hypothesis validation.
 # %% [markdown]
 # ## Initial Layernorm Scaling
