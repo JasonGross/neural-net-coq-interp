@@ -1239,7 +1239,7 @@ for slacks in (slacks_full, slacks_sign):
 
     def make_update(h, num_min, showscale=True):
         cur_slack = slacks[num_min - 1, h]
-        return go.Heatmap(z=cur_slack,  colorscale='RdBu', zmin=-zmax, zmax=zmax, showscale=showscale)
+        return go.Heatmap(z=cur_slack,  colorscale='Picnic_r', zmin=-zmax, zmax=zmax, showscale=showscale)
 
     def update(num_min):
         fig.data = []
@@ -1352,6 +1352,96 @@ print(f"The model gets a {(predictions == 0).float().mean().item() * 100}% corre
 
 # %% [markdown]
 # So we can do much better.
+#
+# %% [markdown]
+#
+# Let's compute an approximation of the best result we could get with this independence relaxation (head 0 and head 1 independent except on the minimum token).
+
+# %%
+@torch.no_grad()
+def compute_slack_for_sequences(model, sequences: t.Tensor):
+    '''
+    returns (batch, n_heads)
+    '''
+    # append sep to sequences
+    batch, sep_pos = sequences.shape
+    sequences = torch.cat([sequences, torch.full((sequences.shape[0], 1), len(dataset.vocab) - 1, dtype=torch.long, device=sequences.device)], dim=-1)
+    attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok', nanify_sep_loc=dataset.list_len)
+    attns = attn_all[:, sep_pos, torch.arange(sequences.shape[-1])[None, :], -1, sequences]
+    # (head, batch, pos)
+    attns = attns.softmax(dim=-1)
+    EPVOU_EUPU = compute_EPVOU_EUPU(model, nanify_sep_position=sep_pos, qtok=-1, qpos=sep_pos)
+    # (head, pos, input, output)
+    OVs = EPVOU_EUPU[:, torch.arange(sequences.shape[-1])[None, :], sequences, :]
+    # (head, batch, pos, output)
+    result = einsum(attns, OVs, "head batch pos, head batch pos output -> batch head output")
+
+    # now we pessimize over the other heads
+    # find the minima
+    minima = sequences.min(dim=-1).values
+    # count the number of copies of the minimum
+    n_copies = (sequences == minima.unsqueeze(-1)).sum(dim=-1)
+
+    # center logits
+    result -= result[torch.arange(batch), :, minima].unsqueeze(dim=-1)
+
+    all_worst_OVs = []
+    for num_min in range(1, sep_pos):
+        cur_worst_OV = compute_worst_OV(model, sep_pos=sep_pos, num_min=num_min)
+        cur_worst_OV_reduced = torch.zeros_like(cur_worst_OV[:, :, 0, :])
+        for mintok in range(cur_worst_OV.shape[1]):
+            cur_cur_worst_OV = cur_worst_OV[:, mintok, mintok:, :]
+            cur_cur_worst_OV -= cur_cur_worst_OV[:, :, mintok].unsqueeze(dim=-1)
+            cur_worst_OV_reduced[:, mintok, :] = cur_cur_worst_OV.max(dim=-2).values
+        all_worst_OVs.append(cur_worst_OV_reduced)
+        if num_min == sep_pos - 1:
+            for mintok in range(cur_worst_OV.shape[1]):
+                cur_worst_OV_reduced[:, mintok, :] = cur_worst_OV[:, mintok, mintok, :]
+                cur_worst_OV_reduced[:, mintok, :] -= cur_worst_OV_reduced[:, mintok, mintok].unsqueeze(dim=-1)
+            all_worst_OVs.append(cur_worst_OV_reduced)
+    all_worst_OVs = torch.stack(all_worst_OVs, dim=0)
+    # (num_min, head, mintok, output)
+    all_worst_OVs = all_worst_OVs[n_copies, :, minima, :]
+    # (batch, head, output)
+
+    # assert centered
+    test = result[torch.arange(batch), :, minima]
+    assert (test == 0).all(), f"1: {test.max().item()}"
+    test = all_worst_OVs[torch.arange(batch), :, minima]
+    assert (test == 0).all(), f"2: {test.max().item()}"
+
+    # add in the worst behavior of the other heads
+    for good_head in range(result.shape[1]):
+        result[:, good_head, :] += all_worst_OVs[:, :good_head, :].sum(dim=-2)
+        result[:, good_head, :] += all_worst_OVs[:, good_head+1:, :].sum(dim=-2)
+
+    # set diagonal to minimum to avoid including the logit of the min in the worst non-min logit
+    result[torch.arange(batch), :, minima] = result.min(dim=-1).values
+
+    return result.max(dim=-1).values
+
+@torch.no_grad()
+def count_slack_for_sequences(model, sequences: t.Tensor):
+    return (compute_slack_for_sequences(model, sequences) < 0).any(dim=-1).sum().item()
+
+# %%
+n_samples = 100000
+samples_per_batch = 10000
+torch.manual_seed(42)
+total_sequences = 0
+total_correct = 0
+low, high = 0, len(dataset.vocab) - 2
+with torch.no_grad():
+    for _ in tqdm(range(1 + (n_samples - 1) // samples_per_batch)):
+        sequences = torch.randint(low, high, (samples_per_batch, dataset.list_len))
+        total_sequences += samples_per_batch
+        total_correct += count_slack_for_sequences(model, sequences)
+fraction_correct = total_correct / total_sequences
+print(f"The model correctly predicts the minimum for at least {fraction_correct * 100}% of {total_sequences} sequences of length {dataset.list_len} with numbers between {low} and {high} inclusive.")
+
+
+
+# %% [markdown]
 #
 # For each count of copies of the minimum, for each minimum token, we can divide the remaining token values into ones that are okay to have all copies of, and ones that are not.  Then we can consider each number of copies of each token that is not okay to have all copies of, and compute which other tokens it's okay to to fill the remainder of the sequence with.  We can then attempt to use this to compute the fraction of sequences that the model gets correct.
 
