@@ -1,103 +1,103 @@
 # %% [markdown]
-# <a href="https://colab.research.google.com/github/JasonGross/neural-net-coq-interp/blob/main/October_2023_Monthly_Algorithmic_Challenge_Sorted_List_Rajashree_and_Jason.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
+#<a href="https://colab.research.google.com/github/JasonGross/neural-net-coq-interp/blob/main/October_2023_Monthly_Algorithmic_Challenge_Sorted_List_Rajashree_and_Jason.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 
 # %% [markdown]
-# # October 2023 Mechanistic Interpretability Challange: Sorted List
+## October 2023 Mechanistic Interpretability Challange: Sorted List
 #
-# The <a href="https://colab.research.google.com/drive/1IygYxp98JGvMRLNmnEbHjEGUBAxBkLeU">problem</a> is to interpret a model which has been trained to sort a list. The model is fed sequences like:```[11, 2, 5, 0, 3, 9, SEP, 0, 2, 3, 5, 9, 11]``` and has been trained to predict each element in the sorted list (in other words, the output at the `SEP` token should be a prediction of `0`, the output at `0` should be a prediction of `2`, etc).
-#
-#
-# **TL;DR**: We’re obsessed with the question “what if we gear our interpretability analysis at making formal guarantees about model behavior”. We present a sketch of a formal guarantee that P(model outputs the first token (of ten tokens) correctly) >= 59%.
+#The <a href="https://colab.research.google.com/drive/1IygYxp98JGvMRLNmnEbHjEGUBAxBkLeU">problem</a> is to interpret a model which has been trained to sort a list. The model is fed sequences like:```[11, 2, 5, 0, 3, 9, SEP, 0, 2, 3, 5, 9, 11]``` and has been trained to predict each element in the sorted list (in other words, the output at the `SEP` token should be a prediction of `0`, the output at `0` should be a prediction of `2`, etc).
 #
 #
-# <img src="https://raw.githubusercontent.com/callummcdougall/computational-thread-art/master/example_images/misc/sorted-problem.png" width="350">
+#**TL;DR**: We’re obsessed with the question “what if we gear our interpretability analysis at making formal guarantees about model behavior”. We present a sketch of a formal guarantee that P(model outputs the first token (of ten tokens) correctly) >= 59%.
 #
-# Content flow: Our Approach, Set up, Visualizations, Proofs.
+#
+#<img src="https://raw.githubusercontent.com/callummcdougall/computational-thread-art/master/example_images/misc/sorted-problem.png" width="350">
+#
+#Content flow: Our Approach, Set up, Visualizations, Proofs.
 
 # %% [markdown]
-# # Our Approach
+## Our Approach
 #
-# ## Introduction
+### Introduction
 #
-# Given a model M, and output behavior B that we care about, the standard workflow for mechanistic interpretability goes something like this:
+#Given a model M, and output behavior B that we care about, the standard workflow for mechanistic interpretability goes something like this:
 #
-# 1. M is a very large computation graph, so we find subgraph M’ that is relevant to B. Then we make arguments to show that M’ is a reasonable factoring wrt B. A key example might be ablating irrelevant heads. Let’s call these moves independence relaxations.
+#1. M is a very large computation graph, so we find subgraph M’ that is relevant to B. Then we make arguments to show that M’ is a reasonable factoring wrt B. A key example might be ablating irrelevant heads. Let’s call these moves independence relaxations.
 #
-# 2. M’ is still a pretty large computational graph, but easier to analyze. Now we can isolate important properties P of M' by how they impact B. For example, in patching the classifying property is the result of running the irrelevant parts of the model on a sample from the corrupted distributions and the relevant parts of the model on a sample from the correct distribution. Let’s call these moves finding classifying properties.
+#2. M’ is still a pretty large computational graph, but easier to analyze. Now we can isolate important properties P of M' by how they impact B. For example, in patching the classifying property is the result of running the irrelevant parts of the model on a sample from the corrupted distributions and the relevant parts of the model on a sample from the correct distribution. Let’s call these moves finding classifying properties.
 #
-# Substantial analysis of independence relaxations and classifying properties can paint a compelling picture of model behavior. But we may still not be able to make any formal guarantees akin to “with probability X, M will do B because P is so and so”.
-# So far, the best we've got is informal arguments substantiated by random sampling.
+#Substantial analysis of independence relaxations and classifying properties can paint a compelling picture of model behavior. But we may still not be able to make any formal guarantees akin to “with probability X, M will do B because P is so and so”.
+#So far, the best we've got is informal arguments substantiated by random sampling.
 #
-# On the other hand, a formal guarantee is a **precise** statement about M wrt B that can be **verified**. We think that usefulness towards making a formal guarantee can be a metric for evaluating interpretability analyses!
+#On the other hand, a formal guarantee is a **precise** statement about M wrt B that can be **verified**. We think that usefulness towards making a formal guarantee can be a metric for evaluating interpretability analyses!
 #
-# The following interpretability analyses are geared towards making guarantees. As usual, we’ll present a hypothesis for how the model works, and gesture at evidence for our hypothesis. Beyond this, we’ll identify the computation that would tie up the evidence into a guarantee. Finally, we’ll demonstrate how we iteratively develop our independence relaxations and classifying properties to make stronger guarantees.
+#The following interpretability analyses are geared towards making guarantees. As usual, we’ll present a hypothesis for how the model works, and gesture at evidence for our hypothesis. Beyond this, we’ll identify the computation that would tie up the evidence into a guarantee. Finally, we’ll demonstrate how we iteratively develop our independence relaxations and classifying properties to make stronger guarantees.
 #
-# The methodology used here is being developed as a part of a larger project of Jason Gross, Rajashree Agrawal, and Thomas Kwa investigating formalizations of tiny transformers. We’ll publish an in depth analysis soon. This post is a short attempt at applying the methodology for fun.
+#The methodology used here is being developed as a part of a larger project of Jason Gross, Rajashree Agrawal, and Thomas Kwa investigating formalizations of tiny transformers. We’ll publish an in depth analysis soon. This post is a short attempt at applying the methodology for fun.
 
-# ## Initial Hypothesis
-# To start off, the rough algorithm for the model seems to be: find the smallest value not smaller than the current token, which hasn't been "cancelled" by an equivalent copy appearing already in the sorted list
+### Initial Hypothesis
+#To start off, the rough algorithm for the model seems to be: find the smallest value not smaller than the current token, which hasn't been "cancelled" by an equivalent copy appearing already in the sorted list
 #
-# Head 0 is mostly doing the cancelling, while head 1 is mostly doing the copying, except for token values around 28--37 where head 0 is doing copying and head 1 is doing nothing.
+#Head 0 is mostly doing the cancelling, while head 1 is mostly doing the copying, except for token values around 28--37 where head 0 is doing copying and head 1 is doing nothing.
 #
-# Additional notes:
-# - The skip connection (embed -> unembed) is a small bias against the current token, a smaller bias against numbers less than the current token, and a smaller bias in favor of numbers greater than the current token.
-# - The layernorm scaling is fairly uniform at positions on the unsorted list but a bit less uniform on the sorted prefix (after the SEP token)
-# - It seems like the cancelling doesn't work that well when there are tokens in the range where the head behavior is swapped, so most of the computation should work even in the absence of cancelling.  The cancelling presumably just tips the scales in marginal cases (and cases where there are duplicates), since most of the head's capacity is devoted to positive copying when such tokens are present.
+#Additional notes:
+#- The skip connection (embed -> unembed) is a small bias against the current token, a smaller bias against numbers less than the current token, and a smaller bias in favor of numbers greater than the current token.
+#- The layernorm scaling is fairly uniform at positions on the unsorted list but a bit less uniform on the sorted prefix (after the SEP token)
+#- It seems like the cancelling doesn't work that well when there are tokens in the range where the head behavior is swapped, so most of the computation should work even in the absence of cancelling.  The cancelling presumably just tips the scales in marginal cases (and cases where there are duplicates), since most of the head's capacity is devoted to positive copying when such tokens are present.
 
-# ## Formal Assertions
+### Formal Assertions
 #
-# To validate the hypothesis, we need to establish a the following assertions:
+#To validate the hypothesis, we need to establish a the following assertions:
 #
-# Let $S$ be the range of swapped tokens, $S = [28, 29, 30, 31, 32, 33, 34, 35, 36, 37]$.
+#Let $S$ be the range of swapped tokens, $S = [28, 29, 30, 31, 32, 33, 34, 35, 36, 37]$.
 #
-# Let $h_{k}$ denote head 0 for tokens $k \in S$ and head 1 otherwise.
+#Let $h_{k}$ denote head 0 for tokens $k \in S$ and head 1 otherwise.
 #
-# 1. When the query token is SEP in position 10, we find the minimum of the sequence. (A1)
-# 2. When the query token is 50 in position 19, we emit 50. (A2)
-# 3. When the query token is anything other than 50 in position 19, we emit the maximum of the sequence. (A3)
-# 4. When the query is in positions between 11 and 18 inclusive, we follow the rough algorithm above. (A4)
+#1. When the query token is SEP in position 10, we find the minimum of the sequence. (A1)
+#2. When the query token is 50 in position 19, we emit 50. (A2)
+#3. When the query token is anything other than 50 in position 19, we emit the maximum of the sequence. (A3)
+#4. When the query is in positions between 11 and 18 inclusive, we follow the rough algorithm above. (A4)
 #
-# ## Guarantees Methodology
+### Guarantees Methodology
 #
-# We breakdown each of the assertions by evidence and computation required to make a formal guarantee.
+#We breakdown each of the assertions by evidence and computation required to make a formal guarantee.
 #
-# Argument of A1:
-# 1. Attention by head $h_{k}$ is mostly monotonic decreasing in the value of the token $k$. Evidence: See plot of attention from SEP position.
-# 2. The OV circuit on head $h_{k}$ copies the value $k$ more than anything else. Evidence: See plots of OV circuits.
-# 3. We pay enough more attention to the smallest token than to everything else combined and copy $k$ enough more than anything else that when we combine the effects of the two heads on other tokens, we still manage to copy the correct token. Computation: See attempts.
-#
-#
-# Argument of A2:
-#
-# 1. The copying effects from attending to 50 in position 19 and one additional 50 in some position before 10 gives enough difference between 50 and anything else that we don't care what happens elsewhere. Evidence: See plot of initial layernorm scaling.
-# 2. Computation: TODO.
+#Argument of A1:
+#1. Attention by head $h_{k}$ is mostly monotonic decreasing in the value of the token $k$. Evidence: See plot of attention from SEP position.
+#2. The OV circuit on head $h_{k}$ copies the value $k$ more than anything else. Evidence: See plots of OV circuits.
+#3. We pay enough more attention to the smallest token than to everything else combined and copy $k$ enough more than anything else that when we combine the effects of the two heads on other tokens, we still manage to copy the correct token. Computation: See attempts.
 #
 #
-# Argument of A3:
+#Argument of A2:
 #
-# 1. Attention by head $h_{k}$ in position 19 is mostly monotonic increasing in the value of the token $k$. Evidence: See plots of attention.
-# 2. The OV circuit on head $h_{k}$ copies the value $k$ more than anything else. Evidence: See plots of OV circuits.
-# 3. We pay enough more attention to the largest token than to everything else combined and copy $k$ enough more than anything else that when we combine the effects of the two heads on other tokens, we still manage to copy the correct token. Computation: TODO.
+#1. The copying effects from attending to 50 in position 19 and one additional 50 in some position before 10 gives enough difference between 50 and anything else that we don't care what happens elsewhere. Evidence: See plot of initial layernorm scaling.
+#2. Computation: TODO.
 #
 #
-# Argument of A4:
+#Argument of A3:
 #
-# For all of the following, evidence is in plots of attention, and the computation is a TODO.
-# 1. For $k_1, k_2, q \not\in S$ with $k_1 < q \le k_2$, head 1 pays more attention to $k_2$ in positions before 10 than to $k_1$ in any position.
-# 2. For $k_1, k_2, q \not\in S$ with $k_1 = q \le k_2$, head 1 pays more attention to $k_2$ in positions before 10 than to $k_1$ in positions after 10.
-# 3. For $k_1, k_2, q \not\in S$ with $q \le k_1 < k_2$, head 1 pays more attention to $k_1$ in positions before 10 than to $k_2$ in positions before 10.
-# 4. For $k_2 \in S$ with $k_1 < q \le k_2$, head 0 pays more attention to $k_2$ in positions before 10 than to $k_1$ in any position.
-# 5. For $k_2 \in S$ with $k_1 = q \le k_2$, head 0 pays more attention to $k_2$ in positions before 10 than to $k_1$ in positions after 10.
-# 6. For $k_1 \in S$ with $q \le k_1 < k_2$, head 0 pays more attention to $k_1$ in positions before 10 than to $k_2$ in positions before 10.
+#1. Attention by head $h_{k}$ in position 19 is mostly monotonic increasing in the value of the token $k$. Evidence: See plots of attention.
+#2. The OV circuit on head $h_{k}$ copies the value $k$ more than anything else. Evidence: See plots of OV circuits.
+#3. We pay enough more attention to the largest token than to everything else combined and copy $k$ enough more than anything else that when we combine the effects of the two heads on other tokens, we still manage to copy the correct token. Computation: TODO.
+#
+#
+#Argument of A4:
+#
+#For all of the following, evidence is in plots of attention, and the computation is a TODO.
+#1. For $k_1, k_2, q \not\in S$ with $k_1 < q \le k_2$, head 1 pays more attention to $k_2$ in positions before 10 than to $k_1$ in any position.
+#2. For $k_1, k_2, q \not\in S$ with $k_1 = q \le k_2$, head 1 pays more attention to $k_2$ in positions before 10 than to $k_1$ in positions after 10.
+#3. For $k_1, k_2, q \not\in S$ with $q \le k_1 < k_2$, head 1 pays more attention to $k_1$ in positions before 10 than to $k_2$ in positions before 10.
+#4. For $k_2 \in S$ with $k_1 < q \le k_2$, head 0 pays more attention to $k_2$ in positions before 10 than to $k_1$ in any position.
+#5. For $k_2 \in S$ with $k_1 = q \le k_2$, head 0 pays more attention to $k_2$ in positions before 10 than to $k_1$ in positions after 10.
+#6. For $k_1 \in S$ with $q \le k_1 < k_2$, head 0 pays more attention to $k_1$ in positions before 10 than to $k_2$ in positions before 10.
 #
 #
 # %% [markdown]
-# # Code
-# Can be run without reading. Results are in a separate section.
+## Code
+#Can be run without reading. Results are in a separate section.
 #
 # %% [markdown]
-# ## Model
-# The model is attention-only, with 1 layer, and 2 attention heads per layer. It was trained with layernorm, weight decay, and an Adam optimizer with linearly decaying learning rate.
+### Model
+#The model is attention-only, with 1 layer, and 2 attention heads per layer. It was trained with layernorm, weight decay, and an Adam optimizer with linearly decaying learning rate.
 #
 
 # %%
@@ -146,7 +146,7 @@ else:
 import torch as t
 from pathlib import Path
 
-# Make sure exercises are in the path
+#Make sure exercises are in the path
 chapter = r"chapter1_transformers"
 exercises_dir = Path(f"{os.getcwd().split(chapter)[0]}/{chapter}/exercises").resolve()
 section_dir = exercises_dir / "monthly_algorithmic_problems" / "october23_sorted_list"
@@ -191,7 +191,7 @@ dataset = SortedListDataset(size=N, list_len=10, max_value=50, seed=43)
 
 
 # %% [markdown]
-# ## Analysis Utils
+### Analysis Utils
 #
 # %%
 #imports
@@ -212,10 +212,10 @@ from plotly.subplots import make_subplots
 from transformer_lens import HookedTransformer
 import math
 
-# ## Utils
+### Utils
 
 # %%
-# image utils
+#image utils
 def imshow(tensor, renderer=None, xaxis="", yaxis="", color_continuous_scale="RdBu", **kwargs):
     px.imshow(utils.to_numpy(tensor), color_continuous_midpoint=0.0, color_continuous_scale=color_continuous_scale, labels={"x":xaxis, "y":yaxis}, **kwargs).show(renderer)
 
@@ -241,8 +241,8 @@ def make_tickvals_text(step=10, include_lastn=1, skip_lastn=0, vocab=dataset.voc
     return tickvals, ticktext
 
 # %% [markdown]
-# ## Computation of Matrices
-# Used in both visualization and as a cached computation in proofs.
+### Computation of Matrices
+#Used in both visualization and as a cached computation in proofs.
 
 # %%
 @torch.no_grad()
@@ -511,8 +511,8 @@ def layernorm_scales(x: torch.Tensor, eps: float = 1e-5, recip: bool = True) -> 
     return scale
 
 # %% [markdown]
-# ## Visualization Functions
-# These functions make use of the above computations to display various results.  The details are not essential for correctness.
+### Visualization Functions
+#These functions make use of the above computations to display various results.  The details are not essential for correctness.
 
 # %%
 def display_layernorm_scales(model, sep_pos=dataset.list_len):
@@ -528,7 +528,7 @@ def display_layernorm_scales(model, sep_pos=dataset.list_len):
     px.imshow(utils.to_numpy(s), color_continuous_scale='Sunsetdark', labels={"x":"Token Value", "y":"Position"}, title=f"Layer Norm Scaling", x=dataset.vocab).show(None)
 
 # %%
-# Attention
+#Attention
 def display_attention_at_sep_pos(model, sep_pos=dataset.list_len, vocab=dataset.vocab):
     attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok', nanify_sep_loc=sep_pos)
     attn_subset = attn_all[:, sep_pos, :sep_pos+1, -1, :]
@@ -544,7 +544,7 @@ def display_attention_at_sep_pos(model, sep_pos=dataset.list_len, vocab=dataset.
     fig.show()
 
 # %%
-# Attention Across Positions
+#Attention Across Positions
 def display_attention_everywhere(model, dataset):
     attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok', nanify_sep_loc=dataset.list_len)
     zmax = attn_all[~attn_all.isnan()].max().item()
@@ -890,77 +890,77 @@ def display_slacks(model, dataset, compute_slack_reduced):
         fig.show()
 
 # %% [markdown]
-# # Visualizations
+## Visualizations
 #
-# The following plots are referenced as evidence for our hypotheses.
-# These are purely exploratory, by which me mean that they are useful to hypothesis generation and intuition building but are not required for hypothesis validation.
+#The following plots are referenced as evidence for our hypotheses.
+#These are purely exploratory, by which me mean that they are useful to hypothesis generation and intuition building but are not required for hypothesis validation.
 # %% [markdown]
-# ## Initial Layernorm Scaling
+### Initial Layernorm Scaling
 # %%
 display_layernorm_scales(model)
 # %% [markdown]
-# ## Attention from SEP to Other Tokens
+### Attention from SEP to Other Tokens
 # %%
 display_attention_at_sep_pos(model)
 
 # %% [markdown]
-# ## Attention plots
+### Attention plots
 # %%
 display_attention_everywhere(model, dataset)
 # %% [markdown]
-# ## OV Attention Head Plots
+### OV Attention Head Plots
 # %%
 display_OV_everywhere(model, dataset)
 # %% [markdown]
-# ## Skip Connection / Residual Stream Plots
+### Skip Connection / Residual Stream Plots
 # %%
 display_residual_impact(model, dataset)
 # %% [markdown]
-# # A1: Finding the Minimum with query SEP in Position 10
+## A1: Finding the Minimum with query SEP in Position 10
 #
-# Now we dive into producing guarantess from our hypoheses. We make the relaxation that head 0 and head 1 are completely independent everywhere except for SEP and minimum tokens.
-# Using this relaxation, we prove convexity of the logits over the sequences so we can evalute the output only at the extrema.
+#Now we dive into producing guarantess from our hypoheses. We make the relaxation that head 0 and head 1 are completely independent everywhere except for SEP and minimum tokens.
+#Using this relaxation, we prove convexity of the logits over the sequences so we can evalute the output only at the extrema.
 # %% [markdown]
-# ## State Space Reduction
+### State Space Reduction
 #
-# **Lemma**: For a single attention head, it suffices to consider sequences with at most two distinct tokens.
+#**Lemma**: For a single attention head, it suffices to consider sequences with at most two distinct tokens.
 #
-# Note that we are comparing sequences by pre-final-layernorm-scaling gap between the logit of the minimum token and the logit of any other fixed token.
-# Layernorm scaling is non-linear, but if we only care about accuracy and not log-loss, then we can ignore it (neither scaling nor softmax changes which logit is the largest).
+#Note that we are comparing sequences by pre-final-layernorm-scaling gap between the logit of the minimum token and the logit of any other fixed token.
+#Layernorm scaling is non-linear, but if we only care about accuracy and not log-loss, then we can ignore it (neither scaling nor softmax changes which logit is the largest).
 #
-# **Proof sketch**:
-# We show that any sequence with three token values, $x < y < z$, is strictly dominated either by a sequence with just $x$ and $y$ or a sequence with just $x$ and $z$.
+#**Proof sketch**:
+#We show that any sequence with three token values, $x < y < z$, is strictly dominated either by a sequence with just $x$ and $y$ or a sequence with just $x$ and $z$.
 #
-# Suppose we have $k$ copies of $x$, $n$ copies of $y$, and $\ell - k - n$ copies of $z$, the attention scores are $s_x$, $s_y$, and $s_z$, and the differences between the logit of $x$ and our chosen comparison logit (as computed by the OV circuit for each token) are $v_x$, $v_y$, and $v_z$.
-# Then the difference in logit between $x$ and the comparison token is
-# $$\left(k e^{s_x} v_x + n e^{s_y} v_y + (\ell - k - n)e^{s_z}v_z \right)\left(k e^{s_x} + n e^{s_y} + (\ell - k - n)e^{s_z}\right)^{-1}$$
-# Rearrangement gives
-# $$\left(\left(k e^{s_x} v_x + (\ell - k) e^{s_z} v_z\right) + n \left(e^{s_y} v_y - e^{s_z}v_z\right) \right)\left(\left(k e^{s_x} + (\ell - k) e^{s_z}\right) + n \left(e^{s_y} - e^{s_z}\right)\right)^{-1}$$
-# This is a fraction of the form $\frac{a + bn}{c + dn}$.  Taking the derivative with respect to $n$ gives $\frac{bc - ad}{(c + dn)^2}$.  Noting that $c + dn$ cannot equal zero for any valid $n$, we get the the derivative never changes sign.  Hence our logit difference is maximized either at $n = 0$ or at $n = \ell - k$, and the sequence with just two values dominates the one with three.
+#Suppose we have $k$ copies of $x$, $n$ copies of $y$, and $\ell - k - n$ copies of $z$, the attention scores are $s_x$, $s_y$, and $s_z$, and the differences between the logit of $x$ and our chosen comparison logit (as computed by the OV circuit for each token) are $v_x$, $v_y$, and $v_z$.
+#Then the difference in logit between $x$ and the comparison token is
+#$$\left(k e^{s_x} v_x + n e^{s_y} v_y + (\ell - k - n)e^{s_z}v_z \right)\left(k e^{s_x} + n e^{s_y} + (\ell - k - n)e^{s_z}\right)^{-1}$$
+#Rearrangement gives
+#$$\left(\left(k e^{s_x} v_x + (\ell - k) e^{s_z} v_z\right) + n \left(e^{s_y} v_y - e^{s_z}v_z\right) \right)\left(\left(k e^{s_x} + (\ell - k) e^{s_z}\right) + n \left(e^{s_y} - e^{s_z}\right)\right)^{-1}$$
+#This is a fraction of the form $\frac{a + bn}{c + dn}$.  Taking the derivative with respect to $n$ gives $\frac{bc - ad}{(c + dn)^2}$.  Noting that $c + dn$ cannot equal zero for any valid $n$, we get the the derivative never changes sign.  Hence our logit difference is maximized either at $n = 0$ or at $n = \ell - k$, and the sequence with just two values dominates the one with three.
 #
-# This proof generalizes straightforwardly to sequences with more than three values.
+#This proof generalizes straightforwardly to sequences with more than three values.
 #
-# Similarly, this proof shows that, when considering only a single attention head, it suffices to consider sequences of $\ell$ copies of the minimum token and sequences with one copy of the minimum token and $\ell - 1$ copies of the non-minimum token, as intermediate values are dominated by the extremes.
+#Similarly, this proof shows that, when considering only a single attention head, it suffices to consider sequences of $\ell$ copies of the minimum token and sequences with one copy of the minimum token and $\ell - 1$ copies of the non-minimum token, as intermediate values are dominated by the extremes.
 #
 
 # %% [markdown]
-# Let's bound how much attention is paid to the minimum token, non-minimum tokens (in aggregate), and the SEP token.
+#Let's bound how much attention is paid to the minimum token, non-minimum tokens (in aggregate), and the SEP token.
 #
-# First a plot.  We use green for "paying attention to the minimum token", red for "paying attention to the non-minimum token", and blue for "paying attention to the SEP token".
+#First a plot.  We use green for "paying attention to the minimum token", red for "paying attention to the non-minimum token", and blue for "paying attention to the SEP token".
 
 # %%
 display_attention_2way(model, dataset)
 # %% [markdown]
 #
-# There are some remarkable things about this plot.
+#There are some remarkable things about this plot.
 #
-# 1. For sequences where the minimum token is 19 or larger, we are predicting that the model should basically never get the first token correct, because it's paying too much attention to either the SEP token or the wrong non-min token.
-# 2. Even for sequences with 9 or 10 copies of the same number, if that number is 25--39, so much attention is paid to the SEP token (by both heads) that we predict that the model probably gets the wrong answer, even before analyzing OV.
-# 3. The plot probably overestimates the incorrect behavior when the non-min token is relatively close to the min token, because the OV matrices do (small) positive copying of numbers below the current one.  We don't analyze this behavior in enough depth here to put hard bounds on when it's enough to compensate for paying attention to the wrong token, but a more thorough analysis would.
+#1. For sequences where the minimum token is 19 or larger, we are predicting that the model should basically never get the first token correct, because it's paying too much attention to either the SEP token or the wrong non-min token.
+#2. Even for sequences with 9 or 10 copies of the same number, if that number is 25--39, so much attention is paid to the SEP token (by both heads) that we predict that the model probably gets the wrong answer, even before analyzing OV.
+#3. The plot probably overestimates the incorrect behavior when the non-min token is relatively close to the min token, because the OV matrices do (small) positive copying of numbers below the current one.  We don't analyze this behavior in enough depth here to put hard bounds on when it's enough to compensate for paying attention to the wrong token, but a more thorough analysis would.
 #
-# Before using the above distributions to place concrete bounds on what fraction of outputs the network gets correct, let's compute cutoffs for the OV behavior.
+#Before using the above distributions to place concrete bounds on what fraction of outputs the network gets correct, let's compute cutoffs for the OV behavior.
 #
-# But first, is this actually right?  Which uniform sequences does the model get wrong?  What fraction of sequences starting at 19 get the wrong minimum?
+#But first, is this actually right?  Which uniform sequences does the model get wrong?  What fraction of sequences starting at 19 get the wrong minimum?
 
 # %%
 uniform_predictions = [model(t.tensor([i] * dataset.list_len + [len(dataset.vocab) - 1] + [i] * dataset.list_len))[0, dataset.list_len].argmax(dim=-1).item() for i in range(len(dataset.vocab) - 1)]
@@ -968,18 +968,18 @@ wrong_uniform_predictions = [(i, p) for i, p in enumerate(uniform_predictions) i
 print(f"The model incorrectly predicts the minimum for {len(wrong_uniform_predictions)} sequences ({', '.join(str(i) for i, p in wrong_uniform_predictions)}):\n{' '.join([f'{i} (model: {p})' for i, p in wrong_uniform_predictions])}")
 
 # %% [markdown]
-# Interestingly, the model manages to get 35, 36, 37 right, despite paying most attention to SEP.
+#Interestingly, the model manages to get 35, 36, 37 right, despite paying most attention to SEP.
 
 # %%
 n_total_datapoints = 10000
 datapoints_per_batch = 1000
-# Set a random seed, then generate n_datapoints sequences of length dataset.list_len of numbers between 19 and len(dataset.vocab) - 2, inclusive
-# Set random seed for reproducibility
+#Set a random seed, then generate n_datapoints sequences of length dataset.list_len of numbers between 19 and len(dataset.vocab) - 2, inclusive
+#Set random seed for reproducibility
 torch.manual_seed(42)
 all_predictions = t.zeros((0,), dtype=torch.long)
 all_minima = t.zeros((0,), dtype=torch.long)
 low = 19
-# true minimum, predicted minimum, # copies of minimum
+#true minimum, predicted minimum, # copies of minimum
 results = t.zeros((len(dataset.vocab) - 1, len(dataset.vocab) - 1, dataset.list_len + 1))
 with torch.no_grad():
     for _ in tqdm(range(n_total_datapoints // datapoints_per_batch)):
@@ -1001,24 +1001,24 @@ with torch.no_grad():
             #     print(set(sequences.cpu()[(minima.cpu() == 45) & (predictions.cpu() == minima.cpu())]))
     # Compute the fraction of correct predictions
     correct = (predictions.cpu() == minima).float().mean().item()
-# (true minimum, # copies of minimum)
+#(true minimum, # copies of minimum)
 fraction_correct = (results / results.sum(dim=1, keepdim=True)).diagonal(dim1=0, dim2=1)
-# print(f"The model correctly predicts the minimum for {correct * 100}% of sequences of length {dataset.list_len} with numbers between {low} and {len(dataset.vocab) - 2} inclusive")
-# # plot predictions - minima against minima
-# scatter(all_minima, all_predictions - all_minima, title="Predicted - Actual Minimum vs Actual Minimum", xaxis="Actual Minimum", yaxis="Predicted - Actual Minimum")
-# scatter(all_minima, all_predictions, title="Actual Minimum vs Predicted Minimum", xaxis="Actual Minimum", yaxis="Predicted - Actual Minimum")
-# scatter(list(range(low, len(dataset.vocab) - 1)), [(all_predictions[all_minima == i] == i).float().mean().item() for i in range(low, len(dataset.vocab) - 1)], title="Fraction Correct vs Actual Minimum", xaxis="Actual Minimum", yaxis="Fraction Correct")
+#print(f"The model correctly predicts the minimum for {correct * 100}% of sequences of length {dataset.list_len} with numbers between {low} and {len(dataset.vocab) - 2} inclusive")
+## plot predictions - minima against minima
+#scatter(all_minima, all_predictions - all_minima, title="Predicted - Actual Minimum vs Actual Minimum", xaxis="Actual Minimum", yaxis="Predicted - Actual Minimum")
+#scatter(all_minima, all_predictions, title="Actual Minimum vs Predicted Minimum", xaxis="Actual Minimum", yaxis="Predicted - Actual Minimum")
+#scatter(list(range(low, len(dataset.vocab) - 1)), [(all_predictions[all_minima == i] == i).float().mean().item() for i in range(low, len(dataset.vocab) - 1)], title="Fraction Correct vs Actual Minimum", xaxis="Actual Minimum", yaxis="Fraction Correct")
 imshow(fraction_correct, title="Fraction Correct vs Actual Minimum and # Copies of Minimum", xaxis="Actual Minimum", yaxis="# Copies of Minimum")
-# print(sequences)
+#print(sequences)
 
 # %% [markdown]
-# So we see that with enough copies of the minimum, we can get things correct, but with only one or two copies, we tend not to.
+#So we see that with enough copies of the minimum, we can get things correct, but with only one or two copies, we tend not to.
 #
-# This makes sense, though.  Consider what fraction of sequences start at 19 or higher.
+#This makes sense, though.  Consider what fraction of sequences start at 19 or higher.
 
 # %%
 total_sequences = (len(dataset.vocab) - 1) ** dataset.list_len
-# (minimum, n copies of minimum)
+#(minimum, n copies of minimum)
 count_of_sequences = torch.zeros((len(dataset.vocab) - 1, dataset.list_len + 1), dtype=torch.long)
 count_of_sequences[:, dataset.list_len] = 1 # one sequence for each min tok when everything is the same
 for mintok in range(len(dataset.vocab) - 1):
@@ -1034,18 +1034,18 @@ print(f"{cumulative_fraction_of_sequences_all_counts[significant.shape[0]+1] * 1
 
 # %% [markdown]
 #
-# So since more than 99% of cases have their minimum at or below 19, it seem fine to only explain the behavior on sequences with minimum at or below 19.
+#So since more than 99% of cases have their minimum at or below 19, it seem fine to only explain the behavior on sequences with minimum at or below 19.
 
 
 # %% [markdown]
-# ## OV Cutoffs
+### OV Cutoffs
 #
-# For each pair of minimum and non-minimum tokens, we can ask: how much attention needs to be paid to the minimum token to ensure that the correct output logit is highest?
-# We ask this question separately for when the remainder of the attention is paid to the non-min token vs paid to the SEP token.
-# Note that to make use of the proof above about considering only sequences with at most two distinct tokens, we need to consider the behavior of the two heads independently.
+#For each pair of minimum and non-minimum tokens, we can ask: how much attention needs to be paid to the minimum token to ensure that the correct output logit is highest?
+#We ask this question separately for when the remainder of the attention is paid to the non-min token vs paid to the SEP token.
+#Note that to make use of the proof above about considering only sequences with at most two distinct tokens, we need to consider the behavior of the two heads independently.
 
 # %% [markdown]
-# Let's first find the worst-case OV behavior for head 0, indexed by (minimum token, output logit)
+#Let's first find the worst-case OV behavior for head 0, indexed by (minimum token, output logit)
 # %%
 @torch.no_grad()
 def compute_worst_OV(model, sep_pos=dataset.list_len, num_min=1):
@@ -1114,7 +1114,7 @@ line(compute_worst_OV_reduced(model).T, title="Worst OV behavior per head, Value
 
 # %% [markdown]
 #
-# Now let's compute, for each minimum and non-minimum token, whether or not the attention from head 1 is enough to overcome the worst behavior from head 0
+#Now let's compute, for each minimum and non-minimum token, whether or not the attention from head 1 is enough to overcome the worst behavior from head 0
 
 # %%
 @torch.no_grad()
@@ -1157,7 +1157,7 @@ def compute_slack_reduced(model, good_head_num_min=1, **kwargs):
 # %%
 display_slacks(model, dataset, compute_slack_reduced)
 # %% [markdown]
-# Let's count what fraction of sequences we can now explain the computation of the minimum on.
+#Let's count what fraction of sequences we can now explain the computation of the minimum on.
 
 # %%
 @torch.no_grad()
@@ -1190,22 +1190,26 @@ def calculate_correct_minimum_lower_bound_fraction(model, sep_pos=dataset.list_l
 print(f"Assuming no errors in our argument, we can prove that the model computes the correct minimum of the sequence in at least {calculate_correct_minimum_lower_bound(model)} cases ({100 * calculate_correct_minimum_lower_bound_fraction(model):.1f}% of the sequences).")
 
 # %% [markdown]
-# ## Summary of Results for First Sequence Token Predictions
+### Summary of Results for First Sequence Token Predictions
 #
-# We've managed to prove a lower bound on correctness of the first token at 32%.  While this isn't great (the model in fact seems to do much better than this), this is only a preliminary analysis of the behavior.
+#We've managed to prove a lower bound on correctness of the first token at 32%.  While this isn't great (the model in fact seems to do much better than this), this is only a preliminary analysis of the behavior.
 #
-# Recaping: We found that head 1 does positive copying on numbers outside of 25--39.  For numbers below 20, head 1 frequently manages to pay most attention to the smallest number.  Since fewer than 1% of sequences have a minimum above 19, we largely neglect the behavior on sequences with large minima.  We compute for each head the largest logit gap between the actual minima and any other logit, separately for each number of copies of the minimum token.  We then compute the worst-case behavior of the other heads.  We pessimize over position, which mostly does not matter.  We folded the computation of skip connection into the computation of the attention head.  We made a convexity argument that, as long as we consider each head's behavior independently, we can restrict our attention to sequences with at most two distinct tokens and still bound the behavior of other sequences.
+#Recaping: We found that head 1 does positive copying on numbers outside of 25--39.  For numbers below 20, head 1 frequently manages to pay most attention to the smallest number.  Since fewer than 1% of sequences have a minimum above 19, we largely neglect the behavior on sequences with large minima.  We compute for each head the largest logit gap between the actual minima and any other logit, separately for each number of copies of the minimum token.  We then compute the worst-case behavior of the other heads.  We pessimize over position, which mostly does not matter.  We folded the computation of skip connection into the computation of the attention head.  We made a convexity argument that, as long as we consider each head's behavior independently, we can restrict our attention to sequences with at most two distinct tokens and still bound the behavior of other sequences.
 #
 # %% [markdown]
-# ## More fine-grained analysis of first token prediction
+### More fine-grained analysis of first token prediction
 #
-# We currently are making very loose approximations when the model outputs the wrong minimum on $n$ copies of the minimum and $10 - n$ copies of some non-minimum token; we throw away all sequences that contain any copies of that token.  For example, the model outputs the wrong minimum for `[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]`:
+#We currently are making very loose approximations when the model outputs the wrong minimum on $n$ copies of the minimum and $10 - n$ copies of some non-minimum token; we throw away all sequences that contain any copies of that token.  For example, the model outputs the wrong minimum for `[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]`:
+
+# %%
+if torch.cuda.is_available():
+    torch.cuda.empty_cache()
 
 # %%
 print(f"The model predicts {model(t.tensor([0] + [1] * (dataset.list_len - 1) + [len(dataset.vocab) - 1] + [0] + [1] * (dataset.list_len - 1))).argmax(dim=-1)[0, dataset.list_len].item()} instead of 0.")
 
 # %% [markdown]
-# But then we throw away all sequences that contain a 0, any number of 1s, and any other non-zero numbers!  But the model predicts the minimum correctly for many of these!
+#But then we throw away all sequences that contain a 0, any number of 1s, and any other non-zero numbers!  But the model predicts the minimum correctly for many of these!
 
 # %%
 n_samples = 10000
@@ -1214,18 +1218,18 @@ zero_idxs = torch.randint(0, dataset.list_len - 1, (n_samples,))
 one_idxs = (zero_idxs + torch.randint(1, dataset.list_len - 1, (n_samples,))) % dataset.list_len
 sequences[torch.arange(n_samples), zero_idxs], sequences[torch.arange(n_samples), one_idxs] = 0, 1
 sorted_sequences, _ = sequences.sort(dim=-1)
-# add sep
+#add sep
 sequences = torch.cat([sequences, torch.full((n_samples, 1), len(dataset.vocab) - 1, dtype=torch.long), sorted_sequences], dim=-1)
-# compute predictions
+#compute predictions
 predictions = model(sequences)[:, dataset.list_len, :].argmax(dim=-1)
 print(f"The model gets a {(predictions == 0).float().mean().item() * 100}% correct predictions of the minimum from a random sample of {n_samples} sequences with one 0, one 1, and the remainder of numbers above 2.")
 
 # %% [markdown]
-# So we can do much better.
+#So we can do much better.
 #
 # %% [markdown]
 #
-# Let's compute an approximation of the best result we could get with this independence relaxation (head 0 and head 1 independent except on the minimum token).
+#Let's compute an approximation of the best result we could get with this independence relaxation (head 0 and head 1 independent except on the minimum token).
 
 # %%
 @torch.no_grad()
@@ -1313,7 +1317,7 @@ print(f"The model correctly predicts the minimum for at least {fraction_correct 
 
 # %% [markdown]
 #
-# For each count of copies of the minimum, for each minimum token, we can divide the remaining token values into ones that are okay to have all copies of, and ones that are not.  Then we can consider each number of copies of each token that is not okay to have all copies of, and compute which other tokens it's okay to to fill the remainder of the sequence with.  We can then attempt to use this to compute the fraction of sequences that the model gets correct.
+#For each count of copies of the minimum, for each minimum token, we can divide the remaining token values into ones that are okay to have all copies of, and ones that are not.  Then we can consider each number of copies of each token that is not okay to have all copies of, and compute which other tokens it's okay to to fill the remainder of the sequence with.  We can then attempt to use this to compute the fraction of sequences that the model gets correct.
 
 # %%
 @torch.no_grad()
@@ -1415,102 +1419,102 @@ def compute_slack_3way_reduced(model, good_head_max_num_min=dataset.list_len-2, 
 
 # %%
 slacks_3way = compute_slack_3way_reduced(model)
-# (num_min, num_nonmin1, n_heads, d_vocab_min, d_vocab_nonmin1, d_vocab_nonmin2)
+#(num_min, num_nonmin1, n_heads, d_vocab_min, d_vocab_nonmin1, d_vocab_nonmin2)
 # %%
-# XXX TODO Figure out visualization https://stackoverflow.com/questions/77392813/how-do-i-make-interacting-updates-in-plotly
-# zmax = slacks_3way[~slacks_3way.isnan()].abs().max().item()
-# # negate for coloring
-# slacks_3way_sign = slacks_3way.sign()
-# slacks_3way_full = -utils.to_numpy(slacks_3way)
-# slacks_3way_sign = -utils.to_numpy(slacks_3way_sign)
+#XXX TODO Figure out visualization https://stackoverflow.com/questions/77392813/how-do-i-make-interacting-updates-in-plotly
+#zmax = slacks_3way[~slacks_3way.isnan()].abs().max().item()
+## negate for coloring
+#slacks_3way_sign = slacks_3way.sign()
+#slacks_3way_full = -utils.to_numpy(slacks_3way)
+#slacks_3way_sign = -utils.to_numpy(slacks_3way_sign)
 
-# all_tickvals_text = list(enumerate(dataset.vocab[:-1]))
-# tickvals_indices = list(range(0, len(all_tickvals_text) - 1, 10)) + [len(all_tickvals_text) - 1]
-# tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
-# tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
+#all_tickvals_text = list(enumerate(dataset.vocab[:-1]))
+#tickvals_indices = list(range(0, len(all_tickvals_text) - 1, 10)) + [len(all_tickvals_text) - 1]
+#tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
+#tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
 
-# for slacks_kind in (slacks_3way_full, slacks_3way_sign):
-#     fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=[f"slack on head {h}" for h in range(model.cfg.n_heads)])
-#     fig.update_layout(title=f"Slack (positive for either head ⇒ model is correct)")
+#for slacks_kind in (slacks_3way_full, slacks_3way_sign):
+#    fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=[f"slack on head {h}" for h in range(model.cfg.n_heads)])
+#    fig.update_layout(title=f"Slack (positive for either head ⇒ model is correct)")
 
-#     def make_update(h, num_min, num_nonmin1, mintok, showscale=True):
-#         cur_slack = slacks_kind[num_min - 1, num_nonmin1 - 1, h, mintok]
-#         return go.Heatmap(z=cur_slack, colorscale='RdBu', zmin=-zmax, zmax=zmax, showscale=showscale)
+#    def make_update(h, num_min, num_nonmin1, mintok, showscale=True):
+#        cur_slack = slacks_kind[num_min - 1, num_nonmin1 - 1, h, mintok]
+#        return go.Heatmap(z=cur_slack, colorscale='RdBu', zmin=-zmax, zmax=zmax, showscale=showscale)
 
-#     def update(num_min, num_nonmin1, mintok):
-#         fig.data = []
-#         for h in range(model.cfg.n_heads):
-#             col, row = h+1, 1
-#             fig.add_trace(make_update(h, num_min, num_nonmin1, mintok), col=col, row=row)
-#             fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', col=col, row=row, title_text="non-min tok 2") #, title_text="Output Logit Token"
-#             fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, col=col, row=row, title_text="non min tok 1")
-#         fig.update_traces(hovertemplate="Non-min token 1: %{y}<br>Non-min token 2: %{x}<br>Slack: %{z}<extra>head %{fullData.name}</extra>")
+#    def update(num_min, num_nonmin1, mintok):
+#        fig.data = []
+#        for h in range(model.cfg.n_heads):
+#            col, row = h+1, 1
+#            fig.add_trace(make_update(h, num_min, num_nonmin1, mintok), col=col, row=row)
+#            fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', col=col, row=row, title_text="non-min tok 2") #, title_text="Output Logit Token"
+#            fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, col=col, row=row, title_text="non min tok 1")
+#        fig.update_traces(hovertemplate="Non-min token 1: %{y}<br>Non-min token 2: %{x}<br>Slack: %{z}<extra>head %{fullData.name}</extra>")
 
-#     # Create the initial heatmap
-#     update(1, 1, 0)
+#    # Create the initial heatmap
+#    update(1, 1, 0)
 
-#     # Create frames for each combination of mintok, num_min, and num_nonmin1
-#     frames = [go.Frame(
-#         data=[make_update(h, num_min, num_nonmin1, mintok) for h in range(model.cfg.n_heads)],
-#         name=f"{num_min}-{num_nonmin1}-{mintok}"
-#     ) for num_min in range(1, dataset.list_len - 1) for num_nonmin1 in range(1, dataset.list_len - 1) for mintok in range(len(dataset.vocab[:-1]))]
+#    # Create frames for each combination of mintok, num_min, and num_nonmin1
+#    frames = [go.Frame(
+#        data=[make_update(h, num_min, num_nonmin1, mintok) for h in range(model.cfg.n_heads)],
+#        name=f"{num_min}-{num_nonmin1}-{mintok}"
+#    ) for num_min in range(1, dataset.list_len - 1) for num_nonmin1 in range(1, dataset.list_len - 1) for mintok in range(len(dataset.vocab[:-1]))]
 
-#     fig.frames = frames
+#    fig.frames = frames
 
-#     # Create three sliders
-#     sliders = [
-#         # Slider for num_min
-#         dict(
-#             active=0,
-#             yanchor='top',
-#             xanchor='left',
-#             currentvalue=dict(font=dict(size=20), prefix='# copies of min token:', visible=True, xanchor='right'),
-#             transition=dict(duration=0),
-#             pad=dict(b=10, t=50),
-#             len=0.3,
-#             x=0.1,
-#             y=0,
-#             steps=[dict(args=[[f"{num_min}-{num_nonmin1}-{mintok}"], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
-#                         method='animate',
-#                         label=str(num_min)) for num_min, num_nonmin1, mintok, frame in enumerate(fig.frames) if num_min == mintok]
-#         ),
-#         # Slider for num_nonmin1
-#         dict(
-#             active=0,
-#             yanchor='top',
-#             xanchor='left',
-#             currentvalue=dict(font=dict(size=20), prefix='Num nonmin1:', visible=True, xanchor='right'),
-#             transition=dict(duration=0),
-#             pad=dict(b=10, t=150),
-#             len=0.3,
-#             x=0.1,
-#             y=0.4,
-#             steps=[dict(args=[[f"{num_min}-{num_nonmin1}-{mintok}"], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
-#                         method='animate',
-#                         label=str(num_nonmin1)) for num_min, num_nonmin1, mintok, frame in enumerate(fig.frames) if num_nonmin1 == mintok]
-#         ),
-#         # Slider for mintok
-#         dict(
-#             active=0,
-#             yanchor='top',
-#             xanchor='left',
-#             currentvalue=dict(font=dict(size=20), prefix='Mintok:', visible=True, xanchor='right'),
-#             transition=dict(duration=0),
-#             pad=dict(b=10, t=250),
-#             len=0.3,
-#             x=0.1,
-#             y=0.8,
-#             steps=[dict(args=[[f"{num_min}-{num_nonmin1}-{mintok}"], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
-#                         method='animate',
-#                         label=str(mintok)) for num_min, num_nonmin1, mintok, frame in enumerate(fig.frames)]
-#         )
-#     ]
+#    # Create three sliders
+#    sliders = [
+#        # Slider for num_min
+#        dict(
+#            active=0,
+#            yanchor='top',
+#            xanchor='left',
+#            currentvalue=dict(font=dict(size=20), prefix='# copies of min token:', visible=True, xanchor='right'),
+#            transition=dict(duration=0),
+#            pad=dict(b=10, t=50),
+#            len=0.3,
+#            x=0.1,
+#            y=0,
+#            steps=[dict(args=[[f"{num_min}-{num_nonmin1}-{mintok}"], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
+#                        method='animate',
+#                        label=str(num_min)) for num_min, num_nonmin1, mintok, frame in enumerate(fig.frames) if num_min == mintok]
+#        ),
+#        # Slider for num_nonmin1
+#        dict(
+#            active=0,
+#            yanchor='top',
+#            xanchor='left',
+#            currentvalue=dict(font=dict(size=20), prefix='Num nonmin1:', visible=True, xanchor='right'),
+#            transition=dict(duration=0),
+#            pad=dict(b=10, t=150),
+#            len=0.3,
+#            x=0.1,
+#            y=0.4,
+#            steps=[dict(args=[[f"{num_min}-{num_nonmin1}-{mintok}"], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
+#                        method='animate',
+#                        label=str(num_nonmin1)) for num_min, num_nonmin1, mintok, frame in enumerate(fig.frames) if num_nonmin1 == mintok]
+#        ),
+#        # Slider for mintok
+#        dict(
+#            active=0,
+#            yanchor='top',
+#            xanchor='left',
+#            currentvalue=dict(font=dict(size=20), prefix='Mintok:', visible=True, xanchor='right'),
+#            transition=dict(duration=0),
+#            pad=dict(b=10, t=250),
+#            len=0.3,
+#            x=0.1,
+#            y=0.8,
+#            steps=[dict(args=[[f"{num_min}-{num_nonmin1}-{mintok}"], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
+#                        method='animate',
+#                        label=str(mintok)) for num_min, num_nonmin1, mintok, frame in enumerate(fig.frames)]
+#        )
+#    ]
 
-#     fig.update_layout(
-#         sliders=sliders
-#     )
+#    fig.update_layout(
+#        sliders=sliders
+#    )
 
-#     fig.show()
+#    fig.show()
 
 # %%
 @torch.no_grad()
@@ -1557,10 +1561,6 @@ def calculate_correct_minimum_lower_bound_fraction_3way(model, sep_pos=dataset.l
     total_sequences = (model.cfg.d_vocab - 1) ** sep_pos
     return calculate_correct_minimum_lower_bound_3way(model, sep_pos=sep_pos, **kwargs) / total_sequences
 
-# # %%
-# slacks_3way = compute_slack_3way_reduced(model)
-# # %%
-# print(f"Assuming no errors in our argument, we can now prove that the model computes the correct minimum of the sequence in at least {calculate_correct_minimum_lower_bound(model)} cases ({100 * calculate_correct_minimum_lower_bound_fraction_3way(model, slacks_3way=slacks_3way):.1f}% of the sequences).")
 # %%
 print(f"Assuming no errors in our argument, we can now prove that the model computes the correct minimum of the sequence in at least {calculate_correct_minimum_lower_bound(model)} cases ({100 * calculate_correct_minimum_lower_bound_fraction_3way(model):.1f}% of the sequences).")
 
