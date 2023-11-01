@@ -215,7 +215,7 @@ import math
 ### Utils
 
 # %%
-#image utils
+#@title image utils
 def imshow(tensor, renderer=None, xaxis="", yaxis="", color_continuous_scale="RdBu", **kwargs):
     px.imshow(utils.to_numpy(tensor), color_continuous_midpoint=0.0, color_continuous_scale=color_continuous_scale, labels={"x":xaxis, "y":yaxis}, **kwargs).show(renderer)
 
