@@ -7,7 +7,7 @@
 # The <a href="https://colab.research.google.com/drive/1IygYxp98JGvMRLNmnEbHjEGUBAxBkLeU">problem</a> is to interpret a model which has been trained to sort a list. The model is fed sequences like:```[11, 2, 5, 0, 3, 9, SEP, 0, 2, 3, 5, 9, 11]``` and has been trained to predict each element in the sorted list (in other words, the output at the `SEP` token should be a prediction of `0`, the output at `0` should be a prediction of `2`, etc).
 #
 #
-# **TL;DR**: We’re obsessed with the question “what if we gear our interpretability analysis at making formal guarantees about model behavior”. We present a sketch of a formal guarantee that P(model outputs the first token (of ten tokens) correctly) >= 59%. 
+# **TL;DR**: We’re obsessed with the question “what if we gear our interpretability analysis at making formal guarantees about model behavior”. We present a sketch of a formal guarantee that P(model outputs the first token (of ten tokens) correctly) >= 59%.
 #
 #
 # <img src="https://raw.githubusercontent.com/callummcdougall/computational-thread-art/master/example_images/misc/sorted-problem.png" width="350">
@@ -19,18 +19,18 @@
 #
 # ## Introduction
 #
-# Given a model M, and output behavior B that we care about, the standard workflow for mechanistic interpretability goes something like this: 
+# Given a model M, and output behavior B that we care about, the standard workflow for mechanistic interpretability goes something like this:
 #
-# 1. M is a very large computation graph, so we find subgraph M’ that is relevant to B. Then we make arguments to show that M’ is a reasonable factoring wrt B. A key example might be ablating irrelevant heads. Let’s call these moves independence relaxations. 
+# 1. M is a very large computation graph, so we find subgraph M’ that is relevant to B. Then we make arguments to show that M’ is a reasonable factoring wrt B. A key example might be ablating irrelevant heads. Let’s call these moves independence relaxations.
 #
-# 2. M’ is still a pretty large computational graph, but easier to analyze. Now we can isolate important properties P of M' by how they impact B. For example, in patching the classifying property is the result of running the irrelevant parts of the model on a sample from the corrupted distributions and the relevant parts of the model on a sample from the correct distribution. Let’s call these moves finding classifying properties. 
+# 2. M’ is still a pretty large computational graph, but easier to analyze. Now we can isolate important properties P of M' by how they impact B. For example, in patching the classifying property is the result of running the irrelevant parts of the model on a sample from the corrupted distributions and the relevant parts of the model on a sample from the correct distribution. Let’s call these moves finding classifying properties.
 #
 # Substantial analysis of independence relaxations and classifying properties can paint a compelling picture of model behavior. But we may still not be able to make any formal guarantees akin to “with probability X, M will do B because P is so and so”.
 # So far, the best we've got is informal arguments substantiated by random sampling.
 #
 # On the other hand, a formal guarantee is a **precise** statement about M wrt B that can be **verified**. We think that usefulness towards making a formal guarantee can be a metric for evaluating interpretability analyses!
 #
-# The following interpretability analyses are geared towards making guarantees. As usual, we’ll present a hypothesis for how the model works, and gesture at evidence for our hypothesis. Beyond this, we’ll identify the computation that would tie up the evidence into a guarantee. Finally, we’ll demonstrate how we iteratively develop our independence relaxations and classifying properties to make stronger guarantees. 
+# The following interpretability analyses are geared towards making guarantees. As usual, we’ll present a hypothesis for how the model works, and gesture at evidence for our hypothesis. Beyond this, we’ll identify the computation that would tie up the evidence into a guarantee. Finally, we’ll demonstrate how we iteratively develop our independence relaxations and classifying properties to make stronger guarantees.
 #
 # The methodology used here is being developed as a part of a larger project of Jason Gross, Rajashree Agrawal, and Thomas Kwa investigating formalizations of tiny transformers. We’ll publish an in depth analysis soon. This post is a short attempt at applying the methodology for fun.
 
@@ -45,7 +45,7 @@
 # - It seems like the cancelling doesn't work that well when there are tokens in the range where the head behavior is swapped, so most of the computation should work even in the absence of cancelling.  The cancelling presumably just tips the scales in marginal cases (and cases where there are duplicates), since most of the head's capacity is devoted to positive copying when such tokens are present.
 
 # ## Formal Assertions
-# 
+#
 # To validate the hypothesis, we need to establish a the following assertions:
 #
 # Let $S$ be the range of swapped tokens, $S = [28, 29, 30, 31, 32, 33, 34, 35, 36, 37]$.
@@ -64,31 +64,31 @@
 # Argument of A1:
 # 1. Attention by head $h_{k}$ is mostly monotonic decreasing in the value of the token $k$. Evidence: See graph of attention from SEP position.
 # 2. The OV circuit on head $h_{k}$ copies the value $k$ more than anything else. Evidence: See graphs of OV circuits.
-# 3. We pay enough more attention to the smallest token than to everything else combined and copy $k$ enough more than anything else that when we combine the effects of the two heads on other tokens, we still manage to copy the correct token. Computation: See attempts. 
-# 
+# 3. We pay enough more attention to the smallest token than to everything else combined and copy $k$ enough more than anything else that when we combine the effects of the two heads on other tokens, we still manage to copy the correct token. Computation: See attempts.
+#
 #
 # Argument of A2:
 #
-# 1. The copying effects from attending to 50 in position 19 and one additional 50 in some position before 10 gives enough difference between 50 and anything else that we don't care what happens elsewhere. Evidence: See graph of layernorm scaling. 
+# 1. The copying effects from attending to 50 in position 19 and one additional 50 in some position before 10 gives enough difference between 50 and anything else that we don't care what happens elsewhere. Evidence: See graph of layernorm scaling.
 # 2. Computation: TODO.
-# 
+#
 #
 # Argument of A3:
 #
-# 1. Attention by head $h_{k}$ in position 19 is mostly monotonic increasing in the value of the token $k$. Evidence: See graphs of attention. 
+# 1. Attention by head $h_{k}$ in position 19 is mostly monotonic increasing in the value of the token $k$. Evidence: See graphs of attention.
 # 2. The OV circuit on head $h_{k}$ copies the value $k$ more than anything else. Evidence: See graphs of OV circuits.
 # 3. We pay enough more attention to the largest token than to everything else combined and copy $k$ enough more than anything else that when we combine the effects of the two heads on other tokens, we still manage to copy the correct token. Computation: TODO.
-# 
+#
 #
 # Argument of A4:
 #
 # For all of the following, evidence is in graphs of attention, and the computation is a TODO.
 # 1. For $k_1, k_2, q \not\in S$ with $k_1 < q \le k_2$, head 1 pays more attention to $k_2$ in positions before 10 than to $k_1$ in any position.
-# 2. For $k_1, k_2, q \not\in S$ with $k_1 = q \le k_2$, head 1 pays more attention to $k_2$ in positions before 10 than to $k_1$ in positions after 10. 
-# 3. For $k_1, k_2, q \not\in S$ with $q \le k_1 < k_2$, head 1 pays more attention to $k_1$ in positions before 10 than to $k_2$ in positions before 10. 
-# 4. For $k_2 \in S$ with $k_1 < q \le k_2$, head 0 pays more attention to $k_2$ in positions before 10 than to $k_1$ in any position. 
-# 5. For $k_2 \in S$ with $k_1 = q \le k_2$, head 0 pays more attention to $k_2$ in positions before 10 than to $k_1$ in positions after 10. 
-# 6. For $k_1 \in S$ with $q \le k_1 < k_2$, head 0 pays more attention to $k_1$ in positions before 10 than to $k_2$ in positions before 10. 
+# 2. For $k_1, k_2, q \not\in S$ with $k_1 = q \le k_2$, head 1 pays more attention to $k_2$ in positions before 10 than to $k_1$ in positions after 10.
+# 3. For $k_1, k_2, q \not\in S$ with $q \le k_1 < k_2$, head 1 pays more attention to $k_1$ in positions before 10 than to $k_2$ in positions before 10.
+# 4. For $k_2 \in S$ with $k_1 < q \le k_2$, head 0 pays more attention to $k_2$ in positions before 10 than to $k_1$ in any position.
+# 5. For $k_2 \in S$ with $k_1 = q \le k_2$, head 0 pays more attention to $k_2$ in positions before 10 than to $k_1$ in positions after 10.
+# 6. For $k_1 \in S$ with $q \le k_1 < k_2$, head 0 pays more attention to $k_1$ in positions before 10 than to $k_2$ in positions before 10.
 #
 #
 # %% [markdown]
@@ -233,8 +233,8 @@ def scatter(x, y, xaxis="", yaxis="", caxis="", renderer=None, **kwargs):
 def hist(tensor, renderer=None, xaxis="", yaxis="", **kwargs):
     px.histogram(utils.to_numpy(tensor), labels={"x":xaxis, "y":yaxis}, **kwargs).show(renderer)
 
-def make_tickvals_text(step=10, include_lastn=1, skip_lastn=0, dataset=dataset):
-    all_tickvals_text = list(enumerate(dataset.vocab))
+def make_tickvals_text(step=10, include_lastn=1, skip_lastn=0, vocab=dataset.vocab):
+    all_tickvals_text = list(enumerate(vocab))
     tickvals_indices = list(range(0, len(all_tickvals_text) - 1 - include_lastn - skip_lastn, step)) + list(range(len(all_tickvals_text) - 1 - include_lastn, len(all_tickvals_text)))
     tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
     ticktext = [all_tickvals_text[i][1] for i in tickvals_indices]
@@ -520,249 +520,262 @@ def layernorm_scales(x: torch.Tensor, eps: float = 1e-5, recip: bool = True) -> 
 
 
 # %%
-s = layernorm_scales(model.W_pos[:,None,:] + model.W_E[None,:,:])[...,0]
-# the only token in position 10 is SEP
-s[dataset.list_len, :-1] = float('nan')
-# SEP never occurs in positions other than 10
-s[:dataset.list_len, -1:], s[dataset.list_len+1:, -1:] = float('nan'), float('nan')
-# we don't actually care about the prediction in the last position
-s = s[:-1, :]
-smin = s[~s.isnan()].min()
-# s = s / smin
-px.imshow(utils.to_numpy(s), color_continuous_scale='Sunsetdark', labels={"x":"Token Value", "y":"Position"}, title=f"Layer Norm Scaling", x=dataset.vocab).show(None)
-
+def display_layernorm_scales(model, sep_pos=dataset.list_len):
+    s = layernorm_scales(model.W_pos[:,None,:] + model.W_E[None,:,:])[...,0]
+    # the only token in position 10 is SEP
+    s[sep_pos, :-1] = float('nan')
+    # SEP never occurs in positions other than 10
+    s[:sep_pos, -1:], s[sep_pos+1:, -1:] = float('nan'), float('nan')
+    # we don't actually care about the prediction in the last position
+    s = s[:-1, :]
+    smin = s[~s.isnan()].min()
+    # s = s / smin
+    px.imshow(utils.to_numpy(s), color_continuous_scale='Sunsetdark', labels={"x":"Token Value", "y":"Position"}, title=f"Layer Norm Scaling", x=dataset.vocab).show(None)
+# %%
+display_layernorm_scales(model)
 # %% [markdown]
 # ## Attention Plots
 
 # %%
 # Attention
-attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok', nanify_sep_loc=dataset.list_len)
-attn_subset = attn_all[:, dataset.list_len, :dataset.list_len+1, -1, :]
-zmin, zmax = attn_subset[~attn_subset.isnan()].min().item(), attn_subset[~attn_subset.isnan()].max().item()
+def display_attention_at_sep_pos(model, sep_pos=dataset.list_len, vocab=dataset.vocab):
+    attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok', nanify_sep_loc=sep_pos)
+    attn_subset = attn_all[:, sep_pos, :sep_pos+1, -1, :]
+    zmin, zmax = attn_subset[~attn_subset.isnan()].min().item(), attn_subset[~attn_subset.isnan()].max().item()
 
-fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=("Head 0", "Head 1"))
-fig.update_layout(title="Attention (pre-softmax) from SEP to other tokens and positions")
-tickvals, ticktext = make_tickvals_text(step=10, include_lastn=0, skip_lastn=1, dataset=dataset)
-for h in range(model.cfg.n_heads):
-    fig.add_trace(go.Heatmap(z=utils.to_numpy(attn_subset[h]), colorscale='Plasma', zmin=zmin, zmax=zmax, hovertemplate="Token: %{x}<br>Position: %{y}<br>Attention: %{z}<extra>Head " + str(h) + "</extra>"), row=1, col=h+1)
-    fig.update_xaxes(tickvals=tickvals, ticktext=ticktext, title_text="Key Token", row=1, col=h+1)
-    fig.update_yaxes(title_text="Position of Key", row=1, col=h+1)
-fig.show()
+    fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=("Head 0", "Head 1"))
+    fig.update_layout(title="Attention (pre-softmax) from SEP to other tokens and positions")
+    tickvals, ticktext = make_tickvals_text(step=10, include_lastn=0, skip_lastn=1, vocab=vocab)
+    for h in range(model.cfg.n_heads):
+        fig.add_trace(go.Heatmap(z=utils.to_numpy(attn_subset[h]), colorscale='Plasma', zmin=zmin, zmax=zmax, hovertemplate="Token: %{x}<br>Position: %{y}<br>Attention: %{z}<extra>Head " + str(h) + "</extra>"), row=1, col=h+1)
+        fig.update_xaxes(tickvals=tickvals, ticktext=ticktext, title_text="Key Token", row=1, col=h+1)
+        fig.update_yaxes(title_text="Position of Key", row=1, col=h+1)
+    fig.show()
 
 # %%
+display_attention_at_sep_pos(model)
+# %%
 # Attention Across Positions
-attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok', nanify_sep_loc=dataset.list_len)
-zmax = attn_all[~attn_all.isnan()].max().item()
-zmin = attn_all[~attn_all.isnan()].min().item()
+def display_attention_everywhere(model, dataset):
+    attn_all = compute_attn_all(model, outdim='h qpos kpos qtok ktok', nanify_sep_loc=dataset.list_len)
+    zmax = attn_all[~attn_all.isnan()].max().item()
+    zmin = attn_all[~attn_all.isnan()].min().item()
 
-default_attn = t.zeros_like(attn_all[0, 0, 0])
-default_attn[:, :] = float('nan')
-default_attn = utils.to_numpy(default_attn)
+    default_attn = t.zeros_like(attn_all[0, 0, 0])
+    default_attn[:, :] = float('nan')
+    default_attn = utils.to_numpy(default_attn)
 
-n_cols = 10
-n_rows_per_head = (dataset.seq_len - 1 - 1) // n_cols + 1
-n_rows = n_rows_per_head * model.cfg.n_heads
+    n_cols = 10
+    n_rows_per_head = (dataset.seq_len - 1 - 1) // n_cols + 1
+    n_rows = n_rows_per_head * model.cfg.n_heads
 
-tickvals, ticktext = make_tickvals_text(step=20, include_lastn=0, skip_lastn=0, dataset=dataset)
+    tickvals, ticktext = make_tickvals_text(step=20, include_lastn=0, skip_lastn=0, vocab=dataset.vocab)
 
-subplot_titles = []
-for h in range(model.cfg.n_heads):
-    subplot_titles += [f"{h}:{kpos}" for kpos in range(dataset.seq_len - 1)]
-    subplot_titles += ["" for _ in range(dataset.seq_len - 1, n_cols * n_rows_per_head)]
-fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=subplot_titles)
-fig.update_annotations(font_size=5)
-fig.update_layout(title="Attention head:key_position, x=key token, y=query token")
+    subplot_titles = []
+    for h in range(model.cfg.n_heads):
+        subplot_titles += [f"{h}:{kpos}" for kpos in range(dataset.seq_len - 1)]
+        subplot_titles += ["" for _ in range(dataset.seq_len - 1, n_cols * n_rows_per_head)]
+    fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=subplot_titles)
+    fig.update_annotations(font_size=5)
+    fig.update_layout(title="Attention head:key_position, x=key token, y=query token")
 
-def make_update(qpos, h=None, kpos=None, showscale=False, include_tickvals_ticktext=False):
-    if h is None or kpos is None:
-        return [make_update(qpos, h, kpos, include_tickvals_ticktext=include_tickvals_ticktext) for h in range(model.cfg.n_heads) for kpos in range(n_cols * n_rows_per_head)]
-    cur_attn = attn_all[h, qpos, kpos] if kpos <= qpos else default_attn
-    x = dataset.vocab
-    cur_tickvals, cur_ticktext = tickvals, ticktext
-    if kpos == dataset.list_len:
-        cur_attn = cur_attn[:, -1:]
-        # nan_column = torch.full((cur_attn.shape[0], 1), float('nan'), device=cur_attn.device, dtype=cur_attn.dtype)
-        # cur_attn = torch.cat([nan_column, cur_attn, nan_column], dim=1)
-        # x, cur_tickvals, cur_ticktext = [float('nan'), x[-1], float('nan')], [float('nan'), cur_tickvals[-1], float('nan')], ['', cur_ticktext[-1], '']
-        x, cur_tickvals, cur_ticktext = x[-1:], cur_tickvals[-1:], cur_ticktext[-1:]
-    trace = go.Heatmap(z=utils.to_numpy(cur_attn), colorscale='Plasma', zmin=zmin, zmax=zmax, showscale=showscale, x=x, y=dataset.vocab, hovertemplate="Key: %{x}<br>Query: %{y}<br>Attention: %{z}<extra>" + f"Head {h}<br>Key Pos {kpos}<br>Query Pos {qpos}" + "</extra>")
-    if include_tickvals_ticktext: return trace, cur_tickvals, cur_ticktext
-    return trace
+    def make_update(qpos, h=None, kpos=None, showscale=False, include_tickvals_ticktext=False):
+        if h is None or kpos is None:
+            return [make_update(qpos, h, kpos, include_tickvals_ticktext=include_tickvals_ticktext) for h in range(model.cfg.n_heads) for kpos in range(n_cols * n_rows_per_head)]
+        cur_attn = attn_all[h, qpos, kpos] if kpos <= qpos else default_attn
+        x = dataset.vocab
+        cur_tickvals, cur_ticktext = tickvals, ticktext
+        if kpos == dataset.list_len:
+            cur_attn = cur_attn[:, -1:]
+            # nan_column = torch.full((cur_attn.shape[0], 1), float('nan'), device=cur_attn.device, dtype=cur_attn.dtype)
+            # cur_attn = torch.cat([nan_column, cur_attn, nan_column], dim=1)
+            # x, cur_tickvals, cur_ticktext = [float('nan'), x[-1], float('nan')], [float('nan'), cur_tickvals[-1], float('nan')], ['', cur_ticktext[-1], '']
+            x, cur_tickvals, cur_ticktext = x[-1:], cur_tickvals[-1:], cur_ticktext[-1:]
+        trace = go.Heatmap(z=utils.to_numpy(cur_attn), colorscale='Plasma', zmin=zmin, zmax=zmax, showscale=showscale, x=x, y=dataset.vocab, hovertemplate="Key: %{x}<br>Query: %{y}<br>Attention: %{z}<extra>" + f"Head {h}<br>Key Pos {kpos}<br>Query Pos {qpos}" + "</extra>")
+        if include_tickvals_ticktext: return trace, cur_tickvals, cur_ticktext
+        return trace
 
-def update(qpos):
-    fig.data = []
-    for i, (trace, cur_tickvals, cur_ticktext) in enumerate(make_update(qpos, include_tickvals_ticktext=True)):
-        row, col = i // n_cols + 1, i % n_cols + 1
-        fig.add_trace(trace, row=row, col=col)
-        fig.update_xaxes(tickvals=cur_tickvals, ticktext=cur_ticktext, constrain='domain', row=row, col=col, tickfont=dict(size=5), title_font=dict(size=5))
-        fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, row=row, col=col, tickvals=tickvals, ticktext=ticktext, tickfont=dict(size=5), title_font=dict(size=5))
+    def update(qpos):
+        fig.data = []
+        for i, (trace, cur_tickvals, cur_ticktext) in enumerate(make_update(qpos, include_tickvals_ticktext=True)):
+            row, col = i // n_cols + 1, i % n_cols + 1
+            fig.add_trace(trace, row=row, col=col)
+            fig.update_xaxes(tickvals=cur_tickvals, ticktext=cur_ticktext, constrain='domain', row=row, col=col, tickfont=dict(size=5), title_font=dict(size=5))
+            fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, row=row, col=col, tickvals=tickvals, ticktext=ticktext, tickfont=dict(size=5), title_font=dict(size=5))
 
-# Create the initial heatmap
-update(dataset.seq_len-2)
+    # Create the initial heatmap
+    update(dataset.seq_len-2)
 
-# Create frames for each position
-frames = [go.Frame(
-    data=make_update(qpos),
-    name=str(qpos)
-) for qpos in range(dataset.list_len+1, dataset.seq_len - 1)]
+    # Create frames for each position
+    frames = [go.Frame(
+        data=make_update(qpos),
+        name=str(qpos)
+    ) for qpos in range(dataset.list_len+1, dataset.seq_len - 1)]
 
-fig.frames = frames
+    fig.frames = frames
 
-# # Add animation controls
-# animation_settings = dict(
-#     frame=dict(duration=1000, redraw=True),
-#     fromcurrent=True,
-#     transition=dict(duration=0)
-# )
+    # # Add animation controls
+    # animation_settings = dict(
+    #     frame=dict(duration=1000, redraw=True),
+    #     fromcurrent=True,
+    #     transition=dict(duration=0)
+    # )
 
-# Create slider
-sliders = [dict(
-    active=len(fig.frames) - 1,
-    yanchor='top',
-    xanchor='left',
-    currentvalue=dict(font=dict(size=20), prefix='Query Position:', visible=True, xanchor='right'),
-    transition=dict(duration=0),
-    pad=dict(b=10, t=50),
-    len=0.9,
-    x=0.1,
-    y=0,
-    steps=[dict(args=[[frame.name], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
-                method='animate',
-                label=frame.name) for frame in fig.frames]
-)]
+    # Create slider
+    sliders = [dict(
+        active=len(fig.frames) - 1,
+        yanchor='top',
+        xanchor='left',
+        currentvalue=dict(font=dict(size=20), prefix='Query Position:', visible=True, xanchor='right'),
+        transition=dict(duration=0),
+        pad=dict(b=10, t=50),
+        len=0.9,
+        x=0.1,
+        y=0,
+        steps=[dict(args=[[frame.name], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
+                    method='animate',
+                    label=frame.name) for frame in fig.frames]
+    )]
 
-fig.update_layout(
-    sliders=sliders
-)
+    fig.update_layout(
+        sliders=sliders
+    )
 
-# fig.update_layout(
-#     updatemenus=[dict(
-#         type='buttons',
-#         showactive=False,
-#         buttons=[dict(label='Play',
-#                       method='animate',
-#                       args=[None, animation_settings])]
-#     )]
-# )
+    # fig.update_layout(
+    #     updatemenus=[dict(
+    #         type='buttons',
+    #         showactive=False,
+    #         buttons=[dict(label='Play',
+    #                       method='animate',
+    #                       args=[None, animation_settings])]
+    #     )]
+    # )
 
-fig.show()
-
+    fig.show()
+# %%
+display_attention_everywhere(model, dataset)
 # %% [markdown]
 # ## OV Attention Head Plots
 
 # %%
-EPVOU = compute_EPVOU(model, nanify_sep_position=dataset.list_len)
-zmax = EPVOU[~EPVOU.isnan()].abs().max().item()
-EPVOU = utils.to_numpy(EPVOU)
+def display_OV_everywhere(model, dataset):
+    EPVOU = compute_EPVOU(model, nanify_sep_position=dataset.list_len)
+    zmax = EPVOU[~EPVOU.isnan()].abs().max().item()
+    EPVOU = utils.to_numpy(EPVOU)
 
-fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=[f"head {h}" for h in range(model.cfg.n_heads)])
-# fig.update_annotations(font_size=12)
-fig.update_layout(title="OV Logit Impact: x=Ouput Logit Token, y=Input Token<br>LN_noscale(LN1(W_pos[pos,:] + W_E) @ W_V[0,h] @ W_O[0, h]) @ W_U")
+    fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=[f"head {h}" for h in range(model.cfg.n_heads)])
+    # fig.update_annotations(font_size=12)
+    fig.update_layout(title="OV Logit Impact: x=Ouput Logit Token, y=Input Token<br>LN_noscale(LN1(W_pos[pos,:] + W_E) @ W_V[0,h] @ W_O[0, h]) @ W_U")
 
-tickvals, ticktext = make_tickvals_text(step=10, include_lastn=0, skip_lastn=1, dataset=dataset)
+    tickvals, ticktext = make_tickvals_text(step=10, include_lastn=0, skip_lastn=1, vocab=dataset.vocab)
 
-def make_update(pos, h, adjust_sep=True):
-    cur_EPVOU = EPVOU[h, pos]
-    y = dataset.vocab
-    if adjust_sep and pos == dataset.list_len:
-        cur_EPVOU = cur_EPVOU[-1:, :]
-        y = y[-1:]
-    elif pos != dataset.list_len:
-        cur_EPVOU = cur_EPVOU[:-1, :]
-        y = y[:-1]
-    return go.Heatmap(z=utils.to_numpy(cur_EPVOU), colorscale='Picnic_r', x=dataset.vocab, y=y, zmin=-zmax, zmax=zmax, showscale=(h == 0), hovertemplate="Input Token: %{y}<br>Output Token: %{x}<br>Logit: %{z}<extra>" + f"Head {h}<br>Pos {pos}" + "</extra>")
+    def make_update(pos, h, adjust_sep=True):
+        cur_EPVOU = EPVOU[h, pos]
+        y = dataset.vocab
+        if adjust_sep and pos == dataset.list_len:
+            cur_EPVOU = cur_EPVOU[-1:, :]
+            y = y[-1:]
+        elif pos != dataset.list_len:
+            cur_EPVOU = cur_EPVOU[:-1, :]
+            y = y[:-1]
+        return go.Heatmap(z=utils.to_numpy(cur_EPVOU), colorscale='Picnic_r', x=dataset.vocab, y=y, zmin=-zmax, zmax=zmax, showscale=(h == 0), hovertemplate="Input Token: %{y}<br>Output Token: %{x}<br>Logit: %{z}<extra>" + f"Head {h}<br>Pos {pos}" + "</extra>")
 
-def update(pos):
-    fig.data = []
-    for h in range(model.cfg.n_heads):
-        fig.add_trace(make_update(pos, h), row=1, col=h+1)
-        fig.update_xaxes(constrain='domain', row=1, col=h+1) #, title_text="Output Logit Token"
-        if pos == dataset.list_len:
-            fig.update_yaxes(range=[-1,1], row=1, col=h+1)
-        else:
-            fig.update_yaxes(autorange='reversed', row=1, col=h+1)
+    def update(pos):
+        fig.data = []
+        for h in range(model.cfg.n_heads):
+            fig.add_trace(make_update(pos, h), row=1, col=h+1)
+            fig.update_xaxes(constrain='domain', row=1, col=h+1) #, title_text="Output Logit Token"
+            if pos == dataset.list_len:
+                fig.update_yaxes(range=[-1,1], row=1, col=h+1)
+            else:
+                fig.update_yaxes(autorange='reversed', row=1, col=h+1)
 
-# Create the initial heatmap
-update(0)
+    # Create the initial heatmap
+    update(0)
 
-# Create frames for each position
-frames = [go.Frame(
-    data=[make_update(pos, h, adjust_sep=True) for h in range(model.cfg.n_heads)],
-    name=str(pos),
-    layout={'yaxis': {'range': ([-1, 1] if pos == dataset.list_len else [len(dataset.vocab)-2, 0])},
-        'yaxis2': {'range': ([-1, 1] if pos == dataset.list_len else [len(dataset.vocab)-2, 0])}},
-) for pos in range(dataset.seq_len-1)]
+    # Create frames for each position
+    frames = [go.Frame(
+        data=[make_update(pos, h, adjust_sep=True) for h in range(model.cfg.n_heads)],
+        name=str(pos),
+        layout={'yaxis': {'range': ([-1, 1] if pos == dataset.list_len else [len(dataset.vocab)-2, 0])},
+            'yaxis2': {'range': ([-1, 1] if pos == dataset.list_len else [len(dataset.vocab)-2, 0])}},
+    ) for pos in range(dataset.seq_len-1)]
 
-fig.frames = frames
+    fig.frames = frames
 
-# # Add animation controls
-# animation_settings = dict(
-#     frame=dict(duration=1000, redraw=True),
-#     fromcurrent=True,
-#     transition=dict(duration=0)
-# )
+    # # Add animation controls
+    # animation_settings = dict(
+    #     frame=dict(duration=1000, redraw=True),
+    #     fromcurrent=True,
+    #     transition=dict(duration=0)
+    # )
 
-# Create slider
-sliders = [dict(
-    active=0,
-    yanchor='top',
-    xanchor='left',
-    currentvalue=dict(font=dict(size=20), prefix='Position:', visible=True, xanchor='right'),
-    transition=dict(duration=0),
-    pad=dict(b=10, t=50),
-    len=0.9,
-    x=0.1,
-    y=0,
-    steps=[dict(args=[[frame.name], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
-                method='animate',
-                label=str(pos)) for pos, frame in enumerate(fig.frames)]
-)]
+    # Create slider
+    sliders = [dict(
+        active=0,
+        yanchor='top',
+        xanchor='left',
+        currentvalue=dict(font=dict(size=20), prefix='Position:', visible=True, xanchor='right'),
+        transition=dict(duration=0),
+        pad=dict(b=10, t=50),
+        len=0.9,
+        x=0.1,
+        y=0,
+        steps=[dict(args=[[frame.name], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
+                    method='animate',
+                    label=str(pos)) for pos, frame in enumerate(fig.frames)]
+    )]
 
-fig.update_layout(
-    sliders=sliders
-)
+    fig.update_layout(
+        sliders=sliders
+    )
 
-# fig.update_layout(
-#     updatemenus=[dict(
-#         type='buttons',
-#         showactive=False,
-#         buttons=[dict(label='Play',
-#                       method='animate',
-#                       args=[None, animation_settings])]
-#     )]
-# )
+    # fig.update_layout(
+    #     updatemenus=[dict(
+    #         type='buttons',
+    #         showactive=False,
+    #         buttons=[dict(label='Play',
+    #                       method='animate',
+    #                       args=[None, animation_settings])]
+    #     )]
+    # )
 
-fig.show()
-
+    fig.show()
+# %%
+display_OV_everywhere(model, dataset)
 # %% [markdown]
 # ## Skip Connection / Residual Stream Plots
 
 # %%
-n_rows = 2
-n_cols = 1 + (dataset.list_len - 1) // n_rows
-fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=[f"pos={pos}" for pos in range(dataset.list_len, dataset.seq_len - 1)])
-fig.update_layout(title="Logit Impact from the embedding (without layernorm scaling)<br>LN_noscale(W_pos[pos,:] + W_E) @ W_U, y=Input, x=Ouput Logit Token")
+def display_residual_impact(model, dataset):
+    n_rows = 2
+    n_cols = 1 + (dataset.list_len - 1) // n_rows
+    fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=[f"pos={pos}" for pos in range(dataset.list_len, dataset.seq_len - 1)])
+    fig.update_layout(title="Logit Impact from the embedding (without layernorm scaling)<br>LN_noscale(W_pos[pos,:] + W_E) @ W_U, y=Input, x=Ouput Logit Token")
 
-EUPU = compute_EUPU(model, nanify_sep_position=dataset.list_len)
-zmax = EUPU[~EUPU.isnan()].abs().max().item()
-EUPU = utils.to_numpy(EUPU)
-for i, pos in enumerate(range(dataset.list_len, dataset.seq_len-1)):
-    r, c = i // n_cols, i % n_cols
-    cur_EUPU = EUPU[pos]
-    y = dataset.vocab
-    if pos == dataset.list_len:
-        cur_EUPU = cur_EUPU[-1:, :]
-        y = y[-1:]
-    else:
-        cur_EUPU = cur_EUPU[:-1, :]
-        y = y[:-1]
-    fig.add_trace(go.Heatmap(z=utils.to_numpy(cur_EUPU), x=dataset.vocab, y=y, colorscale='Picnic_r', zmin=-zmax, zmax=zmax, showscale=(i==0), hovertemplate="Input Token: %{y}<br>Output Token: %{x}<br>Logit: %{z}<extra>" + f"Pos {pos}" + "</extra>"), row=r+1, col=c+1)
-    fig.update_xaxes(constrain='domain', row=r+1, col=c+1) #, title_text="Output Logit Token"
-    if pos == dataset.list_len:
-        fig.update_yaxes(range=[-1,1], row=r+1, col=c+1)
-    else:
-        fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, row=r+1, col=c+1)
-fig.show()
+    EUPU = compute_EUPU(model, nanify_sep_position=dataset.list_len)
+    zmax = EUPU[~EUPU.isnan()].abs().max().item()
+    EUPU = utils.to_numpy(EUPU)
+    for i, pos in enumerate(range(dataset.list_len, dataset.seq_len-1)):
+        r, c = i // n_cols, i % n_cols
+        cur_EUPU = EUPU[pos]
+        y = dataset.vocab
+        if pos == dataset.list_len:
+            cur_EUPU = cur_EUPU[-1:, :]
+            y = y[-1:]
+        else:
+            cur_EUPU = cur_EUPU[:-1, :]
+            y = y[:-1]
+        fig.add_trace(go.Heatmap(z=utils.to_numpy(cur_EUPU), x=dataset.vocab, y=y, colorscale='Picnic_r', zmin=-zmax, zmax=zmax, showscale=(i==0), hovertemplate="Input Token: %{y}<br>Output Token: %{x}<br>Logit: %{z}<extra>" + f"Pos {pos}" + "</extra>"), row=r+1, col=c+1)
+        fig.update_xaxes(constrain='domain', row=r+1, col=c+1) #, title_text="Output Logit Token"
+        if pos == dataset.list_len:
+            fig.update_yaxes(range=[-1,1], row=r+1, col=c+1)
+        else:
+            fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, row=r+1, col=c+1)
+    fig.show()
+
+# %%
+display_residual_impact(model, dataset)
 
 # %% [markdown]
 # # Finding the Minimum with query SEP in Position 10
@@ -796,71 +809,73 @@ fig.show()
 # First a plot.  We use green for "paying attention to the minimum token", red for "paying attention to the non-minimum token", and blue for "paying attention to the SEP token".
 
 # %%
-# swap the axes so that we have red for nonmin, green for min, and blue for sep
-attn_patterns = torch.stack([compute_attention_patterns(model, num_min=num_min)[:, :, :, :, (1, 0, 2)] for num_min in range(1, dataset.list_len)], dim=0)
-# (num_min, head, 2, mintok, nonmintok, 3)
-attn_patterns[attn_patterns.isnan()] = 1
-attn_patterns = utils.to_numpy(attn_patterns * 256)
+def display_attention_2way(model, dataset):
+    # swap the axes so that we have red for nonmin, green for min, and blue for sep
+    attn_patterns = torch.stack([compute_attention_patterns(model, num_min=num_min)[:, :, :, :, (1, 0, 2)] for num_min in range(1, dataset.list_len)], dim=0)
+    # (num_min, head, 2, mintok, nonmintok, 3)
+    attn_patterns[attn_patterns.isnan()] = 1
+    attn_patterns = utils.to_numpy(attn_patterns * 256)
 
-fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=[f"head {h}" for h in range(model.cfg.n_heads)])# {minmax} attn on mintok" for h in range(model.cfg.n_heads) for minmax in ('min', 'max')])
-# fig.update_annotations(font_size=12)
-minmaxi_g = 0 # min attention, but it doesn't matter much
-fig.update_layout(title=f"Attention ({('min', 'max')[minmaxi_g]} on min tok)")
+    fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=[f"head {h}" for h in range(model.cfg.n_heads)])# {minmax} attn on mintok" for h in range(model.cfg.n_heads) for minmax in ('min', 'max')])
+    # fig.update_annotations(font_size=12)
+    minmaxi_g = 0 # min attention, but it doesn't matter much
+    fig.update_layout(title=f"Attention ({('min', 'max')[minmaxi_g]} on min tok)")
 
-all_tickvals_text = list(enumerate(dataset.vocab[:-1]))
-tickvals_indices = list(range(0, len(all_tickvals_text) - 1, 10)) + [len(all_tickvals_text) - 1]
-tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
-tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
-
-
-def make_update(h, minmaxi, num_min):
-    cur_attn_pattern = attn_patterns[num_min - 1, h, minmaxi]
-    # cur_hovertext = all_hovertext[num_min - 1][h][minmaxi]
-    return go.Image(z=cur_attn_pattern, customdata=cur_attn_pattern / 256 * 100, hovertemplate="Non-min token: %{x}<br>Min token: %{y}<br>Min token attn: %{customdata[1]:.1f}%<br>Nonmin tok attn: %{customdata[0]:.1f}%<br>SEP attn: %{customdata[0]:.1f}%<extra>" + f"head {h}" + "</extra>")
-
-def update(num_min):
-    fig.data = []
-    for h in range(model.cfg.n_heads):
-        for minmaxi, minmax in list(enumerate(('min', 'max')))[:1]:
-            col, row = h+1, minmaxi+1
-            fig.add_trace(make_update(h, minmaxi, num_min), col=col, row=row)
-            fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', col=col, row=row, title_text="non-min tok") #, title_text="Output Logit Token"
-            fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, col=col, row=row, title_text="min tok")
-
-# Create the initial heatmap
-update(1)
-
-# Create frames for each position
-frames = [go.Frame(
-    data=[make_update(h, minmaxi, num_min) for h in range(model.cfg.n_heads) for minmaxi in (minmaxi_g, )],
-    name=str(num_min)
-) for num_min in range(1, dataset.list_len)]
-
-fig.frames = frames
-
-# Create slider
-sliders = [dict(
-    active=0,
-    yanchor='top',
-    xanchor='left',
-    currentvalue=dict(font=dict(size=20), prefix='# copies of min token:', visible=True, xanchor='right'),
-    transition=dict(duration=0),
-    pad=dict(b=10, t=50),
-    len=0.9,
-    x=0.1,
-    y=0,
-    steps=[dict(args=[[frame.name], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
-                method='animate',
-                label=str(num_min+1)) for num_min, frame in enumerate(fig.frames)]
-)]
-
-fig.update_layout(
-    sliders=sliders
-)
+    all_tickvals_text = list(enumerate(dataset.vocab[:-1]))
+    tickvals_indices = list(range(0, len(all_tickvals_text) - 1, 10)) + [len(all_tickvals_text) - 1]
+    tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
+    tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
 
 
-fig.show()
+    def make_update(h, minmaxi, num_min):
+        cur_attn_pattern = attn_patterns[num_min - 1, h, minmaxi]
+        # cur_hovertext = all_hovertext[num_min - 1][h][minmaxi]
+        return go.Image(z=cur_attn_pattern, customdata=cur_attn_pattern / 256 * 100, hovertemplate="Non-min token: %{x}<br>Min token: %{y}<br>Min token attn: %{customdata[1]:.1f}%<br>Nonmin tok attn: %{customdata[0]:.1f}%<br>SEP attn: %{customdata[0]:.1f}%<extra>" + f"head {h}" + "</extra>")
 
+    def update(num_min):
+        fig.data = []
+        for h in range(model.cfg.n_heads):
+            for minmaxi, minmax in list(enumerate(('min', 'max')))[:1]:
+                col, row = h+1, minmaxi+1
+                fig.add_trace(make_update(h, minmaxi, num_min), col=col, row=row)
+                fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', col=col, row=row, title_text="non-min tok") #, title_text="Output Logit Token"
+                fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, col=col, row=row, title_text="min tok")
+
+    # Create the initial heatmap
+    update(1)
+
+    # Create frames for each position
+    frames = [go.Frame(
+        data=[make_update(h, minmaxi, num_min) for h in range(model.cfg.n_heads) for minmaxi in (minmaxi_g, )],
+        name=str(num_min)
+    ) for num_min in range(1, dataset.list_len)]
+
+    fig.frames = frames
+
+    # Create slider
+    sliders = [dict(
+        active=0,
+        yanchor='top',
+        xanchor='left',
+        currentvalue=dict(font=dict(size=20), prefix='# copies of min token:', visible=True, xanchor='right'),
+        transition=dict(duration=0),
+        pad=dict(b=10, t=50),
+        len=0.9,
+        x=0.1,
+        y=0,
+        steps=[dict(args=[[frame.name], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
+                    method='animate',
+                    label=str(num_min+1)) for num_min, frame in enumerate(fig.frames)]
+    )]
+
+    fig.update_layout(
+        sliders=sliders
+    )
+
+
+    fig.show()
+# %%
+display_attention_2way(model, dataset)
 # %% [markdown]
 #
 # There are some remarkable things about this plot.
@@ -1066,71 +1081,73 @@ def compute_slack_reduced(model, good_head_num_min=1, **kwargs):
     return slack.max(dim=-1).values
 
 # %%
-slacks = torch.stack([compute_slack_reduced(model, good_head_num_min=num_min) for num_min in range(1, dataset.list_len)], dim=0)
-# (num_min, head, mintok, nonmintok)
-zmax = slacks[~slacks.isnan()].abs().max().item()
-# negate for coloring
-slacks_sign = slacks.sign()
-slacks_full = -utils.to_numpy(slacks)
-slacks_sign = -utils.to_numpy(slacks_sign)
+def display_slacks(model, dataset):
+    slacks = torch.stack([compute_slack_reduced(model, good_head_num_min=num_min) for num_min in range(1, dataset.list_len)], dim=0)
+    # (num_min, head, mintok, nonmintok)
+    zmax = slacks[~slacks.isnan()].abs().max().item()
+    # negate for coloring
+    slacks_sign = slacks.sign()
+    slacks_full = -utils.to_numpy(slacks)
+    slacks_sign = -utils.to_numpy(slacks_sign)
 
-for slacks in (slacks_full, slacks_sign):
-    fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=[f"slack on head {h}" for h in range(model.cfg.n_heads)])# {minmax} attn on mintok" for h in range(model.cfg.n_heads) for minmax in ('min', 'max')])
-    fig.update_layout(title=f"Slack (positive for either head ⇒ model is correct)")
+    for slacks in (slacks_full, slacks_sign):
+        fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=[f"slack on head {h}" for h in range(model.cfg.n_heads)])# {minmax} attn on mintok" for h in range(model.cfg.n_heads) for minmax in ('min', 'max')])
+        fig.update_layout(title=f"Slack (positive for either head ⇒ model is correct)")
 
-    all_tickvals_text = list(enumerate(dataset.vocab[:-1]))
-    tickvals_indices = list(range(0, len(all_tickvals_text) - 1, 10)) + [len(all_tickvals_text) - 1]
-    tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
-    tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
-
-
-    def make_update(h, num_min, showscale=True):
-        cur_slack = slacks[num_min - 1, h]
-        return go.Heatmap(z=cur_slack,  colorscale='Picnic_r', zmin=-zmax, zmax=zmax, showscale=showscale)
-
-    def update(num_min):
-        fig.data = []
-        for h in range(model.cfg.n_heads):
-            col, row = h+1, 1
-            fig.add_trace(make_update(h, num_min), col=col, row=row)
-            fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', col=col, row=row, title_text="non-min tok") #, title_text="Output Logit Token"
-            fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, col=col, row=row, title_text="min tok")
-        fig.update_traces(hovertemplate="Non-min token: %{x}<br>Min token: %{y}<br>Slack: %{z}<extra>head %{fullData.name}</extra>")
-
-    # Create the initial heatmap
-    update(1)
-
-    # Create frames for each position
-    frames = [go.Frame(
-        data=[make_update(h, num_min) for h in range(model.cfg.n_heads)],
-        name=str(num_min)
-    ) for num_min in range(1, dataset.list_len)]
-
-    fig.frames = frames
-
-    # Create slider
-    sliders = [dict(
-        active=0,
-        yanchor='top',
-        xanchor='left',
-        currentvalue=dict(font=dict(size=20), prefix='# copies of min token:', visible=True, xanchor='right'),
-        transition=dict(duration=0),
-        pad=dict(b=10, t=50),
-        len=0.9,
-        x=0.1,
-        y=0,
-        steps=[dict(args=[[frame.name], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
-                    method='animate',
-                    label=str(num_min+1)) for num_min, frame in enumerate(fig.frames)]
-    )]
-
-    fig.update_layout(
-        sliders=sliders
-    )
+        all_tickvals_text = list(enumerate(dataset.vocab[:-1]))
+        tickvals_indices = list(range(0, len(all_tickvals_text) - 1, 10)) + [len(all_tickvals_text) - 1]
+        tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
+        tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
 
 
-    fig.show()
+        def make_update(h, num_min, showscale=True):
+            cur_slack = slacks[num_min - 1, h]
+            return go.Heatmap(z=cur_slack,  colorscale='Picnic_r', zmin=-zmax, zmax=zmax, showscale=showscale)
 
+        def update(num_min):
+            fig.data = []
+            for h in range(model.cfg.n_heads):
+                col, row = h+1, 1
+                fig.add_trace(make_update(h, num_min), col=col, row=row)
+                fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', col=col, row=row, title_text="non-min tok") #, title_text="Output Logit Token"
+                fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, col=col, row=row, title_text="min tok")
+            fig.update_traces(hovertemplate="Non-min token: %{x}<br>Min token: %{y}<br>Slack: %{z}<extra>head %{fullData.name}</extra>")
+
+        # Create the initial heatmap
+        update(1)
+
+        # Create frames for each position
+        frames = [go.Frame(
+            data=[make_update(h, num_min) for h in range(model.cfg.n_heads)],
+            name=str(num_min)
+        ) for num_min in range(1, dataset.list_len)]
+
+        fig.frames = frames
+
+        # Create slider
+        sliders = [dict(
+            active=0,
+            yanchor='top',
+            xanchor='left',
+            currentvalue=dict(font=dict(size=20), prefix='# copies of min token:', visible=True, xanchor='right'),
+            transition=dict(duration=0),
+            pad=dict(b=10, t=50),
+            len=0.9,
+            x=0.1,
+            y=0,
+            steps=[dict(args=[[frame.name], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
+                        method='animate',
+                        label=str(num_min+1)) for num_min, frame in enumerate(fig.frames)]
+        )]
+
+        fig.update_layout(
+            sliders=sliders
+        )
+
+
+        fig.show()
+# %%
+display_slacks(model, dataset)
 # %% [markdown]
 # Let's count what fraction of sequences we can now explain the computation of the minimum on.
 
