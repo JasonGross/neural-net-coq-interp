@@ -242,7 +242,7 @@ def make_tickvals_text(step=10, include_lastn=1, skip_lastn=0, vocab=dataset.voc
 
 # %% [markdown]
 # ## Computation of Matrices
-# Used in both visualization and as a cached computation in proofs)
+# Used in both visualization and as a cached computation in proofs.
 
 # %%
 @torch.no_grad()
@@ -511,13 +511,8 @@ def layernorm_scales(x: torch.Tensor, eps: float = 1e-5, recip: bool = True) -> 
     return scale
 
 # %% [markdown]
-# # Exploratory Plots
-#
-# Before diving into the proof, we provide some plots that may help with understanding the above claims.  These are purely exploratory (aimed at hypothesis generation) and are not required for hypothesis validation.
-
-# %% [markdown]
-# ## Initial Layernorm Scaling
-
+# ## Graphing Display Functions
+# These functions make use of the above computations to display various results.  The details are not essential for correctness.
 
 # %%
 def display_layernorm_scales(model, sep_pos=dataset.list_len):
@@ -531,10 +526,6 @@ def display_layernorm_scales(model, sep_pos=dataset.list_len):
     smin = s[~s.isnan()].min()
     # s = s / smin
     px.imshow(utils.to_numpy(s), color_continuous_scale='Sunsetdark', labels={"x":"Token Value", "y":"Position"}, title=f"Layer Norm Scaling", x=dataset.vocab).show(None)
-# %%
-display_layernorm_scales(model)
-# %% [markdown]
-# ## Attention Plots
 
 # %%
 # Attention
@@ -552,8 +543,6 @@ def display_attention_at_sep_pos(model, sep_pos=dataset.list_len, vocab=dataset.
         fig.update_yaxes(title_text="Position of Key", row=1, col=h+1)
     fig.show()
 
-# %%
-display_attention_at_sep_pos(model)
 # %%
 # Attention Across Positions
 def display_attention_everywhere(model, dataset):
@@ -652,10 +641,6 @@ def display_attention_everywhere(model, dataset):
     # )
 
     fig.show()
-# %%
-display_attention_everywhere(model, dataset)
-# %% [markdown]
-# ## OV Attention Head Plots
 
 # %%
 def display_OV_everywhere(model, dataset):
@@ -741,10 +726,6 @@ def display_OV_everywhere(model, dataset):
     # )
 
     fig.show()
-# %%
-display_OV_everywhere(model, dataset)
-# %% [markdown]
-# ## Skip Connection / Residual Stream Plots
 
 # %%
 def display_residual_impact(model, dataset):
@@ -773,40 +754,6 @@ def display_residual_impact(model, dataset):
         else:
             fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, row=r+1, col=c+1)
     fig.show()
-
-# %%
-display_residual_impact(model, dataset)
-
-# %% [markdown]
-# # Finding the Minimum with query SEP in Position 10
-
-# %% [markdown]
-# ## State Space Reduction
-#
-# **Lemma**: For a single attention head, it suffices to consider sequences with at most two distinct tokens.
-#
-# Note that we are comparing sequences by pre-final-layernorm-scaling gap between the logit of the minimum token and the logit of any other fixed token.
-# Layernorm scaling is non-linear, but if we only care about accuracy and not log-loss, then we can ignore it (neither scaling nor softmax changes which logit is the largest).
-#
-# **Proof sketch**:
-# We show that any sequence with three token values, $x < y < z$, is strictly dominated either by a sequence with just $x$ and $y$ or a sequence with just $x$ and $z$.
-#
-# Suppose we have $k$ copies of $x$, $n$ copies of $y$, and $\ell - k - n$ copies of $z$, the attention scores are $s_x$, $s_y$, and $s_z$, and the differences between the logit of $x$ and our chosen comparison logit (as computed by the OV circuit for each token) are $v_x$, $v_y$, and $v_z$.
-# Then the difference in logit between $x$ and the comparison token is
-# $$\left(k e^{s_x} v_x + n e^{s_y} v_y + (\ell - k - n)e^{s_z}v_z \right)\left(k e^{s_x} + n e^{s_y} + (\ell - k - n)e^{s_z}\right)^{-1}$$
-# Rearrangement gives
-# $$\left(\left(k e^{s_x} v_x + (\ell - k) e^{s_z} v_z\right) + n \left(e^{s_y} v_y - e^{s_z}v_z\right) \right)\left(\left(k e^{s_x} + (\ell - k) e^{s_z}\right) + n \left(e^{s_y} - e^{s_z}\right)\right)^{-1}$$
-# This is a fraction of the form $\frac{a + bn}{c + dn}$.  Taking the derivative with respect to $n$ gives $\frac{bc - ad}{(c + dn)^2}$.  Noting that $c + dn$ cannot equal zero for any valid $n$, we get the the derivative never changes sign.  Hence our logit difference is maximized either at $n = 0$ or at $n = \ell - k$, and the sequence with just two values dominates the one with three.
-#
-# This proof generalizes straightforwardly to sequences with more than three values.
-#
-# Similarly, this proof shows that, when considering only a single attention head, it suffices to consider sequences of $\ell$ copies of the minimum token and sequences with one copy of the minimum token and $\ell - 1$ copies of the non-minimum token, as intermediate values are dominated by the extremes.
-#
-
-# %% [markdown]
-# Let's bound how much attention is paid to the minimum token, non-minimum tokens (in aggregate), and the SEP token.
-#
-# First a plot.  We use green for "paying attention to the minimum token", red for "paying attention to the non-minimum token", and blue for "paying attention to the SEP token".
 
 # %%
 def display_attention_2way(model, dataset):
@@ -874,6 +821,136 @@ def display_attention_2way(model, dataset):
 
 
     fig.show()
+
+# %%
+def display_slacks(model, dataset, compute_slack_reduced):
+    slacks = torch.stack([compute_slack_reduced(model, good_head_num_min=num_min) for num_min in range(1, dataset.list_len)], dim=0)
+    # (num_min, head, mintok, nonmintok)
+    zmax = slacks[~slacks.isnan()].abs().max().item()
+    # negate for coloring
+    slacks_sign = slacks.sign()
+    slacks_full = -utils.to_numpy(slacks)
+    slacks_sign = -utils.to_numpy(slacks_sign)
+
+    for slacks in (slacks_full, slacks_sign):
+        fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=[f"slack on head {h}" for h in range(model.cfg.n_heads)])# {minmax} attn on mintok" for h in range(model.cfg.n_heads) for minmax in ('min', 'max')])
+        fig.update_layout(title=f"Slack (positive for either head ⇒ model is correct)")
+
+        all_tickvals_text = list(enumerate(dataset.vocab[:-1]))
+        tickvals_indices = list(range(0, len(all_tickvals_text) - 1, 10)) + [len(all_tickvals_text) - 1]
+        tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
+        tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
+
+
+        def make_update(h, num_min, showscale=True):
+            cur_slack = slacks[num_min - 1, h]
+            return go.Heatmap(z=cur_slack,  colorscale='Picnic_r', zmin=-zmax, zmax=zmax, showscale=showscale)
+
+        def update(num_min):
+            fig.data = []
+            for h in range(model.cfg.n_heads):
+                col, row = h+1, 1
+                fig.add_trace(make_update(h, num_min), col=col, row=row)
+                fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', col=col, row=row, title_text="non-min tok") #, title_text="Output Logit Token"
+                fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, col=col, row=row, title_text="min tok")
+            fig.update_traces(hovertemplate="Non-min token: %{x}<br>Min token: %{y}<br>Slack: %{z}<extra>head %{fullData.name}</extra>")
+
+        # Create the initial heatmap
+        update(1)
+
+        # Create frames for each position
+        frames = [go.Frame(
+            data=[make_update(h, num_min) for h in range(model.cfg.n_heads)],
+            name=str(num_min)
+        ) for num_min in range(1, dataset.list_len)]
+
+        fig.frames = frames
+
+        # Create slider
+        sliders = [dict(
+            active=0,
+            yanchor='top',
+            xanchor='left',
+            currentvalue=dict(font=dict(size=20), prefix='# copies of min token:', visible=True, xanchor='right'),
+            transition=dict(duration=0),
+            pad=dict(b=10, t=50),
+            len=0.9,
+            x=0.1,
+            y=0,
+            steps=[dict(args=[[frame.name], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
+                        method='animate',
+                        label=str(num_min+1)) for num_min, frame in enumerate(fig.frames)]
+        )]
+
+        fig.update_layout(
+            sliders=sliders
+        )
+
+
+        fig.show()
+
+# %% [markdown]
+# # Exploratory Plots
+#
+# Before diving into the proof, we provide some plots that may help with understanding the above claims.  These are purely exploratory (aimed at hypothesis generation) and are not required for hypothesis validation.
+
+# %% [markdown]
+# ## Initial Layernorm Scaling
+
+
+# %%
+display_layernorm_scales(model)
+# %% [markdown]
+# ## Attention Plots
+
+
+# %%
+display_attention_at_sep_pos(model)
+# %%
+display_attention_everywhere(model, dataset)
+# %% [markdown]
+# ## OV Attention Head Plots
+
+# %%
+display_OV_everywhere(model, dataset)
+# %% [markdown]
+# ## Skip Connection / Residual Stream Plots
+
+
+# %%
+display_residual_impact(model, dataset)
+
+# %% [markdown]
+# # Finding the Minimum with query SEP in Position 10
+
+# %% [markdown]
+# ## State Space Reduction
+#
+# **Lemma**: For a single attention head, it suffices to consider sequences with at most two distinct tokens.
+#
+# Note that we are comparing sequences by pre-final-layernorm-scaling gap between the logit of the minimum token and the logit of any other fixed token.
+# Layernorm scaling is non-linear, but if we only care about accuracy and not log-loss, then we can ignore it (neither scaling nor softmax changes which logit is the largest).
+#
+# **Proof sketch**:
+# We show that any sequence with three token values, $x < y < z$, is strictly dominated either by a sequence with just $x$ and $y$ or a sequence with just $x$ and $z$.
+#
+# Suppose we have $k$ copies of $x$, $n$ copies of $y$, and $\ell - k - n$ copies of $z$, the attention scores are $s_x$, $s_y$, and $s_z$, and the differences between the logit of $x$ and our chosen comparison logit (as computed by the OV circuit for each token) are $v_x$, $v_y$, and $v_z$.
+# Then the difference in logit between $x$ and the comparison token is
+# $$\left(k e^{s_x} v_x + n e^{s_y} v_y + (\ell - k - n)e^{s_z}v_z \right)\left(k e^{s_x} + n e^{s_y} + (\ell - k - n)e^{s_z}\right)^{-1}$$
+# Rearrangement gives
+# $$\left(\left(k e^{s_x} v_x + (\ell - k) e^{s_z} v_z\right) + n \left(e^{s_y} v_y - e^{s_z}v_z\right) \right)\left(\left(k e^{s_x} + (\ell - k) e^{s_z}\right) + n \left(e^{s_y} - e^{s_z}\right)\right)^{-1}$$
+# This is a fraction of the form $\frac{a + bn}{c + dn}$.  Taking the derivative with respect to $n$ gives $\frac{bc - ad}{(c + dn)^2}$.  Noting that $c + dn$ cannot equal zero for any valid $n$, we get the the derivative never changes sign.  Hence our logit difference is maximized either at $n = 0$ or at $n = \ell - k$, and the sequence with just two values dominates the one with three.
+#
+# This proof generalizes straightforwardly to sequences with more than three values.
+#
+# Similarly, this proof shows that, when considering only a single attention head, it suffices to consider sequences of $\ell$ copies of the minimum token and sequences with one copy of the minimum token and $\ell - 1$ copies of the non-minimum token, as intermediate values are dominated by the extremes.
+#
+
+# %% [markdown]
+# Let's bound how much attention is paid to the minimum token, non-minimum tokens (in aggregate), and the SEP token.
+#
+# First a plot.  We use green for "paying attention to the minimum token", red for "paying attention to the non-minimum token", and blue for "paying attention to the SEP token".
+
 # %%
 display_attention_2way(model, dataset)
 # %% [markdown]
@@ -1081,73 +1158,7 @@ def compute_slack_reduced(model, good_head_num_min=1, **kwargs):
     return slack.max(dim=-1).values
 
 # %%
-def display_slacks(model, dataset):
-    slacks = torch.stack([compute_slack_reduced(model, good_head_num_min=num_min) for num_min in range(1, dataset.list_len)], dim=0)
-    # (num_min, head, mintok, nonmintok)
-    zmax = slacks[~slacks.isnan()].abs().max().item()
-    # negate for coloring
-    slacks_sign = slacks.sign()
-    slacks_full = -utils.to_numpy(slacks)
-    slacks_sign = -utils.to_numpy(slacks_sign)
-
-    for slacks in (slacks_full, slacks_sign):
-        fig = make_subplots(rows=1, cols=model.cfg.n_heads, subplot_titles=[f"slack on head {h}" for h in range(model.cfg.n_heads)])# {minmax} attn on mintok" for h in range(model.cfg.n_heads) for minmax in ('min', 'max')])
-        fig.update_layout(title=f"Slack (positive for either head ⇒ model is correct)")
-
-        all_tickvals_text = list(enumerate(dataset.vocab[:-1]))
-        tickvals_indices = list(range(0, len(all_tickvals_text) - 1, 10)) + [len(all_tickvals_text) - 1]
-        tickvals = [all_tickvals_text[i][0] for i in tickvals_indices]
-        tickvals_text = [all_tickvals_text[i][1] for i in tickvals_indices]
-
-
-        def make_update(h, num_min, showscale=True):
-            cur_slack = slacks[num_min - 1, h]
-            return go.Heatmap(z=cur_slack,  colorscale='Picnic_r', zmin=-zmax, zmax=zmax, showscale=showscale)
-
-        def update(num_min):
-            fig.data = []
-            for h in range(model.cfg.n_heads):
-                col, row = h+1, 1
-                fig.add_trace(make_update(h, num_min), col=col, row=row)
-                fig.update_xaxes(tickvals=tickvals, ticktext=tickvals_text, constrain='domain', col=col, row=row, title_text="non-min tok") #, title_text="Output Logit Token"
-                fig.update_yaxes(autorange='reversed', scaleanchor="x", scaleratio=1, col=col, row=row, title_text="min tok")
-            fig.update_traces(hovertemplate="Non-min token: %{x}<br>Min token: %{y}<br>Slack: %{z}<extra>head %{fullData.name}</extra>")
-
-        # Create the initial heatmap
-        update(1)
-
-        # Create frames for each position
-        frames = [go.Frame(
-            data=[make_update(h, num_min) for h in range(model.cfg.n_heads)],
-            name=str(num_min)
-        ) for num_min in range(1, dataset.list_len)]
-
-        fig.frames = frames
-
-        # Create slider
-        sliders = [dict(
-            active=0,
-            yanchor='top',
-            xanchor='left',
-            currentvalue=dict(font=dict(size=20), prefix='# copies of min token:', visible=True, xanchor='right'),
-            transition=dict(duration=0),
-            pad=dict(b=10, t=50),
-            len=0.9,
-            x=0.1,
-            y=0,
-            steps=[dict(args=[[frame.name], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
-                        method='animate',
-                        label=str(num_min+1)) for num_min, frame in enumerate(fig.frames)]
-        )]
-
-        fig.update_layout(
-            sliders=sliders
-        )
-
-
-        fig.show()
-# %%
-display_slacks(model, dataset)
+display_slacks(model, dataset, compute_slack_reduced)
 # %% [markdown]
 # Let's count what fraction of sequences we can now explain the computation of the minimum on.
 
