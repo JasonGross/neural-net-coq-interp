@@ -12,7 +12,7 @@
 #
 # <img src="https://raw.githubusercontent.com/callummcdougall/computational-thread-art/master/example_images/misc/sorted-problem.png" width="350">
 #
-# Content flow: Our Approach, Set up, Graphs, Proofs, Conclusion.
+# Content flow: Our Approach, Set up, Visualizations, Proofs.
 
 # %% [markdown]
 # # Our Approach
@@ -62,27 +62,27 @@
 # We breakdown each of the assertions by evidence and computation required to make a formal guarantee.
 #
 # Argument of A1:
-# 1. Attention by head $h_{k}$ is mostly monotonic decreasing in the value of the token $k$. Evidence: See graph of attention from SEP position.
-# 2. The OV circuit on head $h_{k}$ copies the value $k$ more than anything else. Evidence: See graphs of OV circuits.
+# 1. Attention by head $h_{k}$ is mostly monotonic decreasing in the value of the token $k$. Evidence: See plot of attention from SEP position.
+# 2. The OV circuit on head $h_{k}$ copies the value $k$ more than anything else. Evidence: See plots of OV circuits.
 # 3. We pay enough more attention to the smallest token than to everything else combined and copy $k$ enough more than anything else that when we combine the effects of the two heads on other tokens, we still manage to copy the correct token. Computation: See attempts.
 #
 #
 # Argument of A2:
 #
-# 1. The copying effects from attending to 50 in position 19 and one additional 50 in some position before 10 gives enough difference between 50 and anything else that we don't care what happens elsewhere. Evidence: See graph of layernorm scaling.
+# 1. The copying effects from attending to 50 in position 19 and one additional 50 in some position before 10 gives enough difference between 50 and anything else that we don't care what happens elsewhere. Evidence: See plot of initial layernorm scaling.
 # 2. Computation: TODO.
 #
 #
 # Argument of A3:
 #
-# 1. Attention by head $h_{k}$ in position 19 is mostly monotonic increasing in the value of the token $k$. Evidence: See graphs of attention.
-# 2. The OV circuit on head $h_{k}$ copies the value $k$ more than anything else. Evidence: See graphs of OV circuits.
+# 1. Attention by head $h_{k}$ in position 19 is mostly monotonic increasing in the value of the token $k$. Evidence: See plots of attention.
+# 2. The OV circuit on head $h_{k}$ copies the value $k$ more than anything else. Evidence: See plots of OV circuits.
 # 3. We pay enough more attention to the largest token than to everything else combined and copy $k$ enough more than anything else that when we combine the effects of the two heads on other tokens, we still manage to copy the correct token. Computation: TODO.
 #
 #
 # Argument of A4:
 #
-# For all of the following, evidence is in graphs of attention, and the computation is a TODO.
+# For all of the following, evidence is in plots of attention, and the computation is a TODO.
 # 1. For $k_1, k_2, q \not\in S$ with $k_1 < q \le k_2$, head 1 pays more attention to $k_2$ in positions before 10 than to $k_1$ in any position.
 # 2. For $k_1, k_2, q \not\in S$ with $k_1 = q \le k_2$, head 1 pays more attention to $k_2$ in positions before 10 than to $k_1$ in positions after 10.
 # 3. For $k_1, k_2, q \not\in S$ with $q \le k_1 < k_2$, head 1 pays more attention to $k_1$ in positions before 10 than to $k_2$ in positions before 10.
@@ -154,7 +154,7 @@ if str(exercises_dir) not in sys.path: sys.path.append(str(exercises_dir))
 
 from monthly_algorithmic_problems.october23_sorted_list.dataset import SortedListDataset
 from monthly_algorithmic_problems.october23_sorted_list.model import create_model
-from plotly_utils import hist, bar, imshow
+from plotly_utils import hist, bar
 
 device = t.device("cuda" if t.cuda.is_available() else "cpu")
 
@@ -511,7 +511,7 @@ def layernorm_scales(x: torch.Tensor, eps: float = 1e-5, recip: bool = True) -> 
     return scale
 
 # %% [markdown]
-# ## Graphing Display Functions
+# ## Visualization Functions
 # These functions make use of the above computations to display various results.  The details are not essential for correctness.
 
 # %%
@@ -890,39 +890,36 @@ def display_slacks(model, dataset, compute_slack_reduced):
         fig.show()
 
 # %% [markdown]
-# # Exploratory Plots
+# # Visualizations
 #
-# Before diving into the proof, we provide some plots that may help with understanding the above claims.  These are purely exploratory (aimed at hypothesis generation) and are not required for hypothesis validation.
-
+# The following plots are referenced as evidence for our hypotheses. 
+# These are purely exploratory, by which me mean that they are useful to hypothesis generation and intuition building but are not required for hypothesis validation.
 # %% [markdown]
 # ## Initial Layernorm Scaling
-
-
 # %%
 display_layernorm_scales(model)
 # %% [markdown]
-# ## Attention Plots
-
-
+# ## Attention from SEP to Other Tokens
 # %%
 display_attention_at_sep_pos(model)
+
+# %% [markdown]
+# ## Attention plots
 # %%
 display_attention_everywhere(model, dataset)
 # %% [markdown]
 # ## OV Attention Head Plots
-
 # %%
 display_OV_everywhere(model, dataset)
 # %% [markdown]
 # ## Skip Connection / Residual Stream Plots
-
-
 # %%
 display_residual_impact(model, dataset)
-
 # %% [markdown]
-# # Finding the Minimum with query SEP in Position 10
-
+# # A1: Finding the Minimum with query SEP in Position 10
+#
+# Now we dive into producing guarantess from our hypoheses. We make the relaxation that head 0 and head 1 are completely independent everywhere except for SEP and minimum tokens.
+# Using this relaxation, we prove convexity of the logits over the sequences so we can evalute the output only at the extrema.
 # %% [markdown]
 # ## State Space Reduction
 #
@@ -957,7 +954,7 @@ display_attention_2way(model, dataset)
 #
 # There are some remarkable things about this plot.
 #
-# 1. For sequences where the minimum token is 19 or larger, the model should basically never get the first token correct, because it's paying too much attention to either the SEP token or the wrong non-min token.
+# 1. For sequences where the minimum token is 19 or larger, we are predicting that the model should basically never get the first token correct, because it's paying too much attention to either the SEP token or the wrong non-min token.
 # 2. Even for sequences with 9 or 10 copies of the same number, if that number is 25--39, so much attention is paid to the SEP token (by both heads) that we predict that the model probably gets the wrong answer, even before analyzing OV.
 # 3. The plot probably overestimates the incorrect behavior when the non-min token is relatively close to the min token, because the OV matrices do (small) positive copying of numbers below the current one.  We don't analyze this behavior in enough depth here to put hard bounds on when it's enough to compensate for paying attention to the wrong token, but a more thorough analysis would.
 #
@@ -1199,8 +1196,6 @@ print(f"Assuming no errors in our argument, we can prove that the model computes
 #
 # Recaping: We found that head 1 does positive copying on numbers outside of 25--39.  For numbers below 20, head 1 frequently manages to pay most attention to the smallest number.  Since fewer than 1% of sequences have a minimum above 19, we largely neglect the behavior on sequences with large minima.  We compute for each head the largest logit gap between the actual minima and any other logit, separately for each number of copies of the minimum token.  We then compute the worst-case behavior of the other heads.  We pessimize over position, which mostly does not matter.  We folded the computation of skip connection into the computation of the attention head.  We made a convexity argument that, as long as we consider each head's behavior independently, we can restrict our attention to sequences with at most two distinct tokens and still bound the behavior of other sequences.
 #
-# Although we don't do a more in-depth analysis of the prediction of the first token for the October challenge, we (Jason Gross and Rajashree Agrwal, and Thomas Kwa) are working on a project involving more deeply anlyzing the behavior of even smaller models (1 attention head, no layer norm, only computing the maximum of a list) in more detail, with proofs formalized in the proof assistant Coq.  We're in the process of writing up preliminary results, including connections with heuristic arguments, and hope to post on LessWrong and/or the Alignment Forum soon.  Keep an eye out!
-
 # %% [markdown]
 # ## More fine-grained analysis of first token prediction
 #
