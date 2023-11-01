@@ -32,7 +32,7 @@
 #
 #The following interpretability analyses are geared towards making guarantees. As usual, we’ll present a hypothesis for how the model works, and gesture at evidence for our hypothesis. Beyond this, we’ll identify the computation that would tie up the evidence into a guarantee. Finally, we’ll demonstrate how we iteratively develop our independence relaxations and classifying properties to make stronger guarantees.
 #
-#The methodology used here is being developed as a part of a larger project of Jason Gross, Rajashree Agrawal, and Thomas Kwa investigating formalizations of tiny transformers. We’ll publish an in depth analysis soon. This post is a short attempt at applying the methodology for fun.
+#The methodology used here is being developed as a part of a larger project of Jason and Rajashree, along with Thomas Kwa and others, investigating formalizations of tiny transformers. We’ll publish an in depth analysis soon. This post is a short attempt at applying the methodology for fun.
 
 ### Initial Hypothesis
 #To start off, the rough algorithm for the model seems to be: find the smallest value not smaller than the current token, which hasn't been "cancelled" by an equivalent copy appearing already in the sorted list
