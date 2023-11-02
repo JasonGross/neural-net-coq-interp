@@ -27,9 +27,9 @@ $(foreach f,$(CHECK_PY_FILES),$(eval $(call add_target,check,$(f),$(PYTHON) $(f)
 
 ANALYZE_PY_FILES := \
 	train_max_of_2.py \
-	undertrained_max2.py \
 	proof_max2_01_exhaustive.py \
-	proof_max2_01_undertrained.py \
+#	undertrained_max2.py \
+#	proof_max2_01_undertrained.py \
 	#
 
 ANALYZE_BIG_PY_FILES := \
