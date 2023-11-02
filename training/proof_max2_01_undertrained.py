@@ -1,29 +1,12 @@
 # %%
 import torch
-import torch.nn as nn
 import numpy as np
-import transformer_lens
-from transformer_lens import HookedTransformer, HookedTransformerConfig
-import tqdm.auto as tqdm
 # import circuitsvis as cv
-from fancy_einsum import einsum
-from pathlib import Path
-from IPython import get_ipython
 
-from coq_export_utils import strify
-from analysis_utils import line, summarize, plot_QK_cosine_similarity, \
-    analyze_svd, calculate_OV_of_pos_embed, calculate_attn, calculate_attn_by_pos, \
-    calculate_copying, calculate_copying_with_pos, calculate_embed_and_pos_embed_overlap, \
-    calculate_rowwise_embed_and_pos_embed_overlap, \
-    calculate_embed_overlap, calculate_pos_embed_overlap, check_monotonicity, \
-    plot_avg_qk_heatmap, plot_qk_heatmap, plot_qk_heatmaps_normed, plot_unembed_cosine_similarity
-from coq_export_utils import coq_export_params
-from max_of_n import acc_fn, loss_fn, train_model, large_data_gen
+from max_of_n import acc_fn, loss_fn
 from interp_max_utils import logit_delta
-from training_utils import compute_all_tokens, make_testset_trainset, make_generator_from_data
+from training_utils import compute_all_tokens
 
-import os, sys
-from importlib import reload
 
 from undertrained_max2 import get_model
 

@@ -1,7 +1,7 @@
 # %%
 from max_of_n import acc_fn, loss_fn
 from interp_max_utils import logit_delta, complexity_of
-from interp_max_utils import logit_delta_large_gap_exhaustive
+# from interp_max_utils import logit_delta_large_gap_exhaustive
 from training_utils import compute_all_tokens
 from train_max_of_2 import get_model
 from tqdm.auto import tqdm
