@@ -2,7 +2,7 @@ From Coq Require Import Sint63 Uint63 Utf8.
 From Ltac2 Require Ltac2 Constr List Ident String Fresh Printf.
 From NeuralNetInterp.Torch Require Import Tensor.
 From NeuralNetInterp.Util Require Import Wf_Uint63 Arrow.
-From NeuralNetInterp.Util.Tactics2 Require Constr FixNotationsForPerformance Constr.Unsafe.MakeAbbreviations List Ident.
+From NeuralNetInterp.Util.Tactics2 Require Constr FixNotationsForPerformance Constr.Unsafe.MakeAbbreviations Array List Ident.
 From NeuralNetInterp.Util Require Export Arith.Classes.
 
 Import Ltac2.
@@ -47,15 +47,15 @@ Module Import Internals.
        end.
 
   Ltac2 toplevel_rels (c : constr) : int list
-    := let rec aux (acc : int list) (c : constr)
+    := let rec aux (c : constr) (acc : int list)
          := match Constr.Unsafe.kind_nocast c with
             | Constr.Unsafe.Rel i => i :: acc
             | Constr.Unsafe.App f args
-              => let acc := aux acc f in
-                 Array.fold_right aux acc args
+              => let acc := aux f acc in
+                 Array.fold_right aux args acc
             | _ => acc
             end in
-       List.sort_uniq Int.compare (aux [] c).
+       List.sort_uniq Int.compare (aux c []).
 
   Local Notation try_tc := (ltac:(try typeclasses eauto)) (only parsing).
   (* inserts einsum for all binders *)

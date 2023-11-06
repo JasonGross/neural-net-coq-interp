@@ -15,3 +15,17 @@ Ltac2 uniq (equal : 'a -> 'a -> bool) (ls : 'a list) : 'a list
                else aux xs (x :: acc)
           end in
      List.rev (aux ls []).
+
+(* drop when <8.19 compat is dropped *)
+Ltac2 rec fold_right (f : 'a -> 'b -> 'b) (ls : 'a list) (a : 'b) : 'b :=
+  match ls with
+  | [] => a
+  | l :: ls => f l (fold_right f ls a)
+  end.
+
+(* drop when <8.19 compat is dropped *)
+Ltac2 rec fold_left (f : 'a -> 'b -> 'a) (a : 'a) (xs : 'b list) : 'a :=
+  match xs with
+  | [] => a
+  | x :: xs => fold_left f (f a x) xs
+  end.
