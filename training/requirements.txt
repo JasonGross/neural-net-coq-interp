@@ -95,7 +95,7 @@ python-dateutil==2.8.2
 pytz==2022.7
 PyYAML==6.0
 pyzmq==25.1.1
-regex==2022.7.9
+regex==2023.10.3
 requests==2.31.0
 responses==0.13.3
 rich==13.5.1
