@@ -12,11 +12,12 @@ Set NativeCompute Timing.
 Time #[native_compile=no] Local Definition all_tokens_attn_pattern_concrete_value := native_compute pre.
 
 Time #[native_compile=no] Definition all_tokens_attn_pattern_concrete : PArray.concrete_tensor _ _ := (*Eval native_compute in pre *)Eval hnf in extract all_tokens_attn_pattern_concrete_value.
-Time Definition all_tokens_attn_pattern_concrete_eq : all_tokens_attn_pattern_concrete = prev := extract_eq all_tokens_attn_pattern_concrete_value. (*
+(* Drop #[native_compile=no] in all definitions after this line once the attribute is automatically transitively recursive, cf https://github.com/coq/coq/pull/18033#issuecomment-1746899653 *)
+Time #[native_compile=no] Definition all_tokens_attn_pattern_concrete_eq : all_tokens_attn_pattern_concrete = prev := extract_eq all_tokens_attn_pattern_concrete_value. (*
 Proof. native_cast_no_check (eq_refl prev). Time Qed.*)
 
-Definition all_tokens_attn_pattern : tensor _ _ := PArray.reabstract (fun _ => prea) all_tokens_attn_pattern_concrete.
-Lemma all_tokens_attn_pattern_eq idxs : all_tokens_attn_pattern idxs = prea idxs.
+#[native_compile=no] Definition all_tokens_attn_pattern : tensor _ _ := PArray.reabstract (fun _ => prea) all_tokens_attn_pattern_concrete.
+#[native_compile=no] Lemma all_tokens_attn_pattern_eq idxs : all_tokens_attn_pattern idxs = prea idxs.
 Proof.
   cbv [all_tokens_attn_pattern].
   erewrite PArray.reabstract_ext_correct by exact all_tokens_attn_pattern_concrete_eq.
