@@ -201,6 +201,18 @@ def center_by_mid_range(tensor: torch.Tensor, dim: Optional[int] = None) -> torc
 # In[ ]:
 
 
+def analyze_svd(M, descr='', scale_by_singular_value=True):
+    U, S, Vh = torch.svd(M)
+    if scale_by_singular_value:
+        U = U * S[None, :].sqrt()
+        Vh = Vh * S[None, :].sqrt()
+    if descr: descr = f' for {descr}'
+    line(S, title=f"Singular Values{descr}")
+    imshow(U, title=f"Principal Components on U{descr}")
+    imshow(Vh, title=f"Principal Components on Vh{descr}")
+
+# %%
+
 # ## Negligibility of W_E @ W_U
 
 # In[ ]:
@@ -741,14 +753,6 @@ def plot_unembed_cosine_similarity(model):
 # In[ ]:
 
 
-def analyze_svd(M, descr=''):
-    U, S, Vh = torch.svd(M)
-    if descr: descr = f' for {descr}'
-    line(S, title=f"Singular Values{descr}")
-    imshow(U, title=f"Principal Components on U{descr}")
-    imshow(Vh, title=f"Principal Components on Vh{descr}")
-
-
 def count_monotonicity_violations_line(result_tensor, m):
     # Count the number of pairs of indices (i, j), i != j, for which
     # (result_tensor[i] + m*i - result_tensor[j] + m*j) / (i - j) is negative
@@ -994,8 +998,12 @@ def layernorm_scales(x: torch.Tensor, eps: float = 1e-5, recip: bool = True) -> 
 # %%
 
 def display_size_direction_stats(size_direction: torch.Tensor, QK: torch.Tensor, U: torch.Tensor, Vh: torch.Tensor, S: torch.Tensor,
+                                 scale_by_singular_value: bool = True,
                                  renderer=None, fit_funcs: Iterable = (sigmoid_func, cubic_func, quintic_func)):
-    imshow(QK, title="W_E @ W_Q @ W_K.T @ W_E.T", renderer=renderer)
+    imshow(QK, title="(W_E + W_pos[-1]) @ W_Q @ W_K.T @ (W_E + W_pos.mean(dim=0)).T", renderer=renderer)
+    if scale_by_singular_value:
+        U = U * S[None, :].sqrt()
+        Vh = Vh * S[None, :].sqrt()
     imshow(U, title="U", renderer=renderer)
     imshow(Vh, title="Vh", renderer=renderer)
     line(S, title="S", renderer=renderer)
@@ -1062,7 +1070,7 @@ def find_size_and_query_direction(model: HookedTransformer, plot_heatmaps=False,
     assert W_K.shape == (1, 1, d_model, d_model), f"W_K.shape = {W_K.shape} != {(1, 1, d_model, d_model)} = (1, 1, d_model, d_model)"
     assert W_E.shape == (d_vocab, d_model), f"W_E.shape = {W_E.shape} != {(d_vocab, d_model)} = (d_vocab, d_model)"
 
-    QK = (W_E + W_pos[-1]) @ W_Q[0, 0, :, :] @ W_K[0, 0, :, :].T @ W_E.T
+    QK = (W_E + W_pos[-1]) @ W_Q[0, 0, :, :] @ W_K[0, 0, :, :].T @ (W_E + W_pos.mean(dim=0)).T
     assert QK.shape == (d_vocab, d_vocab), f"QK.shape = {QK.shape} != {(d_vocab, d_vocab)} = (d_vocab, d_vocab)"
 
     # take SVD:
