@@ -55,3 +55,7 @@ training/wandb/
 training/__pycache__/
 training/trained-models/
 training/artifacts/
+writeups/artifacts/
+writeups/__pycache__/
+writeups/utils/
+writeups/wandb/

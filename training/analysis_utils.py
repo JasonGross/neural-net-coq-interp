@@ -75,8 +75,8 @@ def inv_sigmoid_func(y, K, B, M):
     return M - np.log(K / y - 1) / B
 inv_sigmoid_func.equation = lambda popt: f'x = {popt[2]:.3f} - ln({popt[0]:.3f} / y - 1) / {popt[1]:.3f}'
 
-def imshow(tensor, renderer=None, xaxis="", yaxis="", **kwargs):
-    px.imshow(utils.to_numpy(tensor), color_continuous_midpoint=0.0, color_continuous_scale="RdBu", labels={"x":xaxis, "y":yaxis}, **kwargs).show(renderer)
+def imshow(tensor, renderer=None, xaxis="", yaxis="", colorscale="RdBu", **kwargs):
+    px.imshow(utils.to_numpy(tensor), color_continuous_midpoint=0.0, color_continuous_scale=colorscale, labels={"x":xaxis, "y":yaxis}, **kwargs).show(renderer)
 
 
 def line(tensor, renderer=None, xaxis="", yaxis="", line_labels=None, **kwargs):
@@ -999,13 +999,13 @@ def layernorm_scales(x: torch.Tensor, eps: float = 1e-5, recip: bool = True) -> 
 
 def display_size_direction_stats(size_direction: torch.Tensor, QK: torch.Tensor, U: torch.Tensor, Vh: torch.Tensor, S: torch.Tensor,
                                  scale_by_singular_value: bool = True,
-                                 renderer=None, fit_funcs: Iterable = (sigmoid_func, cubic_func, quintic_func)):
-    imshow(QK, title="(W_E + W_pos[-1]) @ W_Q @ W_K.T @ (W_E + W_pos.mean(dim=0)).T", renderer=renderer)
+                                 renderer=None, fit_funcs: Iterable = (cubic_func, quintic_func), **kwargs):
+    imshow(QK, title="(W_E + W_pos[-1]) @ W_Q @ W_K.T @ (W_E + W_pos.mean(dim=0)).T", renderer=renderer, **kwargs)
     if scale_by_singular_value:
         U = U * S[None, :].sqrt()
         Vh = Vh * S[None, :].sqrt()
-    imshow(U, title="U", renderer=renderer)
-    imshow(Vh, title="Vh", renderer=renderer)
+    imshow(U, title="Query-Side SVD", renderer=renderer, **kwargs)
+    imshow(Vh, title="Vh", renderer=renderer, **kwargs)
     line(S, title="S", renderer=renderer)
     line(size_direction, title="size direction", renderer=renderer)
 
@@ -1059,7 +1059,7 @@ def display_size_direction_stats(size_direction: torch.Tensor, QK: torch.Tensor,
 
 
 @torch.no_grad()
-def find_size_and_query_direction(model: HookedTransformer, plot_heatmaps=False, renderer=None) -> Tuple[torch.Tensor, torch.Tensor]:
+def find_size_and_query_direction(model: HookedTransformer, plot_heatmaps=False, renderer=None, **kwargs) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Approximates the size direction of the model.
     """
@@ -1075,6 +1075,9 @@ def find_size_and_query_direction(model: HookedTransformer, plot_heatmaps=False,
 
     # take SVD:
     U, S, Vh = torch.svd(QK)
+    # adjust the free parameter of sign
+    sign = torch.sign(U[:, 0].mean())
+    U, Vh = U * sign, Vh * sign
 
     # the size direction is the first column of Vh times the mean of the first column of U (to account for sign) times the first singular value, normalized
     size_direction = Vh[:, 0] * U[:, 0].mean() * S[0]
@@ -1084,24 +1087,24 @@ def find_size_and_query_direction(model: HookedTransformer, plot_heatmaps=False,
     query_direction = U[:, 0] * Vh[:, 0].mean() * S[0]
     query_direction = query_direction / query_direction.norm()
 
-    if plot_heatmaps: display_size_direction_stats(size_direction, QK, U, Vh, S, renderer=renderer)
+    if plot_heatmaps: display_size_direction_stats(size_direction, QK, U, Vh, S, renderer=renderer, **kwargs)
 
     return size_direction, query_direction
 
 
 @torch.no_grad()
-def find_size_direction(model: HookedTransformer, plot_heatmaps=False, renderer=None):
+def find_size_direction(model: HookedTransformer, **kwargs):
     """
     Approximates the size direction of the model.
     """
-    return find_size_and_query_direction(model, plot_heatmaps=plot_heatmaps, renderer=renderer)[0]
+    return find_size_and_query_direction(model, **kwargs)[0]
 
 @torch.no_grad()
-def find_query_direction(model: HookedTransformer, plot_heatmaps=False, renderer=None):
+def find_query_direction(model: HookedTransformer, **kwargs):
     """
     Approximates the query direction of the model.
     """
-    return find_size_and_query_direction(model, plot_heatmaps=plot_heatmaps, renderer=renderer)[1]
+    return find_size_and_query_direction(model, **kwargs)[1]
 
 # if __name__ == '__main__':
 #     from train_max_of_2 import get_model
@@ -1110,7 +1113,7 @@ def find_query_direction(model: HookedTransformer, plot_heatmaps=False, renderer
 #     TRAIN_IF_NECESSARY = False
 #     model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
 
-#     find_size_direction(model, plot_heatmaps=True)#, renderer='png')
+#     find_size_direction(model, plot_heatmaps=True, colorscale='Picnic_r')#, renderer='png')
 #     size_direction, query_direction = find_size_and_query_direction(model)
 #     W_pos, W_Q, W_K, W_E = model.W_pos, model.W_Q, model.W_K, model.W_E
 #     line(query_direction @ (W_E + W_pos[-1]) @ W_Q[0, 0, :, :] @ W_K[0, 0, :, :].T)
