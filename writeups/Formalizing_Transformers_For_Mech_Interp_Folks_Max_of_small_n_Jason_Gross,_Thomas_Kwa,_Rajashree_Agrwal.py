@@ -146,7 +146,10 @@ model = max_of_2.get_model(train_if_necessary=False)
 # %% [markdown]
 ### Finding the Size Direction
 #
+#We can run SVD on EQKE (actually $(W_E + W_{\text{pos}}[-1]) W_Q W_K^T \left(W_E + W_{\text{pos}}\text{.mean}(\text{dim}=0)\right)^T$) to find the size direction and the query direction in token space.
 # %%
 size_direction, query_direction = find_size_and_query_direction(model, plot_heatmaps=True, colorscale='Picnic_r')
-
-# %%
+print(f"Size direction: {size_direction}\nQuery direction: {query_direction}")
+# %% [markdown]
+#A couple of notes:
+#- SVD

@@ -4,7 +4,7 @@
 # from training.Proving_How_A_Transformer_Takes_Max import linear_func
 
 
-from typing import Iterable, Optional, Tuple
+from typing import Callable, Iterable, Optional, Tuple
 import einops
 from fancy_einsum import einsum
 import matplotlib.pyplot as plt
@@ -15,6 +15,9 @@ import torch.nn.functional as F
 from transformer_lens import HookedTransformer
 import transformer_lens.utils as utils
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from inspect import signature
 
 # %%
 
@@ -25,19 +28,19 @@ linear_func.equation = lambda popt: f'y = {popt[0]:.3f}*x + {popt[1]:.3f}'
 
 def quadratic_func(x, a, b, c):
     return a * x**2 + b * x + c
-quadratic_func.equation = lambda popt: f'y = {popt[0]:.3f}*x^2 + {popt[1]:.3f}*x + {popt[2]:.3f}'
+quadratic_func.equation = lambda popt: f'y = {popt[0]:.3e}*x^2 + {popt[1]:.3f}*x + {popt[2]:.3f}'
 
 def cubic_func(x, a, b, c, d):
     return a * x**3 + b * x**2 + c * x + d
-cubic_func.equation = lambda popt: f'y = {popt[0]:.3f}*x^3 + {popt[1]:.3f}*x^2 + {popt[2]:.3f}*x + {popt[3]:.3f}'
+cubic_func.equation = lambda popt: f'y = {popt[0]:.3e}*x^3 + {popt[1]:.3e}*x^2 + {popt[2]:.3f}*x + {popt[3]:.3f}'
 
 def quartic_func(x, a, b, c, d, e):
     return a * x**4 + b * x**3 + c * x**2 + d * x + e
-quartic_func.equation = lambda popt: f'y = {popt[0]:.3f}*x^4 + {popt[1]:.3f}*x^3 + {popt[2]:.3f}*x^2 + {popt[3]:.3f}*x + {popt[4]:.3f}'
+quartic_func.equation = lambda popt: f'y = {popt[0]:.3e}*x^4 + {popt[1]:.3e}*x^3 + {popt[2]:.3e}*x^2 + {popt[3]:.3f}*x + {popt[4]:.3f}'
 
 def quintic_func(x, a, b, c, d, e, f):
     return a * x**5 + b * x**4 + c * x**3 + d * x**2 + e * x + f
-quintic_func.equation = lambda popt: f'y = {popt[0]:.3f}*x^5 + {popt[1]:.3f}*x^4 + {popt[2]:.3f}*x^3 + {popt[3]:.3f}*x^2 + {popt[4]:.3f}*x + {popt[5]:.3f}'
+quintic_func.equation = lambda popt: f'y = {popt[0]:.3e}*x^5 + {popt[1]:.3e}*x^4 + {popt[2]:.3e}*x^3 + {popt[3]:.3e}*x^2 + {popt[4]:.3f}*x + {popt[5]:.3f}'
 
 def absolute_shift_func(x, a, b, c):
     return a * np.abs(x - b) + c
@@ -74,6 +77,11 @@ sigmoid_func.equation = lambda popt: f'y = {popt[0]:.3f} / (1 + exp(-{popt[1]:.3
 def inv_sigmoid_func(y, K, B, M):
     return M - np.log(K / y - 1) / B
 inv_sigmoid_func.equation = lambda popt: f'x = {popt[2]:.3f} - ln({popt[0]:.3f} / y - 1) / {popt[1]:.3f}'
+
+def fit_name_of_func(fit_function):
+    fit_name = fit_function.__name__
+    if fit_name is not None and fit_name.endswith('_func'): fit_name = fit_name[:-len('_func')]
+    return fit_name
 
 def imshow(tensor, renderer=None, xaxis="", yaxis="", colorscale="RdBu", **kwargs):
     px.imshow(utils.to_numpy(tensor), color_continuous_midpoint=0.0, color_continuous_scale=colorscale, labels={"x":xaxis, "y":yaxis}, **kwargs).show(renderer)
@@ -210,6 +218,88 @@ def analyze_svd(M, descr='', scale_by_singular_value=True):
     line(S, title=f"Singular Values{descr}")
     imshow(U, title=f"Principal Components on U{descr}")
     imshow(Vh, title=f"Principal Components on Vh{descr}")
+
+# %%
+@torch.no_grad()
+def make_fit(values: torch.Tensor, fit_function, exclude_count=None):
+    assert len(values.shape) in (1, 2)
+    if len(values.shape) == 1:
+        x_vals = np.arange(values.shape[0])
+        y_vals = utils.to_numpy(values)
+    else:
+        x_vals = np.tile(np.arange(values.shape[1]), values.shape[0])
+        y_vals = utils.to_numpy(values.flatten())
+
+    x_vals_fit, y_vals_fit = x_vals, y_vals
+    if exclude_count is not None: x_vals_fit, y_vals_fit = x_vals[exclude_count:-exclude_count], y_vals[exclude_count:-exclude_count]
+    popt, _ = curve_fit(fit_function, x_vals_fit, y_vals_fit)
+
+    residuals = y_vals - fit_function(x_vals, *popt)
+    order_indices = np.argsort(x_vals)
+
+    return popt, (x_vals, y_vals), (x_vals, fit_function(x_vals, *popt)), (x_vals[order_indices], residuals[order_indices])
+
+
+def make_fit_traces(values: torch.Tensor, fit_function, exclude_count=None, fit_equation: Optional[Callable] = None):
+    popt, points, fit, resid = make_fit(values, fit_function, exclude_count=exclude_count)
+    if fit_equation is None: fit_equation = fit_function.equation
+    return popt, \
+            [go.Scatter(x=points[0], y=points[1], name='Data', mode='markers', marker=dict(color='red', size=1, opacity=0.5), showlegend=True, legendgroup=fit_function.__name__),
+            go.Scatter(x=fit[0], y=fit[1], name=f'Fit: {fit_equation(popt)}', mode='lines', line=dict(color='blue'), showlegend=True, legendgroup=fit_function.__name__),
+            go.Scatter(x=resid[0], y=resid[1], name='Residuals', mode='markers', marker=dict(color='red', opacity=0.5), showlegend=False)]
+
+def show_fits(values: torch.Tensor, name: str, fit_funcs: Iterable[Callable], do_exclusions=True, renderer=None):
+    assert len(values.shape) == 1
+    fit_funcs = list(fit_funcs)
+    fig = make_subplots(rows=len(fit_funcs), cols=2,
+                        subplot_titles=[title
+                                        for fit_func in fit_funcs
+                                        for title in (f"{fit_name_of_func(fit_func)} Fit", f"Residuals")])
+    for i, fit_func in enumerate(fit_funcs):
+        popt, (points, fit, resid) = make_fit_traces(values, fit_func, exclude_count=None)
+        fig.add_trace(points, row=i+1, col=1)
+        fig.add_trace(fit, row=i+1, col=1)
+        fig.add_trace(resid, row=i+1, col=2)
+    fig.update_layout(
+        title=f"{name} Data & Fit",
+        legend=dict(
+            bgcolor='rgba(255,255,255,0.5)',
+            yanchor="middle",
+            y=0.5,  # Y=1 anchors the legend to the top of the plot area
+            xanchor="left",
+            x=0
+        ),
+        height=300 * len(fit_funcs) + 100,
+    )
+
+    if do_exclusions:
+        max_param_count = max([len(signature(fit_func).parameters) for fit_func in fit_funcs])
+        frames = [go.Frame(data=[trace
+                                for fit_func in fit_funcs
+                                for trace in make_fit_traces(values, fit_func, exclude_count=exclude_count)[1]],
+                            name=(str(exclude_count) if exclude_count is not None else "0"),
+        ) for exclude_count in [None] + list(range(1, (values.shape[0] - max_param_count) // 2))]
+
+        fig.frames = frames
+
+        sliders = [dict(
+            active=0,
+            yanchor='top',
+            xanchor='left',
+            currentvalue=dict(font=dict(size=20), prefix='# End Points to Exclude:', visible=True, xanchor='right'),
+            transition=dict(duration=0),
+            pad=dict(b=10, t=50),
+            len=0.9,
+            x=0.1,
+            y=0,
+            steps=[dict(args=[[frame.name], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))],
+                        method='animate',
+                        label=frame.name) for frame in fig.frames]
+        )]
+
+        fig.update_layout(sliders=sliders)
+
+    fig.show(renderer)
 
 # %%
 
@@ -997,17 +1087,81 @@ def layernorm_scales(x: torch.Tensor, eps: float = 1e-5, recip: bool = True) -> 
 
 # %%
 
-def display_size_direction_stats(size_direction: torch.Tensor, QK: torch.Tensor, U: torch.Tensor, Vh: torch.Tensor, S: torch.Tensor,
+def display_size_direction_stats(size_direction: torch.Tensor, query_direction: torch.Tensor, QK: torch.Tensor, U: torch.Tensor, Vh: torch.Tensor, S: torch.Tensor,
+                                 size_direction_resid: Optional[torch.Tensor] = None, size_direction_QK: Optional[torch.Tensor] = None,
+                                 query_direction_resid: Optional[torch.Tensor] = None, query_direction_QK: Optional[torch.Tensor] = None,
+                                 do_exclusions: bool = True,
                                  scale_by_singular_value: bool = True,
-                                 renderer=None, fit_funcs: Iterable = (cubic_func, quintic_func), **kwargs):
-    imshow(QK, title="(W_E + W_pos[-1]) @ W_Q @ W_K.T @ (W_E + W_pos.mean(dim=0)).T", renderer=renderer, **kwargs)
+                                 renderer=None,
+                                 fit_funcs: Iterable = (cubic_func, quintic_func),
+                                 delta_fit_funcs: Iterable = (quadratic_func, quartic_func),
+                                 colorscale='Plasma_r', **kwargs):
     if scale_by_singular_value:
         U = U * S[None, :].sqrt()
         Vh = Vh * S[None, :].sqrt()
-    imshow(U, title="Query-Side SVD", renderer=renderer, **kwargs)
-    imshow(Vh, title="Vh", renderer=renderer, **kwargs)
-    line(S, title="S", renderer=renderer)
-    line(size_direction, title="size direction", renderer=renderer)
+    imshow(QK, title="Attention<br>(W_E + W_pos[-1]) @ W_Q @ W_K.T @ (W_E + W_pos.mean(dim=0)).T", xaxis="Key Token", yaxis="Query Token", renderer=renderer, colorscale=colorscale, **kwargs)
+    fig = make_subplots(rows=1, cols=3, subplot_titles=["Query-Side SVD", "Singular Values", "Key-Side SVD"])
+    uzmax, vzmax = U.abs().max().item(), Vh.abs().max().item()
+    fig.add_trace(go.Heatmap(z=utils.to_numpy(U), colorscale=colorscale, zmin=-uzmax, zmax=uzmax,
+                             showscale=False,
+                            #  colorbar=dict(x=-0.15, # https://community.plotly.com/t/colorbar-ticks-left-aligned/60473/4
+                            #             ticklabelposition='inside',
+                            #             ticksuffix='     ',
+                            #             ticklabeloverflow='allow',
+                            #             tickfont_color='darkslategrey',),
+                            hovertemplate="Query: %{y}<br>Singular Index: %{x}<br>Value: %{z}<extra></extra>",
+                            ),
+                row=1, col=1)
+    fig.add_trace(go.Scatter(x=np.arange(S.shape[0]), y=utils.to_numpy(S),
+                            mode='lines+markers',
+                            marker=dict(color='blue'),
+                            line=dict(color='blue'),
+                            hovertemplate="Singular Value: %{y}<br>Singular Index: %{x}<extra></extra>",
+                            ), row=1, col=2)
+    fig.add_trace(go.Heatmap(z=utils.to_numpy(Vh), colorscale=colorscale, zmin=-vzmax, zmax=vzmax,
+                             showscale=False,
+                            #  colorbar=dict(x=1.15),
+                            hovertemplate="Key: %{y}<br>Singular Index: %{x}<br>Value: %{z}<extra></extra>",
+                            ),
+                row=1, col=3)
+    fig.update_layout(title="Attention SVD") #, margin=dict(l=150, r=150))
+    fig.update_yaxes(title_text="Query Token", row=1, col=1)
+    fig.update_yaxes(range=[0, None], row=1, col=2)
+    fig.update_yaxes(title_text="Key Token", row=1, col=3)
+    fig.show(renderer)
+
+    # imshow(U, title="Query-Side SVD", yaxis="Query Token", renderer=renderer, **kwargs)
+    # imshow(Vh, title="Key-Side SVD", yaxis="Key Token", renderer=renderer, **kwargs)
+    # px.line({'singular values': utils.to_numpy(S)}, title="Singular Values of QK Attention").show(renderer)
+
+    fig = make_subplots(rows=1, cols=2, subplot_titles=["Size", "Query"])
+    fig.add_trace(go.Scatter(x=np.arange(size_direction.shape[0]), y=utils.to_numpy(size_direction),
+                            mode='lines+markers',
+                            marker=dict(color='blue'),
+                            line=dict(color='blue'),
+                            hovertemplate="Token: %{x}<br>Size: %{y}<extra></extra>",
+                            ), row=1, col=1)
+    fig.add_trace(go.Scatter(x=np.arange(query_direction.shape[0]), y=utils.to_numpy(query_direction),
+                            mode='lines+markers',
+                            marker=dict(color='blue'),
+                            line=dict(color='blue'),
+                            hovertemplate="Token: %{x}<br>Query Value: %{y}<extra></extra>",
+                            ), row=1, col=2)
+    fig.update_layout(title="Directions in Token Space", showlegend=False)
+    fig.show(renderer)
+
+    # px.line({'size direction': utils.to_numpy(size_direction)}, title="size direction in token space").show(renderer)
+    # px.line({'query direction': utils.to_numpy(query_direction)}, title="query direction in token space").show(renderer)
+    if size_direction_resid is not None: line(size_direction_resid, title="size direction in residual space", renderer=renderer)
+    if query_direction_resid is not None: line(query_direction_resid, title="query direction in residual space", renderer=renderer)
+    if size_direction_QK is not None: line(size_direction_QK, title="size direction in QK space", renderer=renderer)
+    if query_direction_QK is not None: line(query_direction_QK, title="query direction in QK space", renderer=renderer)
+
+    size_direction_differences = size_direction[1:] - size_direction[:-1]
+    show_fits(size_direction, name='Size Direction', fit_funcs=(fit_func for fit_func in fit_funcs if fit_func is not sigmoid_func),
+              do_exclusions=do_exclusions, renderer=renderer)
+    show_fits(size_direction_differences, name='Size Direction Δ', fit_funcs=(fit_func for fit_func in delta_fit_funcs if fit_func is not sigmoid_func),
+              do_exclusions=do_exclusions, renderer=renderer)
 
     y_data = size_direction.detach().cpu().numpy()
     x_data = np.linspace(1, len(y_data), len(y_data))
@@ -1054,8 +1208,6 @@ def display_size_direction_stats(size_direction: torch.Tensor, QK: torch.Tensor,
             # Displaying the plots
             plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # To prevent overlap between suptitle and subplots
             plt.show()
-        else:
-            summarize(size_direction, fit_function=fit_func, renderer=renderer, name="Size Direction")
 
 
 @torch.no_grad()
@@ -1079,15 +1231,22 @@ def find_size_and_query_direction(model: HookedTransformer, plot_heatmaps=False,
     sign = torch.sign(U[:, 0].mean())
     U, Vh = U * sign, Vh * sign
 
-    # the size direction is the first column of Vh times the mean of the first column of U (to account for sign) times the first singular value, normalized
-    size_direction = Vh[:, 0] * U[:, 0].mean() * S[0]
+    # the size direction is the first column of Vh, normalized
+    size_direction = Vh[:, 0]
     size_direction = size_direction / size_direction.norm()
 
-    # query direction is the first column of U times the mean of the first column of Vh (to account for sign) times the first singular value, normalized
-    query_direction = U[:, 0] * Vh[:, 0].mean() * S[0]
+    # query direction is the first column of U, normalized
+    query_direction = U[:, 0]
     query_direction = query_direction / query_direction.norm()
 
-    if plot_heatmaps: display_size_direction_stats(size_direction, QK, U, Vh, S, renderer=renderer, **kwargs)
+    if plot_heatmaps:
+        size_direction_resid, query_direction_resid = size_direction @ W_E + W_pos[-1], query_direction @ W_E + W_pos.mean(dim=0)
+        size_direction_QK, query_direction_QK = size_direction_resid @ W_Q[0, 0, :, :], query_direction_resid @ W_K[0, 0, :, :]
+
+        display_size_direction_stats(size_direction, query_direction, QK, U, Vh, S,
+                                    # size_direction_resid=size_direction_resid, size_direction_QK=size_direction_QK,
+                                    # query_direction_resid=query_direction_resid, query_direction_QK=query_direction_QK,
+                                    renderer=renderer, **kwargs)
 
     return size_direction, query_direction
 
@@ -1109,10 +1268,10 @@ def find_query_direction(model: HookedTransformer, **kwargs):
 # if __name__ == '__main__':
 #     from train_max_of_2 import get_model
 #     from tqdm.auto import tqdm
-
+#
 #     TRAIN_IF_NECESSARY = False
 #     model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
-
+#
 #     find_size_direction(model, plot_heatmaps=True, colorscale='Picnic_r')#, renderer='png')
 #     size_direction, query_direction = find_size_and_query_direction(model)
 #     W_pos, W_Q, W_K, W_E = model.W_pos, model.W_Q, model.W_K, model.W_E
