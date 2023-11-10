@@ -13,7 +13,7 @@ Time #[native_compile=no] Definition all_tokens_logits_concrete_eq : all_tokens_
 Proof. native_cast_no_check (eq_refl logits_all_tokens_concrete). Time Qed.*)
 
 #[native_compile=no] Definition all_tokens_logits : tensor _ _ := PArray.reabstract (fun _ => logits_all_tokens) all_tokens_logits_concrete.
-#[native_compile=no] Lemma all_tokens_logits_eq idxs : all_tokens_logits idxs = logits_all_tokens idxs.
+Lemma all_tokens_logits_eq idxs : all_tokens_logits idxs = logits_all_tokens idxs.
 Proof.
   cbv [all_tokens_logits].
   rewrite PArray.reabstract_ext_correct; [ reflexivity | ].

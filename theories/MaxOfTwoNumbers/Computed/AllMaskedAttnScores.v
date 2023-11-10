@@ -17,7 +17,7 @@ Time #[native_compile=no] Definition all_tokens_masked_attn_scores_concrete_eq :
 Proof. native_cast_no_check (eq_refl prev). Time Qed.*)
 
 #[native_compile=no] Definition all_tokens_masked_attn_scores : tensor _ _ := PArray.reabstract (fun _ => prea) all_tokens_masked_attn_scores_concrete.
-#[native_compile=no] Lemma all_tokens_masked_attn_scores_eq idxs : all_tokens_masked_attn_scores idxs = prea idxs.
+Lemma all_tokens_masked_attn_scores_eq idxs : all_tokens_masked_attn_scores idxs = prea idxs.
 Proof.
   cbv [all_tokens_masked_attn_scores].
   erewrite PArray.reabstract_ext_correct by exact all_tokens_masked_attn_scores_concrete_eq.

@@ -13,7 +13,7 @@ Time #[native_compile=no] Definition centered_residual_error_m1_concrete_eq : ce
 Proof. native_cast_no_check (eq_refl residual_error_m1_all_tokens_concrete). Time Qed.*)
 
 #[native_compile=no] Definition centered_residual_error_m1 : tensor _ _ := PArray.reabstract (fun _ => centered_residual_error_m1_float) centered_residual_error_m1_concrete.
-#[native_compile=no] Lemma centered_residual_error_m1_eq idxs : centered_residual_error_m1 idxs = centered_residual_error_m1_float idxs.
+Lemma centered_residual_error_m1_eq idxs : centered_residual_error_m1 idxs = centered_residual_error_m1_float idxs.
 Proof.
   cbv [centered_residual_error_m1].
   rewrite PArray.reabstract_ext_correct; [ reflexivity | ].

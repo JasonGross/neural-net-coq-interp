@@ -8,8 +8,7 @@ From NeuralNetInterp.MaxOfTwoNumbers.Computed Require Import AllLogits.
 Local Open Scope uint63_scope.
 Local Open Scope core_scope.
 
-(* Drop #[native_compile=no] in all definitions after this line once the attribute is automatically transitively recursive, cf https://github.com/coq/coq/pull/18033#issuecomment-1746899653 *)
-#[native_compile=no] Derive computed_accuracy SuchThat (computed_accuracy = real_accuracy) As computed_accuracy_eq.
+Derive computed_accuracy SuchThat (computed_accuracy = real_accuracy) As computed_accuracy_eq.
 Proof.
   cbv [real_accuracy].
   etransitivity; revgoals.
@@ -17,7 +16,7 @@ Proof.
     eapply Model.acc_fn_Proper; repeat intro; subst; [ | reflexivity .. ].
     apply all_tokens_logits_eq. }
   Time vm_compute; reflexivity.
-Defined.
+Qed.
 
 Compute abs (computed_accuracy - expected_accuracy). (*      = 0.0023193359375%float *)
 Compute (abs (computed_accuracy - expected_accuracy) * totalf)%float. (* = 19 *) (* probably from floating point assoc issues, etc *)

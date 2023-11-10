@@ -17,7 +17,7 @@ Time #[native_compile=no] Definition all_tokens_attn_pattern_concrete_eq : all_t
 Proof. native_cast_no_check (eq_refl prev). Time Qed.*)
 
 #[native_compile=no] Definition all_tokens_attn_pattern : tensor _ _ := PArray.reabstract (fun _ => prea) all_tokens_attn_pattern_concrete.
-#[native_compile=no] Lemma all_tokens_attn_pattern_eq idxs : all_tokens_attn_pattern idxs = prea idxs.
+Lemma all_tokens_attn_pattern_eq idxs : all_tokens_attn_pattern idxs = prea idxs.
 Proof.
   cbv [all_tokens_attn_pattern].
   erewrite PArray.reabstract_ext_correct by exact all_tokens_attn_pattern_concrete_eq.
