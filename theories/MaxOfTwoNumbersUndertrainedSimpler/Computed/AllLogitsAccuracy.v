@@ -4,7 +4,8 @@ From NeuralNetInterp.Torch Require Import Tensor.Instances.
 From NeuralNetInterp.MaxOfTwoNumbersUndertrainedSimpler Require Import Model Model.Instances.
 From NeuralNetInterp.MaxOfTwoNumbersUndertrainedSimpler.Computed Require Import AllLogits.
 
-Derive precomputed_accuracy SuchThat (precomputed_accuracy = true_accuracy) As precomputed_accuracy_eq.
+(* Drop #[native_compile=no] in all definitions after this line once the attribute is automatically transitively recursive, cf https://github.com/coq/coq/pull/18033#issuecomment-1746899653 *)
+#[native_compile=no] Derive precomputed_accuracy SuchThat (precomputed_accuracy = true_accuracy) As precomputed_accuracy_eq.
 Proof.
   cbv [true_accuracy].
   etransitivity; revgoals.
@@ -14,7 +15,7 @@ Proof.
   subst precomputed_accuracy; reflexivity.
 Qed.
 
-Time Definition computed_accuracy_value := vm_compute precomputed_accuracy.
+Time #[native_compile=no] Definition computed_accuracy_value := vm_compute precomputed_accuracy.
 Definition computed_accuracy := Eval hnf in extract computed_accuracy_value.
-Definition computed_accuracy_eq : computed_accuracy = true_accuracy
+#[native_compile=no] Definition computed_accuracy_eq : computed_accuracy = true_accuracy
   := eq_trans (extract_eq computed_accuracy_value) precomputed_accuracy_eq.
