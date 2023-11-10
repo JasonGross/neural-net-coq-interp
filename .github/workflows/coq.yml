@@ -79,6 +79,7 @@ jobs:
       matrix:
         include:
         - env: { COQ_VERSION: "master (native)", DOCKER_COQ_VERSION: "dev-native" , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "", LAPROOF: "", TGTS: "computed" }
+        - env: { COQ_VERSION: "master (native)", DOCKER_COQ_VERSION: "dev-native" , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "", LAPROOF: "", TGTS: "computed-lite" }
         - env: { COQ_VERSION: "master (for Coq CI, native)", DOCKER_COQ_VERSION: "dev-native" , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "", LAPROOF: "", TGTS: "coq-ci-target" }
 
     runs-on: ubuntu-latest

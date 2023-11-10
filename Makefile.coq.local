@@ -3,6 +3,9 @@ VO ?= vo
 .PHONY: computed
 computed: $(filter $(addsuffix %,$(wildcard theories/*/Computed/)),$(VFILES:.v=.$(VO)))
 
+.PHONY: computed-lite
+computed-lite: theories/MaxOfTwoNumbersSimpler/Computed/AllLogits.vo
+
 .PHONY: models
 models: $(filter theories/%/Model.vo,$(VFILES:.v=.$(VO)))
 
