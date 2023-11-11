@@ -1265,6 +1265,48 @@ def find_query_direction(model: HookedTransformer, **kwargs):
     """
     return find_size_and_query_direction(model, **kwargs)[1]
 
+# %%
+# @torch.no_grad()
+# def find_size_and_query_direction_by_parts(model: HookedTransformer, plot_heatmaps=False, renderer=None, **kwargs) -> Tuple[torch.Tensor, torch.Tensor]:
+#     """
+#     Approximates the size direction of the model.
+#     """
+#     W_pos, W_Q, W_K, W_E = model.W_pos, model.W_Q, model.W_K, model.W_E
+#     d_model, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_vocab, model.cfg.n_ctx
+#     assert W_pos.shape == (n_ctx, d_model), f"W_pos.shape = {W_pos.shape} != {(n_ctx, d_model)} = (n_ctx, d_model)"
+#     assert W_Q.shape == (1, 1, d_model, d_model), f"W_Q.shape = {W_Q.shape} != {(1, 1, d_model, d_model)} = (1, 1, d_model, d_model)"
+#     assert W_K.shape == (1, 1, d_model, d_model), f"W_K.shape = {W_K.shape} != {(1, 1, d_model, d_model)} = (1, 1, d_model, d_model)"
+#     assert W_E.shape == (d_vocab, d_model), f"W_E.shape = {W_E.shape} != {(d_vocab, d_model)} = (d_vocab, d_model)"
+
+#     QK = (W_E + W_pos[-1]) @ W_Q[0, 0, :, :] @ W_K[0, 0, :, :].T @ (W_E + W_pos.mean(dim=0)).T
+#     assert QK.shape == (d_vocab, d_vocab), f"QK.shape = {QK.shape} != {(d_vocab, d_vocab)} = (d_vocab, d_vocab)"
+
+#     # take SVD:
+#     U, S, Vh = torch.svd(QK)
+#     # adjust the free parameter of sign
+#     sign = torch.sign(U[:, 0].mean())
+#     U, Vh = U * sign, Vh * sign
+
+#     # the size direction is the first column of Vh, normalized
+#     size_direction = Vh[:, 0]
+#     size_direction = size_direction / size_direction.norm()
+
+#     # query direction is the first column of U, normalized
+#     query_direction = U[:, 0]
+#     query_direction = query_direction / query_direction.norm()
+
+#     if plot_heatmaps:
+#         size_direction_resid, query_direction_resid = size_direction @ W_E + W_pos[-1], query_direction @ W_E + W_pos.mean(dim=0)
+#         size_direction_QK, query_direction_QK = size_direction_resid @ W_Q[0, 0, :, :], query_direction_resid @ W_K[0, 0, :, :]
+
+#         display_size_direction_stats(size_direction, query_direction, QK, U, Vh, S,
+#                                     # size_direction_resid=size_direction_resid, size_direction_QK=size_direction_QK,
+#                                     # query_direction_resid=query_direction_resid, query_direction_QK=query_direction_QK,
+#                                     renderer=renderer, **kwargs)
+
+#     return size_direction, query_direction
+
+
 # if __name__ == '__main__':
 #     from train_max_of_2 import get_model
 #     from tqdm.auto import tqdm
