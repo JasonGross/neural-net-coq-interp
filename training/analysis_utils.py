@@ -1339,6 +1339,33 @@ def find_query_direction(model: HookedTransformer, **kwargs):
     """
     return find_size_and_query_direction(model, **kwargs)[1]
 
+# %%
+@torch.no_grad()
+def find_backwards_attention(model: HookedTransformer):
+    W_pos, W_Q, W_K, W_E = model.W_pos, model.W_Q, model.W_K, model.W_E
+    d_model, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_vocab, model.cfg.n_ctx
+    assert W_pos.shape == (n_ctx, d_model), f"W_pos.shape = {W_pos.shape} != {(n_ctx, d_model)} = (n_ctx, d_model)"
+    assert W_Q.shape == (1, 1, d_model, d_model), f"W_Q.shape = {W_Q.shape} != {(1, 1, d_model, d_model)} = (1, 1, d_model, d_model)"
+    assert W_K.shape == (1, 1, d_model, d_model), f"W_K.shape = {W_K.shape} != {(1, 1, d_model, d_model)} = (1, 1, d_model, d_model)"
+    assert W_E.shape == (d_vocab, d_model), f"W_E.shape = {W_E.shape} != {(d_vocab, d_model)} = (d_vocab, d_model)"
+
+    QK = (W_E + W_pos[-1]) @ W_Q[0, 0, :, :] @ W_K[0, 0, :, :].T @ (W_E + W_pos[:, None, :]).transpose(-1, -2)
+    assert QK.shape == (n_ctx, d_vocab, d_vocab), f"QK.shape = {QK.shape} != {(n_ctx, d_vocab, d_vocab)} = (n_ctx, d_vocab, d_vocab)"
+    # diffs0 = QK[:, :, :-1].max(dim=0).values - QK[:, :, 1:].min(dim=0).values
+    diffs = QK[:, :, :-1] - QK[:, :, 1:].flip(dims=(0,))
+    return torch.nonzero(diffs >= 0).squeeze()
+
+# if __name__ == '__main__':
+#     from train_max_of_2 import get_model
+#     from tqdm.auto import tqdm
+
+#     TRAIN_IF_NECESSARY = False
+#     model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
+
+#     print(find_backwards_attention(model))
+
+# %%
+# %%
 ## %%
 # @torch.no_grad()
 # def find_size_and_query_direction_by_parts(model: HookedTransformer, plot_heatmaps=False, renderer=None, **kwargs) -> Tuple[torch.Tensor, torch.Tensor]:

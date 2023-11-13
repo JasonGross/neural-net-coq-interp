@@ -138,7 +138,7 @@ else:
 #@title imports
 import train_max_of_2 as max_of_2
 from tqdm.auto import tqdm
-from analysis_utils import find_size_and_query_direction, imshow, analyze_svd, line
+from analysis_utils import find_size_and_query_direction, imshow, analyze_svd, line, find_backwards_attention
 import torch
 
 # %%
@@ -154,14 +154,16 @@ print(f"Size direction: {size_direction}\nQuery direction: {query_direction}\nSi
 #### Interpretation and relevance
 #- The first singular value is just over 8,000; the next singular value is just under 30, so to a first approximation there's only one thing going on.
 #- However, the remainder of the QK circuit (labeled "Residual" on the "Contribution of the first singular value to Attention" plot) is not actually small enough to neglect in all cases.
-#  - Looking at the "Size Direction Δ & Fit" plots, consider the "resid.max - resid.min (worst-case independent query)" line.  This line results from taking the remainder of the QK circuit, finding the maximum possible difference in attention, and scaling it according to the worst possible query token (the one which overlaps the least with the size direction).  This line is still enough to give FIXME
+#  - Looking at the "Size Direction Δ & Fit" plots, consider the "resid.max - resid.min (worst-case independent query)" line.  This line results from taking the remainder of the QK circuit, finding the maximum possible difference in attention, and scaling it according to the worst possible query token (the one which overlaps the least with the size direction).  The position of this line shows that the size direction is enough to explain the majority of cases (many sequences with ($i$, $i+1$) will have a comparatively large attention gap just based on the size direction, and most sequences with larger gaps will certainly pay more attention to the larger token), but not all of them.
+#  - Looking at the "(resid[i] - resid[i+1]).max (worst-case query)" line suggests that even accounting for exact attention values, the model might pay more attention to the smaller token!  Let's compute if this ever happens.
 # %%
-# W_pos, W_Q, W_K, W_E = model.W_pos, model.W_Q, model.W_K, model.W_E
-# d_model, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_vocab, model.cfg.n_ctx
-# QK = (W_E + W_pos[-1]) @ W_Q[0, 0, :, :] @ W_K[0, 0, :, :].T @ (W_E + W_pos.mean(dim=0)).T
-# size_contribution = query_direction[:, None] @ size_direction[None, :] * size_query_singular_value
-# imshow(QK - size_contribution)
-# analyze_svd(QK - size_contribution)
+print('The model pays more attention to the smaller token for the following seuqences:')
+for minpos, qtok, ktokmin in find_backwards_attention(model):
+    print(f"Tokens: {ktokmin}, {ktokmin+1};\tQuery: {qtok};\tPosition of the Minimum: {minpos}")
+    if (minpos == 0 and qtok == ktokmin+1) or (minpos == 1 and qtok == ktokmin):
+        print(f"  This sequence is valid!")
+# %% [markdown]
+#Notably, the model only pays more attention to smaller tokens when the query token is not present in the sequence.
 # %% [markdown]
 #### A couple of notes:
 #- SVD is only unique up to the sign of each singular vector.  PyTorch SVD gives us a negative query direction vector, so we negate both the query and size direction vectors.
