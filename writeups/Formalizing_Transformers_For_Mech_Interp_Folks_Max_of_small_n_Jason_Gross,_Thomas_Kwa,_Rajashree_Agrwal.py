@@ -148,10 +148,22 @@ model = max_of_2.get_model(train_if_necessary=False)
 #
 #We can run SVD on EQKE (actually $(W_E + W_{\text{pos}}[-1]) W_Q W_K^T \left(W_E + W_{\text{pos}}\text{.mean}(\text{dim}=0)\right)^T$) to find the size direction and the query direction in token space.
 # %%
-size_direction, query_direction = find_size_and_query_direction(model, plot_heatmaps=True, colorscale='Picnic_r')
-print(f"Size direction: {size_direction}\nQuery direction: {query_direction}")
+size_direction, query_direction, size_query_singular_value = find_size_and_query_direction(model, plot_heatmaps=True, colorscale='Picnic_r')
+print(f"Size direction: {size_direction}\nQuery direction: {query_direction}\nSingular value: {size_query_singular_value}")
 # %% [markdown]
-#A couple of notes:
+#### Interpretation and relevance
+#- The first singular value is just over 8,000; the next singular value is just under 30, so to a first approximation there's only one thing going on.
+#- However, the remainder of the QK circuit (labeled "Residual" on the "Contribution of the first singular value to Attention" plot) is not actually small enough to neglect in all cases.
+#  - Looking at the "Size Direction Δ & Fit" plots, consider the "resid.max - resid.min (worst-case independent query)" line.  This line results from taking the remainder of the QK circuit, finding the maximum possible difference in attention, and scaling it according to the worst possible query token (the one which overlaps the least with the size direction).  This line is still enough to give FIXME
+# %%
+# W_pos, W_Q, W_K, W_E = model.W_pos, model.W_Q, model.W_K, model.W_E
+# d_model, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_vocab, model.cfg.n_ctx
+# QK = (W_E + W_pos[-1]) @ W_Q[0, 0, :, :] @ W_K[0, 0, :, :].T @ (W_E + W_pos.mean(dim=0)).T
+# size_contribution = query_direction[:, None] @ size_direction[None, :] * size_query_singular_value
+# imshow(QK - size_contribution)
+# analyze_svd(QK - size_contribution)
+# %% [markdown]
+#### A couple of notes:
 #- SVD is only unique up to the sign of each singular vector.  PyTorch SVD gives us a negative query direction vector, so we negate both the query and size direction vectors.
 #- For tokens with close to no overlap with the size direction, we may have to argue separately why the model pays the correct amount of attention to them.
 #- If we fit the size direction to a cubic (or quintic), the bounds on the errors might not actually give us enough information to ensure adjacent tokens are ordered correctly.  But if we fit the differences in size-direction overlap of adjacent tokens to a quadratic (or quartic), we see that all differences are positive, and so we can get monotonicity even with worst-case errors.

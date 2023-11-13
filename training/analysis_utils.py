@@ -4,7 +4,7 @@
 # from training.Proving_How_A_Transformer_Takes_Max import linear_func
 
 
-from typing import Callable, Iterable, Optional, Tuple
+from typing import Callable, Iterable, List, Optional, Tuple
 import einops
 from fancy_einsum import einsum
 import matplotlib.pyplot as plt
@@ -16,8 +16,10 @@ from transformer_lens import HookedTransformer
 import transformer_lens.utils as utils
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.colors
 from plotly.subplots import make_subplots
 from inspect import signature
+import itertools
 
 # %%
 
@@ -240,15 +242,23 @@ def make_fit(values: torch.Tensor, fit_function, exclude_count=None):
     return popt, (x_vals, y_vals), (x_vals, fit_function(x_vals, *popt)), (x_vals[order_indices], residuals[order_indices])
 
 
-def make_fit_traces(values: torch.Tensor, fit_function, exclude_count=None, fit_equation: Optional[Callable] = None):
+def make_fit_traces(values: torch.Tensor, fit_function, exclude_count=None, fit_equation: Optional[Callable] = None, reference_lines: Optional[List[Tuple[str, float]]] = None, reference_colors=plotly.colors.qualitative.Dark24):
     popt, points, fit, resid = make_fit(values, fit_function, exclude_count=exclude_count)
     if fit_equation is None: fit_equation = fit_function.equation
+    if reference_lines is None: reference_lines = []
+    reference_line_traces = \
+        [go.Scatter(x=np.arange(points[0].shape[0]), y=np.full(points[0].shape, val), name=name, mode='lines', line=dict(color=color, dash='dash'),
+                hovertemplate=f'{val}<extra>{name}</extra>',
+                showlegend=False, legendgroup=fit_function.__name__)
+        for (name, val), color in zip(reference_lines, itertools.cycle(reference_colors))]
+    # , size=1
     return popt, \
-            [go.Scatter(x=points[0], y=points[1], name='Data', mode='markers', marker=dict(color='red', size=1, opacity=0.5), showlegend=True, legendgroup=fit_function.__name__),
+            [go.Scatter(x=points[0], y=points[1], name='Data', mode='markers', marker=dict(color='red', opacity=0.5), showlegend=True, legendgroup=fit_function.__name__),
             go.Scatter(x=fit[0], y=fit[1], name=f'Fit: {fit_equation(popt)}', mode='lines', line=dict(color='blue'), showlegend=True, legendgroup=fit_function.__name__),
-            go.Scatter(x=resid[0], y=resid[1], name='Residuals', mode='markers', marker=dict(color='red', opacity=0.5), showlegend=False)]
+            go.Scatter(x=resid[0], y=resid[1], name='Residuals', mode='markers', marker=dict(color='red', opacity=0.5), showlegend=False)], \
+            reference_line_traces
 
-def show_fits(values: torch.Tensor, name: str, fit_funcs: Iterable[Callable], do_exclusions=True, renderer=None):
+def show_fits(values: torch.Tensor, name: str, fit_funcs: Iterable[Callable], do_exclusions=True, renderer=None, **kwargs):
     assert len(values.shape) == 1
     fit_funcs = list(fit_funcs)
     fig = make_subplots(rows=len(fit_funcs), cols=2,
@@ -256,10 +266,12 @@ def show_fits(values: torch.Tensor, name: str, fit_funcs: Iterable[Callable], do
                                         for fit_func in fit_funcs
                                         for title in (f"{fit_name_of_func(fit_func)} Fit", f"Residuals")])
     for i, fit_func in enumerate(fit_funcs):
-        popt, (points, fit, resid) = make_fit_traces(values, fit_func, exclude_count=None)
+        popt, (points, fit, resid), reference_line_traces = make_fit_traces(values, fit_func, exclude_count=None, **kwargs)
         fig.add_trace(points, row=i+1, col=1)
         fig.add_trace(fit, row=i+1, col=1)
         fig.add_trace(resid, row=i+1, col=2)
+        for trace in reference_line_traces:
+            fig.add_trace(trace, row=i+1, col=1)
     fig.update_layout(
         title=f"{name} Data & Fit",
         legend=dict(
@@ -276,7 +288,8 @@ def show_fits(values: torch.Tensor, name: str, fit_funcs: Iterable[Callable], do
         max_param_count = max([len(signature(fit_func).parameters) for fit_func in fit_funcs])
         frames = [go.Frame(data=[trace
                                 for fit_func in fit_funcs
-                                for trace in make_fit_traces(values, fit_func, exclude_count=exclude_count)[1]],
+                                for trace_list in make_fit_traces(values, fit_func, exclude_count=exclude_count, **kwargs)[1:]
+                                for trace in trace_list],
                             name=(str(exclude_count) if exclude_count is not None else "0"),
         ) for exclude_count in [None] + list(range(1, (values.shape[0] - max_param_count) // 2))]
 
@@ -1086,11 +1099,42 @@ def layernorm_scales(x: torch.Tensor, eps: float = 1e-5, recip: bool = True) -> 
     return scale
 
 # %%
+@torch.no_grad()
+def compute_singular_contribution(M: torch.Tensor, plot_heatmaps=True, yaxis=None, xaxis=None, title=None, renderer=None, description=None, singular_value_count=1, **kwargs) -> Tuple[torch.Tensor, torch.Tensor]:
+    U, S, Vh = torch.svd(M)
+    U[:, singular_value_count:], S[singular_value_count:], Vh[:, singular_value_count:] = 0, 0, 0
+    contribution = U @ torch.diag(S) @ Vh.T
+    if plot_heatmaps:
+        singular_value_str = f"first {singular_value_count} singular values" if singular_value_count != 1 else f"first singular value"
+        to_description = f" to {description}" if description is not None else ""
+        description = f"{description} " if description is not None else ""
+        diff_zmax = (M - contribution).abs().max().item()
+        zmax = np.max([contribution.abs().max().item(), diff_zmax])
+        fig = make_subplots(rows=1, cols=3, subplot_titles=[f"Contribution", f"Residual", f"Residual (rescaled)"])
+        fig.add_trace(go.Heatmap(z=utils.to_numpy(contribution), zmin=-zmax, zmax=zmax, showscale=True,
+                                 colorbar=dict(x=-0.15, y=0.5),
+                                **kwargs),
+                    row=1, col=1)
+        fig.add_trace(go.Heatmap(z=utils.to_numpy(M - contribution), zmin=-zmax, zmax=zmax, showscale=False,
+                                **kwargs),
+                    row=1, col=2)
+        fig.add_trace(go.Heatmap(z=utils.to_numpy(M - contribution), zmin=-diff_zmax, zmax=diff_zmax, showscale=True,
+                                **kwargs),
+                    row=1, col=3)
+        if title is None: title = f"Contribution of the {singular_value_str}{to_description}"
+        fig.update_layout(title=title, margin=dict(l=100))
+        for col in range(3):
+            if yaxis is not None: fig.update_yaxes(title_text=yaxis, row=1, col=col+1)
+            if xaxis is not None: fig.update_xaxes(title_text=xaxis, row=1, col=col+1)
+    fig.show(renderer)
+    return M - contribution, contribution
+# %%
 
 def display_size_direction_stats(size_direction: torch.Tensor, query_direction: torch.Tensor, QK: torch.Tensor, U: torch.Tensor, Vh: torch.Tensor, S: torch.Tensor,
                                  size_direction_resid: Optional[torch.Tensor] = None, size_direction_QK: Optional[torch.Tensor] = None,
                                  query_direction_resid: Optional[torch.Tensor] = None, query_direction_QK: Optional[torch.Tensor] = None,
                                  do_exclusions: bool = True,
+                                 include_contribution: bool = True,
                                  scale_by_singular_value: bool = True,
                                  renderer=None,
                                  fit_funcs: Iterable = (cubic_func, quintic_func),
@@ -1130,6 +1174,14 @@ def display_size_direction_stats(size_direction: torch.Tensor, query_direction: 
     fig.update_yaxes(title_text="Key Token", row=1, col=3)
     fig.show(renderer)
 
+    contribution_diff = None
+    if include_contribution:
+        contribution_diff, _ = compute_singular_contribution(
+            QK, description="Attention", colorscale=colorscale, renderer=renderer, singular_value_count=1,
+            xaxis='Key Token', yaxis='Query Token',
+            hovertemplate="Query: %{y}<br>Key: %{x}<br>Value: %{z}<extra></extra>",
+            **kwargs)
+
     # imshow(U, title="Query-Side SVD", yaxis="Query Token", renderer=renderer, **kwargs)
     # imshow(Vh, title="Key-Side SVD", yaxis="Key Token", renderer=renderer, **kwargs)
     # px.line({'singular values': utils.to_numpy(S)}, title="Singular Values of QK Attention").show(renderer)
@@ -1157,10 +1209,34 @@ def display_size_direction_stats(size_direction: torch.Tensor, query_direction: 
     if size_direction_QK is not None: line(size_direction_QK, title="size direction in QK space", renderer=renderer)
     if query_direction_QK is not None: line(query_direction_QK, title="query direction in QK space", renderer=renderer)
 
+    reference_lines = []
+    if contribution_diff is not None:
+        # we make some reference lines for the plots of size[i+1] - size[i]
+        # since we'll eventually multiply these by the singular value and the query direction entry, we want to divide by this product when comparing to values from the non-size-direction contributions
+        # we compute the mean and worst-case behavior, and a more fine-grained worst-case adjacent difference
+        singular_scale = S[0].item()
+        scale_per_query = query_direction * singular_scale
+        resid_diffs = contribution_diff[:, :-1] - contribution_diff[:, 1:]
+        resid_max_diff = contribution_diff.max().item() - contribution_diff.min().item()
+        resid_max_diff_per_query = contribution_diff.max(dim=1).values - contribution_diff.min(dim=1).values
+        scale_mean, scale_min = scale_per_query.mean(dim=0).item(), scale_per_query.min().item()
+        resid_mean_diff = (contribution_diff[:, :, None, None] - contribution_diff[None, None, :, :]).abs().mean().item()
+        resid_mean_diff_per_query = (contribution_diff[:, :, None] - contribution_diff[:, None, :]).abs().mean(dim=(-2, -1))
+        reference_lines = [
+            ("resid.max - resid.min (worst-case independent query)", resid_max_diff / scale_min),
+            ("resid.max - resid.min (average-case independent query)", resid_max_diff / scale_mean),
+            ("resid.max - resid.min (worst-case query)", (resid_max_diff_per_query / scale_per_query).max().item()),
+            ("(resid[i] - resid[i+1]).max (worst-case independent query)", (resid_diffs / scale_min).max().item()),
+            ("(resid[i] - resid[i+1]).max (worst-case query)", (resid_diffs / scale_per_query[:, None]).max().item()),
+            ("(resid[i] - resid[i+1]).abs.mean (average-case independent query)", (resid_diffs / scale_mean).abs().mean().item()),
+            ("(resid[i] - resid[j]).abs.mean (average-case independent query)", resid_mean_diff / scale_mean),
+            ("(resid[i] - resid[j]).abs.mean (average-case query)", (resid_mean_diff_per_query / scale_per_query).abs().mean().item()),
+        ]
+
     size_direction_differences = size_direction[1:] - size_direction[:-1]
     show_fits(size_direction, name='Size Direction', fit_funcs=(fit_func for fit_func in fit_funcs if fit_func is not sigmoid_func),
               do_exclusions=do_exclusions, renderer=renderer)
-    show_fits(size_direction_differences, name='Size Direction Δ', fit_funcs=(fit_func for fit_func in delta_fit_funcs if fit_func is not sigmoid_func),
+    show_fits(size_direction_differences, name='Size Direction Δ', reference_lines=reference_lines, fit_funcs=(fit_func for fit_func in delta_fit_funcs if fit_func is not sigmoid_func),
               do_exclusions=do_exclusions, renderer=renderer)
 
     y_data = size_direction.detach().cpu().numpy()
@@ -1232,12 +1308,10 @@ def find_size_and_query_direction(model: HookedTransformer, plot_heatmaps=False,
     U, Vh = U * sign, Vh * sign
 
     # the size direction is the first column of Vh, normalized
-    size_direction = Vh[:, 0]
-    size_direction = size_direction / size_direction.norm()
-
     # query direction is the first column of U, normalized
-    query_direction = U[:, 0]
-    query_direction = query_direction / query_direction.norm()
+    size_direction, query_direction = Vh[:, 0], U[:, 0]
+    size_query_singular_value = S[0] * size_direction.norm() * query_direction.norm()
+    size_direction, query_direction = size_direction / size_direction.norm(), query_direction / query_direction.norm()
 
     if plot_heatmaps:
         size_direction_resid, query_direction_resid = size_direction @ W_E + W_pos[-1], query_direction @ W_E + W_pos.mean(dim=0)
@@ -1248,7 +1322,7 @@ def find_size_and_query_direction(model: HookedTransformer, plot_heatmaps=False,
                                     # query_direction_resid=query_direction_resid, query_direction_QK=query_direction_QK,
                                     renderer=renderer, **kwargs)
 
-    return size_direction, query_direction
+    return size_direction, query_direction, size_query_singular_value.item()
 
 
 @torch.no_grad()
@@ -1265,56 +1339,68 @@ def find_query_direction(model: HookedTransformer, **kwargs):
     """
     return find_size_and_query_direction(model, **kwargs)[1]
 
-# %%
+## %%
 # @torch.no_grad()
 # def find_size_and_query_direction_by_parts(model: HookedTransformer, plot_heatmaps=False, renderer=None, **kwargs) -> Tuple[torch.Tensor, torch.Tensor]:
 #     """
 #     Approximates the size direction of the model.
 #     """
 #     W_pos, W_Q, W_K, W_E = model.W_pos, model.W_Q, model.W_K, model.W_E
-#     d_model, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_vocab, model.cfg.n_ctx
+#     d_model, d_head, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_head, model.cfg.d_vocab, model.cfg.n_ctx
 #     assert W_pos.shape == (n_ctx, d_model), f"W_pos.shape = {W_pos.shape} != {(n_ctx, d_model)} = (n_ctx, d_model)"
 #     assert W_Q.shape == (1, 1, d_model, d_model), f"W_Q.shape = {W_Q.shape} != {(1, 1, d_model, d_model)} = (1, 1, d_model, d_model)"
 #     assert W_K.shape == (1, 1, d_model, d_model), f"W_K.shape = {W_K.shape} != {(1, 1, d_model, d_model)} = (1, 1, d_model, d_model)"
 #     assert W_E.shape == (d_vocab, d_model), f"W_E.shape = {W_E.shape} != {(d_vocab, d_model)} = (d_vocab, d_model)"
 
-#     QK = (W_E + W_pos[-1]) @ W_Q[0, 0, :, :] @ W_K[0, 0, :, :].T @ (W_E + W_pos.mean(dim=0)).T
-#     assert QK.shape == (d_vocab, d_vocab), f"QK.shape = {QK.shape} != {(d_vocab, d_vocab)} = (d_vocab, d_vocab)"
+#     QE, Q, KT, KET = W_E + W_pos[-1], W_Q[0, 0, :, :], W_K[0, 0, :, :].T, (W_E + W_pos.mean(dim=0)).T
+#     assert QE.shape == (d_vocab, d_model), f"QE.shape = {QE.shape} != {(d_vocab, d_model)} = (d_vocab, d_model)"
+#     assert Q.shape == (d_model, d_head), f"Q.shape = {Q.shape} != {(d_model, d_head)} = (d_model, d_head)"
+#     assert KT.shape == (d_head, d_model), f"KT.shape = {KT.shape} != {(d_head, d_model)} = (d_head, d_model)"
+#     assert KET.shape == (d_model, d_vocab), f"KET.shape = {KET.shape} != {(d_model, d_vocab)} = (d_model, d_vocab)"
 
 #     # take SVD:
-#     U, S, Vh = torch.svd(QK)
-#     # adjust the free parameter of sign
-#     sign = torch.sign(U[:, 0].mean())
-#     U, Vh = U * sign, Vh * sign
+#     analyze_svd(QE, descr="W_E + W_pos[-1]")
+#     analyze_svd(Q, descr="W_Q")
+#     analyze_svd(KT, descr="W_K.T")
+#     analyze_svd(KET, descr="(W_E + W_pos.mean(dim=0)).T")
+#     UQE, SQE, VQEh = torch.svd(QE)
+#     UQ, SQ, VQh = torch.svd(Q)
+#     UKT, SKT, VKTh = torch.svd(KT)
+#     UKET, SKET, VKETh = torch.svd(KET)
+#     # # adjust the free parameter of sign
+#     # sign = torch.sign(U[:, 0].mean())
+#     # U, Vh = U * sign, Vh * sign
 
-#     # the size direction is the first column of Vh, normalized
-#     size_direction = Vh[:, 0]
-#     size_direction = size_direction / size_direction.norm()
+#     # # the size direction is the first column of Vh, normalized
+#     # size_direction = Vh[:, 0]
+#     # size_direction = size_direction / size_direction.norm()
 
-#     # query direction is the first column of U, normalized
-#     query_direction = U[:, 0]
-#     query_direction = query_direction / query_direction.norm()
+#     # # query direction is the first column of U, normalized
+#     # query_direction = U[:, 0]
+#     # query_direction = query_direction / query_direction.norm()
 
-#     if plot_heatmaps:
-#         size_direction_resid, query_direction_resid = size_direction @ W_E + W_pos[-1], query_direction @ W_E + W_pos.mean(dim=0)
-#         size_direction_QK, query_direction_QK = size_direction_resid @ W_Q[0, 0, :, :], query_direction_resid @ W_K[0, 0, :, :]
+#     # if plot_heatmaps:
+#     #     size_direction_resid, query_direction_resid = size_direction @ W_E + W_pos[-1], query_direction @ W_E + W_pos.mean(dim=0)
+#     #     size_direction_QK, query_direction_QK = size_direction_resid @ W_Q[0, 0, :, :], query_direction_resid @ W_K[0, 0, :, :]
 
-#         display_size_direction_stats(size_direction, query_direction, QK, U, Vh, S,
-#                                     # size_direction_resid=size_direction_resid, size_direction_QK=size_direction_QK,
-#                                     # query_direction_resid=query_direction_resid, query_direction_QK=query_direction_QK,
-#                                     renderer=renderer, **kwargs)
+#     #     display_size_direction_stats(size_direction, query_direction, QK, U, Vh, S,
+#     #                                 # size_direction_resid=size_direction_resid, size_direction_QK=size_direction_QK,
+#     #                                 # query_direction_resid=query_direction_resid, query_direction_QK=query_direction_QK,
+#     #                                 renderer=renderer, **kwargs)
 
-#     return size_direction, query_direction
+#     # return size_direction, query_direction
 
 
 # if __name__ == '__main__':
 #     from train_max_of_2 import get_model
 #     from tqdm.auto import tqdm
-#
+
 #     TRAIN_IF_NECESSARY = False
 #     model = get_model(train_if_necessary=TRAIN_IF_NECESSARY)
-#
-#     find_size_direction(model, plot_heatmaps=True, colorscale='Picnic_r')#, renderer='png')
+
+# #     find_size_and_query_direction_by_parts(model, plot_heatmaps=True)
+# #
+#     print(find_size_and_query_direction(model, plot_heatmaps=True, colorscale='Picnic_r'))#, renderer='png')
 #     size_direction, query_direction = find_size_and_query_direction(model)
 #     W_pos, W_Q, W_K, W_E = model.W_pos, model.W_Q, model.W_K, model.W_E
 #     line(query_direction @ (W_E + W_pos[-1]) @ W_Q[0, 0, :, :] @ W_K[0, 0, :, :].T)
