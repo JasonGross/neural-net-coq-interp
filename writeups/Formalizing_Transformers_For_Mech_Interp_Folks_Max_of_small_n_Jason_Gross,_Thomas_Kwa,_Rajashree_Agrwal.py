@@ -147,7 +147,10 @@ import torch
 model = max_of_2.get_model(train_if_necessary=False)
 all_tokens = compute_all_tokens(model)
 all_logits = model(all_tokens)
+expected_max = all_tokens.max(dim=-1).values
+predicted_max = all_logits[..., -1, :].argmax(dim=-1)
 print(f"Model Accuracy: {acc_fn(all_logits, all_tokens, return_per_token=False) * 100}%")
+print(f"Number Incorrect Sequences: {(predicted_max != expected_max).sum()}")
 print(f"Model Loss: {loss_fn(all_logits, all_tokens, return_per_token=False)}")
 print(f"{all_logits.dtype} ULP on log-softmax = ULP at 1.0 = -(exp(0) - eps).log() = {torch.finfo(all_logits.dtype).eps}")
 
@@ -184,19 +187,28 @@ for minpos, qtok, ktokmin in find_backwards_attention(model):
 #- If we are trying to generate the most compact guarantee, neither the SVD nor the fit buy us much.  There are two locations in the proof where we might hope to gain in compactness by using the size direction:
 #  1. In explaining the behavior of the QK circuit.  But in generating a guarantee, we still have to establish that the particular QK circuit is doing the right thing, and I'm not sure how to compactly argue that the principle component of a product of matrices is what it is without multiplying out the matrices.  But if we multiply out the matrices, we have all of the pairwise attention weights, and so we don't need the size direction to explain the behavior of the QK circuit.
 #  2. In using the behavior of the QK circuit to explain the rest of the transformer.  Here in fact we get some benefit from having a compact description of *what* the QK circuit is doing.  Here we get a lot of benefit from some simple cut-off behavior (computing, for example, the minimal attention gap between tokens separated by at least two), but further dependencies between the QK circuit and the rest of the transformer seem to be more about the query direction than the size direction.
-#
-#Hypothesis: In almost all cases (for almost all possible sequences), either:
-#1. The best reasoning we can do with the size direction isn't enough to get us 100% accuracy, and the loss will be rather sensitive to the exact attention values; or
-#2.
-
 
 # %% [markdown]
-#### A couple of notes:
-#- SVD is only unique up to the sign of each singular vector.  PyTorch SVD gives us a negative query direction vector, so we negate both the query and size direction vectors.
-#- For tokens with close to no overlap with the size direction, we may have to argue separately why the model pays the correct amount of attention to them.
-#- If we fit the size direction to a cubic (or quintic), the bounds on the errors might not actually give us enough information to ensure adjacent tokens are ordered correctly.  But if we fit the differences in size-direction overlap of adjacent tokens to a quadratic (or quartic), we see that all differences are positive, and so we can get monotonicity even with worst-case errors.
-#- If we are trying to generate the most compact guarantee, neither the SVD nor the fit buy us much.  There are two locations in the proof where we might hope to gain in compactness by using the size direction:
-#  1. In explaining the behavior of the QK circuit.  But in generating a guarantee, we still have to establish that the particular QK circuit is doing the right thing, and I'm not sure how to compactly argue that the principle component of a product of matrices is what it is without multiplying out the matrices.  But if we multiply out the matrices, we have all of the pairwise attention weights, and so we don't need the size direction to explain the behavior of the QK circuit.
-#  2. In using the behavior of the QK circuit to explain the rest of the transformer.  Here in fact we get some benefit from having a compact description of *what* the QK circuit is doing.  Here we get a lot of benefit from some simple cut-off behavior (computing, for example, the minimal attention gap between tokens separated by at least two), but further dependencies between the QK circuit and the rest of the transformer seem to be more about the query direction than the size direction.
-#- We can get a more compact compact proof by considering the SVD of each of the four matrices separately, though.
-# %%
+#**Hypothesis**: In almost all cases (for almost all possible sequences), either:
+#1. The best reasoning we can do with the size direction isn't enough to get us 100% accuracy, and the loss will be rather sensitive to the exact attention values; or
+#2. A simple lower bound on the attention gap between non-adjacent tokens is enough to get us 100% accuracy, and the loss will be so insensitive to the exact attention values that we won't get much benefit from any approximation more detailed than a lower bound.
+#
+#To test this hypothesis, we can compute the
+# # %%
+# # compute EU PU
+# W_E, W_pos, W_U = model.W_E, model.W_pos, model.W_U
+# print(W_E.shape, W_pos.shape, W_U.shape)
+# line(W_pos[-1] @ W_U)
+# imshow(W_E @ W_U)
+# imshow((W_E + W_pos[-1]) @ W_U)
+# analyze_svd(W_E @ W_U)
+# analyze_svd((W_E + W_pos[-1]) @ W_U)
+# # %%
+# # compute OV
+# import analysis_utils
+# analysis_utils.calculate_OV_of_pos_embed(model)
+# analysis_utils.calculate_copying(model)
+# # %%
+# W_E, W_pos, W_U, W_V, W_O = model.W_E, model.W_pos, model.W_U, model.W_V, model.W_O
+# analyze_svd(W_E @ W_V[0, 0] @ W_O[0, 0] @ W_U)
+# # %%
