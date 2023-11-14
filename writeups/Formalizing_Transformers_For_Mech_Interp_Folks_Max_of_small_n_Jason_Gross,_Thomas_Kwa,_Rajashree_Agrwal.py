@@ -193,7 +193,12 @@ for minpos, qtok, ktokmin in find_backwards_attention(model):
 #1. The best reasoning we can do with the size direction isn't enough to get us 100% accuracy, and the loss will be rather sensitive to the exact attention values; or
 #2. A simple lower bound on the attention gap between non-adjacent tokens is enough to get us 100% accuracy, and the loss will be so insensitive to the exact attention values that we won't get much benefit from any approximation more detailed than a lower bound.
 #
-#To test this hypothesis, we can compute the
+#To test this hypothesis, we can compute, for each maximum token, how much attention needs to be on that token in order for the model to predict the correct output.
+#
+#There are numerous approximations to this computation we might want to consider:
+#1. For every sequence, how much attention needs to be on the correct token for predicting the correct output?
+#2. For each max token, for each position it could be in, for the worst-case (or average-case) query token compatible with that choice (determining the residual stream impact), for the worst-case (or average-case) non-max-token OV behavior (per-logit), how much attention needs to be on the max token for the max token logit to be higher than the logit corresponding to the other token?  (Here we'd also need to verify that the OV behavior has all diagonal entries higher than all off-diagonal entries in the same row, to ensure that we can find the worst case for each logit separately.)
+#3. For each max token, we can compute the smallest (or average) gap between the logit of that token and the logit of any other token, and then reduce across positions.  Then we can compute the largest (or average) gap between logits in the residual stream impact, and the largest (or average) gap between logits across all other copying behavior HERE
 # # %%
 # # compute EU PU
 # W_E, W_pos, W_U = model.W_E, model.W_pos, model.W_U
