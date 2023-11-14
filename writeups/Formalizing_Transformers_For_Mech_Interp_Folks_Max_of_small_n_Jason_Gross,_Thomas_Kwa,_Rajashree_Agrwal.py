@@ -139,10 +139,21 @@ else:
 import train_max_of_2 as max_of_2
 from tqdm.auto import tqdm
 from analysis_utils import find_size_and_query_direction, imshow, analyze_svd, line, find_backwards_attention
+from max_of_n import acc_fn, loss_fn
+from training_utils import compute_all_tokens
 import torch
 
 # %%
 model = max_of_2.get_model(train_if_necessary=False)
+all_tokens = compute_all_tokens(model)
+all_logits = model(all_tokens)
+print(f"Model Accuracy: {acc_fn(all_logits, all_tokens, return_per_token=False) * 100}%")
+print(f"Model Loss: {loss_fn(all_logits, all_tokens, return_per_token=False)}")
+print(f"{all_logits.dtype} ULP on log-softmax = ULP at 1.0 = -(exp(0) - eps).log() = {torch.finfo(all_logits.dtype).eps}")
+
+# %% [markdown]
+#Note that the loss is *lower* than what we would expect from a one ULP (unit of least precision) error in the log-softmax calculation at the end.  This is about as good as the model can possibly do with 32-bit floats.
+
 # %% [markdown]
 ### Finding the Size Direction
 #
@@ -150,6 +161,10 @@ model = max_of_2.get_model(train_if_necessary=False)
 # %%
 size_direction, query_direction, size_query_singular_value = find_size_and_query_direction(model, plot_heatmaps=True, colorscale='Picnic_r')
 print(f"Size direction: {size_direction}\nQuery direction: {query_direction}\nSingular value: {size_query_singular_value}")
+# %% [markdown]
+#### A couple of notes:
+#- SVD is only unique up to the sign of each singular vector.  PyTorch SVD gives us a negative query direction vector, so we negate both the query and size direction vectors.
+#- If we fit the size direction to a cubic (or quintic), the bounds on the errors might not actually give us enough information to ensure adjacent tokens are ordered correctly.  But if we fit the differences in size-direction overlap of adjacent tokens to a quadratic (or quartic), we see that all differences are positive, and so we can get monotonicity even with worst-case errors.
 # %% [markdown]
 #### Interpretation and relevance
 #- The first singular value is just over 8,000; the next singular value is just under 30, so to a first approximation there's only one thing going on.
@@ -164,6 +179,17 @@ for minpos, qtok, ktokmin in find_backwards_attention(model):
         print(f"  This sequence is valid!")
 # %% [markdown]
 #Notably, the model only pays more attention to smaller tokens when the query token is not present in the sequence.
+# %% [markdown]
+#### Compact Guarantees
+#- If we are trying to generate the most compact guarantee, neither the SVD nor the fit buy us much.  There are two locations in the proof where we might hope to gain in compactness by using the size direction:
+#  1. In explaining the behavior of the QK circuit.  But in generating a guarantee, we still have to establish that the particular QK circuit is doing the right thing, and I'm not sure how to compactly argue that the principle component of a product of matrices is what it is without multiplying out the matrices.  But if we multiply out the matrices, we have all of the pairwise attention weights, and so we don't need the size direction to explain the behavior of the QK circuit.
+#  2. In using the behavior of the QK circuit to explain the rest of the transformer.  Here in fact we get some benefit from having a compact description of *what* the QK circuit is doing.  Here we get a lot of benefit from some simple cut-off behavior (computing, for example, the minimal attention gap between tokens separated by at least two), but further dependencies between the QK circuit and the rest of the transformer seem to be more about the query direction than the size direction.
+#
+#Hypothesis: In almost all cases (for almost all possible sequences), either:
+#1. The best reasoning we can do with the size direction isn't enough to get us 100% accuracy, and the loss will be rather sensitive to the exact attention values; or
+#2.
+
+
 # %% [markdown]
 #### A couple of notes:
 #- SVD is only unique up to the sign of each singular vector.  PyTorch SVD gives us a negative query direction vector, so we negate both the query and size direction vectors.
