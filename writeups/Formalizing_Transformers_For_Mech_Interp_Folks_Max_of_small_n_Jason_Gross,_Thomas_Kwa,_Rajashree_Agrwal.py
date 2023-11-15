@@ -148,6 +148,8 @@ from analysis_utils import find_size_and_query_direction, imshow, analyze_svd, l
 from max_of_n import acc_fn, loss_fn
 from training_utils import compute_all_tokens
 import torch
+from transformer_lens import HookedTransformer
+from interp_max_utils import all_attention_scores
 
 # %%
 model = max_of_2.get_model(train_if_necessary=False)
@@ -204,7 +206,38 @@ for minpos, qtok, ktokmin in find_backwards_attention(model):
 #There are numerous approximations to this computation we might want to consider:
 #1. For every sequence, how much attention needs to be on the correct token for predicting the correct output?
 #2. For each max token, for each position it could be in, for the worst-case (or average-case) query token compatible with that choice (determining the residual stream impact), for the worst-case (or average-case) non-max-token OV behavior (per-logit), how much attention needs to be on the max token for the max token logit to be higher than the logit corresponding to the other token?  (Here we'd also need to verify that the OV behavior has all diagonal entries higher than all off-diagonal entries in the same row, to ensure that we can find the worst case for each logit separately.)
-#3. For each max token, we can compute the smallest (or average) gap between the logit of that token and the logit of any other token, and then reduce across positions.  Then we can compute the largest (or average) gap between logits in the residual stream impact, and the largest (or average) gap between logits across all other copying behavior HERE
+#3. For each max token, we can compute the smallest (or average) gap between the logit of that token and the logit of any other token, and then reduce across positions.  Then we can compute the largest (or average) gap between logits in the residual stream impact, and the largest (or average) gap between logits across all other copying behavior.  Finally we can compute how much attention needs to be on the max token to prevent the worst-case (or average) behavior of the rest of the transformer from outweighing the correct behavior on the max token.
+#
+#Although there are even more approximations we might consider, let's zoom out to make sense of the landscape here.  When picking an approximation to compute, we should ask: "What interpretation are we validating with this computation?"
+#
+#1. The first approximation validates the hypothesis "the model (somehow) pays enough more attention to the largest token, where 'enough' means: enough that whatever other computations are going on, the model outputs the correct answer".  Notably, this doesn't explain very much.
+#2. The second approximation validates the hypothesis "for every sequence, find the maximum, and consider all sequences with the same maximum in the same position; whatever computation is going on in the rest of the model, it's sufficiently invariant over the details of the rest of the sequence that the model outputs the correct answer".
+#3. The third approximation validates the hypothesis "the behavior on the non-max token and the bahvior on the skip-connection is irrelevant noise; we pay enough more attention to the max token that we can neglect everything else that happens beyond getting a simple bound on how much it perturbs the output".
+#
+#Notably, the computation for 3 is (slightly) more compact than the computation for 2 (which itself is slightly more compact than the computation for 1), which, to our eyes at least, is minor evidence in favor of compact proofs being a good proxy for human interpretability.
+#
+#However, in the max-of-2 model, exhaustive enumeration, which is exponential in the sequence length, is indistinguishable from a pairwise quadratic analysis (quadratic and exponential are the same when the exponent is 2).  There are not many asymptotic gains to be had here, and compactness differences are somewhat harder to see.
+#
+#Let's plot how much attention is given to the max token in each sequence, and how much attention is required, according to each of these three computations.
+# %%
+# def compute_attention_to_max(model: HookedTransformer) -> torch.Tensor:
+#     """Compute the attention given to the max token in each sequence."""
+#     n_ctx, d_vocab = model.cfg.n_ctx, model.cfg.d_vocab
+#     # pre soft-max
+#     all_attention_scores = all_attention_scores(model)
+#     assert all_attention_scores.shape == (n_ctx, d_vocab, d_vocab), f"all_attention.shape = {all_attention_scores.shape} != ({n_ctx}, {d_vocab}, {d_vocab}) = (n_ctx_k, d_vocab_k, d_vocab_q)"
+
+#     # compute soft-max
+
+
+
+#     all_tokens = compute_all_tokens(model)
+#     all_logits = model(all_tokens)
+#     expected_max = all_tokens.max(dim=-1).values
+#     predicted_max = all_logits[..., -1, :].argmax(dim=-1)
+#     return (all_logits.gather(-1, expected_max.unsqueeze(-1)) * (predicted_max == expected_max).float()).sum(dim=1)
+# %% [markdown]
+#  HERE
 # # %%
 # # compute EU PU
 # W_E, W_pos, W_U = model.W_E, model.W_pos, model.W_U
