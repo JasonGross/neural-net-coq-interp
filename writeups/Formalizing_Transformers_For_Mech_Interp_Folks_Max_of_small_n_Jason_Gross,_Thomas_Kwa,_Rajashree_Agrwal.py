@@ -77,6 +77,12 @@
 # %% [markdown]
 #In this document, we'll walk through a small case-study or two, applying this frame of proofs and guarantees for mech interp.
 # %% [markdown]
+### Proof Strategy
+#The strategy we use for making guarantees about neural nets is as follows:
+#1. Fix an input distribution, and write down a theorem of the form accuracy $\geq$ some value or loss $\leq$ some value.  Importantly, this theorem could in theory be proven (or disproven) simply by computation, if we were willing to wait long enough.
+#2. Write down a computation $c$ and prove that $c \leq$ accuracy or $c \geq$ loss, independently of the particular weights and biases of the neural network.  We're working on formalizing such proofs in the proof assistant Coq, but for this document we give our proofs as English arguments.
+#3. Compute $c$ and verify that it is less than the accuracy or greater than the loss.
+# %% [markdown]
 ### Model Setup: Max of 2
 # %% [markdown]
 #We'll be looking at the problem of computing the max of two numbers.  We use a 1L attention-only transformer with vocab size 64, model size 32, no layer norm, no biases.  The input is a sequence of two (or later $n$) numbers, and we train on the cross-entropy loss of the prediction in the final sequence position and the correct maximum.  The model has been adversarially overtrained to the point where the accuracy is 100% and the loss is dominated by 32-bit floating point error in the final log-softmax.
