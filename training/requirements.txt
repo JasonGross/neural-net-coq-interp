@@ -106,7 +106,7 @@ setproctitle==1.2.2
 setuptools==68.0.0
 sip==6.6.2
 six==1.16.0
-smmap==3.0.5
+smmap==5.0.1
 stack-data==0.6.2
 sympy==1.11.1
 tenacity==8.2.3
