@@ -78,16 +78,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - env: { COQ_VERSION: "master (native)", DOCKER_COQ_VERSION: "dev-native" , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "", LAPROOF: "", TGTS: "computed" }
-        - env: { COQ_VERSION: "master (native)", DOCKER_COQ_VERSION: "dev-native" , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "", LAPROOF: "", TGTS: "computed-lite" }
+        - env: { COQ_VERSION: "master (native)"            , DOCKER_COQ_VERSION: "dev-native" , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "", LAPROOF: "", TGTS: "computed" }
+        - env: { COQ_VERSION: "master (native)"            , DOCKER_COQ_VERSION: "dev-native" , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "", LAPROOF: "", TGTS: "computed-lite" }
         - env: { COQ_VERSION: "master (for Coq CI, native)", DOCKER_COQ_VERSION: "dev-native" , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "", LAPROOF: "", TGTS: "coq-ci-target" }
 
     runs-on: ubuntu-latest
     env: ${{ matrix.env }}
-    name: ${{ matrix.env.COQ_VERSION }}
+    name: ${{ matrix.env.COQ_VERSION }}-${{ matrix.env.TGTS }}
 
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-docker-build-native-${{ github.head_ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-docker-build-native-${{ matrix.env.TGTS }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
 
     steps:
