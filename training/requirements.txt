@@ -110,7 +110,7 @@ smmap==5.0.1
 stack-data==0.6.2
 sympy==1.11.1
 tenacity==8.2.3
-tokenizers==0.13.2
+tokenizers==0.15.0
 toml==0.10.2
 torch==2.0.1
 torchtyping==0.1.4
