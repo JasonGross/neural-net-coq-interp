@@ -149,7 +149,9 @@ from max_of_n import acc_fn, loss_fn
 from training_utils import compute_all_tokens
 import torch
 from transformer_lens import HookedTransformer
-from interp_max_utils import all_attention_scores
+from interp_max_utils import all_attention_scores, EU_PU, all_EVOU, all_PVOU
+from jaxtyping import Float
+from torch import Tensor
 
 # %%
 model = max_of_2.get_model(train_if_necessary=False)
@@ -185,9 +187,11 @@ print(f"Size direction: {size_direction}\nQuery direction: {query_direction}\nSi
 # %%
 print('The model pays more attention to the smaller token for the following seuqences:')
 for minpos, qtok, ktokmin in find_backwards_attention(model):
-    print(f"Tokens: {ktokmin}, {ktokmin+1};\tQuery: {qtok};\tPosition of the Minimum: {minpos}")
-    if (minpos == 0 and qtok == ktokmin+1) or (minpos == 1 and qtok == ktokmin):
-        print(f"  This sequence is valid!")
+    if qtok not in range(ktokmin, ktokmin+2): descr = "(invalid! query token not in sequence)"
+    elif (minpos == 1 and qtok != ktokmin): descr = "(invalid! minimum in the query position but not equal to query token)"
+    elif (minpos == 0 and qtok != ktokmin+1): descr = "(invalid! contradictory minimum position and query token constraints)"
+    else: descr = "(valid!)"
+    print(f"Tokens: {ktokmin}, {ktokmin+1};\tQuery: {qtok};\tPosition of the Minimum: {minpos}\t{descr}")
 # %% [markdown]
 #Notably, the model only pays more attention to smaller tokens when the query token is not present in the sequence.
 # %% [markdown]
@@ -209,6 +213,21 @@ for minpos, qtok, ktokmin in find_backwards_attention(model):
 #2. For some particular functional model of the rest of the transformer's behavior and bounds on the errors, what's the cutoff for attention?
 #
 #or anything in between.
+#
+#Let's compute the histogram of attention cutoffs for a variety of interpretations.
+# %%
+n_ctx, d_vocab, d_vocab_out = model.cfg.n_ctx, model.cfg.d_vocab, model.cfg.d_vocab_out
+EUPU: Float[Tensor, "d_vocab d_vocab_out"] = EU_PU(model, pos=-1)
+#assert EUPU.shape == (d_vocab, d_vocab_out), f"EUPU.shape = {EUPU.shape} != {(d_vocab, d_vocab_out)} = (d_vocab, d_vocab_out)"
+EVOU: Float[Tensor, "d_vocab d_vocab_out"] = all_EVOU(model)
+#assert EVOU.shape == (d_vocab, d_vocab_out), f"EVOU.shape = {EVOU.shape} != {(d_vocab, d_vocab_out)} = (d_vocab, d_vocab_out)"
+PVOU: Float[Tensor, "n_ctx d_vocab_out"] = all_PVOU(model)
+#assert PVOU.shape == (n_ctx, d_vocab_out), f"PVOU.shape = {PVOU.shape} != {(n_ctx, d_vocab_out)} = (n_ctx, d_vocab_out)"
+# assume we vary only the attention, find the minimum attention required for the correct output
+all_tokens: Float[Tensor, "batch n_ctx"] = compute_all_tokens(model)
+all_tokens_max: Float[Tensor, "batch"] = all_tokens.max(dim=-1).values
+# HERE
+# all_tokens_EUPU: Float[Tensor, "batch d_vocab_out"] = EUPU.gather(-1, all.unsqueeze(-1)).squeeze(-1)
 # %% [markdown]
 #HERE
 #
