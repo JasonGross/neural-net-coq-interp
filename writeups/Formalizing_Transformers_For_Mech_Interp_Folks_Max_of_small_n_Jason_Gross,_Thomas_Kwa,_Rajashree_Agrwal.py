@@ -59,7 +59,7 @@
 #2. If we pick a measure of information [that does not peanalize us for arbitrary choices](https://www.lesswrong.com/posts/KcvJXhKqx4itFNWty/k-complexity-is-silly-use-cross-entropy-instead), such as cross entropy, then we can can do even better!  If a choice is arbitrary (such as the image of the size direction under embedding followed by the query matrix), we won't get docked for the size of that description.  If a choice is not arbitrary, then there's something interesting going on, and we shouldn't be excluding it from our interpretation.
 #
 # %% [markdown]
-###Proofs and Heursitic Arguments from the Mech Interp Lens
+### Proofs and Heursitic Arguments from the Mech Interp Lens
 #Proofs give a guarantee not just of the biggest thing that happens, but also how it comes to be that nothing else of interest is happening.  Heuristic arguments promise to solve the problem of how to (rigorously) separate out the “nothing interesting is going on” “default assumption” so we can measure its complexity separately, and find actually compact arguments of just the “interesting” “interpretable” stuff.
 # %% [markdown]
 #We would love to be able to claim that compactness of {proof, heuristic arg} is a good evaluation metric for human interpretability.  We don’t have nearly enough evidence for this, alas (future work!), so instead we aim to present a case-study as evidence that compactness for human interp has *firm formal grounding*.
@@ -79,8 +79,8 @@
 # %% [markdown]
 ### Proof Strategy
 #The strategy we use for making guarantees about neural nets is as follows:
-#1. Fix an input distribution, and write down a theorem of the form accuracy $\geq$ some value or loss $\leq$ some value.  Importantly, this theorem could in theory be proven (or disproven) simply by computation, if we were willing to wait long enough.
-#2. Write down a computation $c$ and prove that $c \leq$ accuracy or $c \geq$ loss, independently of the particular weights and biases of the neural network.  We're working on formalizing such proofs in the proof assistant Coq, but for this document we give our proofs as English arguments.
+#1. Fix an input distribution, and write down a theorem of the form "accuracy $\geq$ some value" or "loss $\leq$ some value".  Importantly, this theorem could in theory be proven (or disproven) simply by computation, if we were willing to wait long enough.
+#2. Write down a computation $c$ and prove that "$c \leq$ accuracy" or "$c \geq$ loss", independently of the particular weights and biases of the neural network.  We're working on formalizing such proofs in the proof assistant Coq, but for this document we give our proofs as English arguments.
 #3. Compute $c$ and verify that it is less than the accuracy or greater than the loss.
 # %% [markdown]
 ### Model Setup: Max of 2
@@ -202,6 +202,15 @@ for minpos, qtok, ktokmin in find_backwards_attention(model):
 #2. A simple lower bound on the attention gap between non-adjacent tokens is enough to get us 100% accuracy, and the loss will be so insensitive to the exact attention values that we won't get much benefit from any approximation more detailed than a lower bound.
 #
 #To test this hypothesis, we can compute, for each maximum token, how much attention needs to be on that token in order for the model to predict the correct output.
+#
+#What does "needs to be" mean, though?
+#It could mean:
+#1. Given exactly how the rest of the transformer behaves, what's the cutoff for attention?
+#2. For some particular functional model of the rest of the transformer's behavior and bounds on the errors, what's the cutoff for attention?
+#
+#or anything in between.
+# %% [markdown]
+#HERE
 #
 #There are numerous approximations to this computation we might want to consider:
 #1. For every sequence, how much attention needs to be on the correct token for predicting the correct output?
