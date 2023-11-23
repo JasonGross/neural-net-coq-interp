@@ -226,8 +226,53 @@ PVOU: Float[Tensor, "n_ctx d_vocab_out"] = all_PVOU(model)
 # assume we vary only the attention, find the minimum attention required for the correct output
 all_tokens: Float[Tensor, "batch n_ctx"] = compute_all_tokens(model)
 all_tokens_max: Float[Tensor, "batch"] = all_tokens.max(dim=-1).values
-# HERE
-# all_tokens_EUPU: Float[Tensor, "batch d_vocab_out"] = EUPU.gather(-1, all.unsqueeze(-1)).squeeze(-1)
+all_tokens_max_pos: Float[Tensor, "batch"] = all_tokens.argmax(dim=-1)
+all_tokens_EUPU: Float[Tensor, "batch d_vocab_out"] = EUPU[all_tokens[:, -1], :]
+all_tokens_EVOU_PVOU: Float[Tensor, "batch n_ctx d_vocab_out"] = EVOU[all_tokens, :] + PVOU
+# to compute the minimum post-softmax attention required for the correct output, we center each output so the logit of the correct output is 0
+# then we want to compute the minimum p such that p * (logit of incorrect output on max token) + (1 - p) * (logit of incorrect token on non-max token) + (logit of incorrect output on residual path) < 0
+# or equivalently p * (logit of incorrect output on max token - logit of incorrect output on non-max token) < -(logit of incorrect output on residual path + logit of incorrect token on non-max token)
+# or p * sign(logit of incorrect output on max token - logit of incorrect output on non-max token) < -(logit of incorrect output on residual path + logit of incorrect token on non-max token) / abs(logit of incorrect output on max token - logit of incorrect output on non-max token)
+# if the logit of the incorrect output on EUPU + the max token is positive, we say nan (no attention is enough)
+# if the logit of the incorrect output on the non-max token is negative, we say 0 (any amount of attention is enough)
+all_tokens_EUPU -= all_tokens_EUPU[torch.arange(all_tokens_EUPU.shape[0]), all_tokens_max][:, None]
+for b in range(all_tokens_EVOU_PVOU.shape[0]):
+    for n in range(all_tokens_EVOU_PVOU.shape[1]):
+        all_tokens_EVOU_PVOU[b, n, :] = all_tokens_EVOU_PVOU[b, n, :] - all_tokens_EVOU_PVOU[b, n, all_tokens_max[b]]
+
+# fold all_tokens_EUPU into all_tokens_EVOU_PVOU
+all_tokens_EVOU_PVOU_max_token: Float[Tensor, "batch d_vocab_out"] = all_tokens_EVOU_PVOU[torch.arange(all_tokens_EVOU_PVOU.shape[0]), all_tokens_max_pos, :] + all_tokens_EUPU
+# we're worst off when the attention on the non-max token is largest, so we take max
+all_tokens_EVOU_PVOU_non_max_token_tmp = all_tokens_EVOU_PVOU.clone()
+all_tokens_EVOU_PVOU_non_max_token_tmp[torch.arange(all_tokens_EVOU_PVOU.shape[0]), all_tokens_max_pos, :] = -float('inf')
+all_tokens_EVOU_PVOU_non_max_token: Float[Tensor, "batch d_vocab_out"] = all_tokens_EVOU_PVOU_non_max_token_tmp.max(dim=-2).values + all_tokens_EUPU
+attention_never_enough = (all_tokens_EVOU_PVOU_max_token > 0)
+logit_diff = all_tokens_EVOU_PVOU_max_token - all_tokens_EVOU_PVOU_non_max_token
+logit_gap = -all_tokens_EVOU_PVOU_non_max_token / logit_diff.abs()
+# where logit_diff < 0, we want smallest p > -logit_gap
+# where logit_diff > 0 we want smallest p < logit_gap
+min_p_1 = -logit_gap[logit_diff < 0]
+min_p_1 = torch.max(min_p_1, torch.zeros_like(min_p_1))
+min_p_2 = logit_gap[logit_diff > 0]
+min_p_2 = torch.min(min_p_2, torch.zeros_like(min_p_2))
+min_p = torch.cat([min_p_1, min_p_2], dim=0)
+from analysis_utils import hist
+hist(min_p)
+hist(min_p[min_p != 0])
+hist(min_p[min_p < 0])
+# find pre-softmax
+# min_p = weight on max = e^max / (e^max + e^non-max) = 1 / (1 + e^(non-max - max)
+# e^(non_max - max) = 1 / min_p - 1
+# non_max - max = log(1 / min_p - 1)
+# max - non_max = -log(1 / min_p - 1)
+min_attn = -(1 / min_p[min_p > 0] - 1).log()
+hist(min_attn)
+hist(min_attn[min_attn > 0])
+
+# all_tokens_EVOU_PVOU_max_token - all_tokens_EVOU_PVOU_non_max_token
+# -all_tokens_EVOU_PVOU_non_max_token / (all_tokens_EVOU_PVOU_max_token - all_tokens_EVOU_PVOU_non_max_token).abs()
+
+# print(all_tokens_EUPU.shape)
 # %% [markdown]
 #HERE
 #
