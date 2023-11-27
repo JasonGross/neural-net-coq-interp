@@ -78,10 +78,31 @@
 #In this document, we'll walk through a small case-study or two, applying this frame of proofs and guarantees for mech interp.
 # %% [markdown]
 ### Proof Strategy
-#The strategy we use for making guarantees about neural nets is as follows:
-#1. Fix an input distribution, and write down a theorem of the form "accuracy $\geq$ some value" or "loss $\leq$ some value".  Importantly, this theorem could in theory be proven (or disproven) simply by computation, if we were willing to wait long enough.
-#2. Write down a computation $c$ and prove that "$c \leq$ accuracy" or "$c \geq$ loss", independently of the particular weights and biases of the neural network.  We're working on formalizing such proofs in the proof assistant Coq, but for this document we give our proofs as English arguments.
-#3. Compute $c$ and verify that it is less than the accuracy or greater than the loss.
+#The strategy we use for making guarantees about neural nets $NN$ is as follows:
+#1. Fix an input distribution $D_I$ (e.g., the uniform distribution of sequences of length $n$ over a vocabulary of size $d$).  This defines the domain of discourse.
+#2. Define a property $P$ to be established on a metric $M$ that can be calculated over the input-output pairs of $NN$ on this domain.  For example, $M$ might be accuracy, log-loss, etc, and $P$ might be $\leq 0.01$ or $\geq 99\%$ or "within $\varepsilon$ of 0.8".  Importantly, this theorem $P(M(NN(D_I)))$ could in theory be proven (or disproven) simply by computation, if we were willing to wait long enough.
+#3. Argue that the property holds of the given $NN$’s computation, by:
+#   - Finding/constructing a cheaper computation $C$ (taking as input the $NN$ weights & biases) such that
+#     1. Establishing the property $P$ on this computation $C$ implies that $P$ holds on $M(NN(D_I))$ (symbolically: $P(C) \Longrightarrow P(M(NN(D_I)))$)
+#         - We're working on formalizing such proofs in the proof assistant Coq, but for this document we give our proofs as English arguments.
+#     2. Establishing $P$ on $C$ is computationally feasible and straightforward
+#
+#Note: Compactness is important in each of these steps, but gives different things:
+#- domain of discourse: compactness allows us to speak at all
+#- property description: compactness gives understanding of *what outcomes happens*
+#- description of computation $C$: compactness gives understanding of *why outcome happens*
+#- cost of running $C$: compactness gives goodness of description / understanding of *how it comes to be that the model is implementing our described algorithm*
+#- size of proof that $P(C) \Longrightarrow P(M(NN(D_I))))$: compactness gives understanding of *why outcome happens **on NN***
+#
+#TODO: move the below somewhere else, or to a document for heursitic argument folks
+#
+#Aside: As we understand it, heuristic arguments also fit into this frame, as follows:
+#1. Same (input distribution $D_I$)
+#2. Usually the metric $M$ is not quite what’s described, instead there’s a standard metric $M'$ (like log-loss), and the actual metric, currently implicit and nebulous, maybe goes something like $\mathbb{E}_{NN\leftarrow D_{NN}}\left[M'(NN(D_I))\right]$ (where $\mathbb{E}_{NN\leftarrow D_{NN}}$ is "the expected value over $NN$ drawn from a distribution of weights and biases $D_{NN}$"), and then the property $P$ is the same
+#3. Sorta same
+#   - Estimator $G$ is a class of computations parameterized over heuristic args $\pi$ such that:
+#     1. We can establish in general that (under some restrictions), there exists / forall / for many $\pi$s, with $C = G(NN|\pi\text{s})$, $P(C)$ implies $P(M(NN(D_I)))$ (plus some other properties that make it reasonable to have this only for some $\pi$s)
+#     2. Same, but even more so (establishing $P(C)$ should be ~linear in NN size)
 # %% [markdown]
 ### Model Setup: Max of 2
 # %% [markdown]
@@ -329,3 +350,5 @@ hist(min_attn[min_attn > 0])
 # W_E, W_pos, W_U, W_V, W_O = model.W_E, model.W_pos, model.W_U, model.W_V, model.W_O
 # analyze_svd(W_E @ W_V[0, 0] @ W_O[0, 0] @ W_U)
 # # %%
+
+# %%
