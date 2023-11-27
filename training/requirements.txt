@@ -115,7 +115,7 @@ toml==0.10.2
 torch==2.0.1
 torchtyping==0.1.4
 tornado==6.3.3
-tqdm==4.65.0
+tqdm==4.66.1
 traitlets==5.9.0
 transformer-lens==1.6.1
 transformers==4.32.1
