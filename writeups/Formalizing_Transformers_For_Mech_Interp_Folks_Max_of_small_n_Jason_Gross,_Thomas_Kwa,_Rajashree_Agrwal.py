@@ -356,7 +356,6 @@ import analysis_utils
 # reload analysis_utils module
 import importlib
 importlib.reload(analysis_utils)
-analysis_utils.calculate_copying(model, scale_by_singular_value=False, colorscale='RdBu', renderer='png')
-# %%
-analysis_utils.calculate_OV_of_pos_embed(model, renderer='png')
+analysis_utils.analyze_EVOU(model, scale_by_singular_value=False)
+analysis_utils.analyze_PVOU(model)
 # %%

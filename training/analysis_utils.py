@@ -505,14 +505,41 @@ def calculate_OV_of_pos_embed(model: HookedTransformer, renderer=None):
     res = (W_pos @ W_V @ W_O @ W_U).detach()[0,0,:,:]
     imshow(res, title='W_pos @ W_V @ W_O @ W_U', xaxis='logit affected', yaxis='position', renderer=renderer)
     return summarize(res, name='W_pos @ W_V @ W_O @ W_U', renderer=renderer, linear_fit=True)
+# %%
+def analyze_PVOU(model: HookedTransformer, colorscale='RdBu', renderer=None):
+    W_U, W_E, W_pos, W_V, W_O = model.W_U, model.W_E, model.W_pos, model.W_V, model.W_O
+    d_model, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_vocab, model.cfg.n_ctx
+    assert W_U.shape == (d_model, d_vocab)
+    assert W_pos.shape == (n_ctx, d_model)
+    assert W_E.shape == (d_vocab, d_model)
+    assert W_V.shape == (1, 1, d_model, d_model)
+    assert W_O.shape == (1, 1, d_model, d_model)
+    res = (W_pos @ W_V @ W_O @ W_U).detach()[0,0,:,:]
+    imshow(res, title='W_pos @ W_V @ W_O @ W_U', xaxis='logit affected', yaxis='position', colorscale=colorscale, renderer=renderer)
+
 
 
 # ## Copying: W_E @ W_V @ W_O @ W_U
 
+# %%
+def analyze_EVOU(model: HookedTransformer, colorscale='RdBu', renderer=None, scale_by_singular_value=True):
+    W_U, W_E, W_pos, W_V, W_O = model.W_U, model.W_E, model.W_pos, model.W_V, model.W_O
+    d_model, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_vocab, model.cfg.n_ctx
+    assert W_U.shape == (d_model, d_vocab)
+    assert W_pos.shape == (n_ctx, d_model)
+    assert W_E.shape == (d_vocab, d_model)
+    assert W_V.shape == (1, 1, d_model, d_model)
+    assert W_O.shape == (1, 1, d_model, d_model)
+    res = (W_E @ W_V @ W_O @ W_U).detach().cpu()[0,0,:,:]
+    imshow(res, title='W_E @ W_V @ W_O @ W_U', renderer=renderer,
+           xaxis="logit affected", yaxis="input token")
+    analyze_svd(res, descr='W_E @ W_V @ W_O @ W_U', colorscale=colorscale, scale_by_singular_value=scale_by_singular_value, renderer=renderer)
+    line(res.diag(), title='(W_E @ W_V @ W_O @ W_U).diag()', xaxis='input token', renderer=renderer)
+
 # In[ ]:
 
 
-def calculate_copying(model: HookedTransformer, colorscale='Picnic_r', renderer=None, scale_by_singular_value=True):
+def calculate_copying(model: HookedTransformer, colorscale='RdBu', renderer=None, scale_by_singular_value=True):
     W_U, W_E, W_pos, W_V, W_O = model.W_U, model.W_E, model.W_pos, model.W_V, model.W_O
     d_model, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_vocab, model.cfg.n_ctx
     assert W_U.shape == (d_model, d_vocab)
@@ -528,8 +555,8 @@ def calculate_copying(model: HookedTransformer, colorscale='Picnic_r', renderer=
     imshow(res, title='W_E @ W_V @ W_O @ W_U', renderer=renderer,
            xaxis="logit affected", yaxis="input token")
     analyze_svd(res, descr='W_E @ W_V @ W_O @ W_U', colorscale=colorscale, scale_by_singular_value=scale_by_singular_value, renderer=renderer)
-    imshow(centered, title='copying.diag()[:,None] - copying', renderer=renderer)
-    line(res.diag(), title='copying.diag()', renderer=renderer)
+    # imshow(centered, title='copying.diag()[:,None] - copying', renderer=renderer)
+    line(res.diag(), title='copying.diag()', xaxis='input token', renderer=renderer)
     # take svd of res
     u, s, v = torch.svd(res)
     # plot singular values
