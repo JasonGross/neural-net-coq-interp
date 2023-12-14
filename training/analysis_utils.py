@@ -211,15 +211,69 @@ def center_by_mid_range(tensor: torch.Tensor, dim: Optional[int] = None) -> torc
 # In[ ]:
 
 
-def analyze_svd(M, descr='', scale_by_singular_value=True):
+def analyze_svd(M, descr='', scale_by_singular_value=True, colorscale='Picnic_r', singular_color='blue', renderer=None):
     U, S, Vh = torch.svd(M)
     if scale_by_singular_value:
         U = U * S[None, :].sqrt()
         Vh = Vh * S[None, :].sqrt()
     if descr: descr = f' for {descr}'
-    line(S, title=f"Singular Values{descr}")
-    imshow(U, title=f"Principal Components on U{descr}")
-    imshow(Vh, title=f"Principal Components on Vh{descr}")
+
+    fig = make_subplots(rows=1, cols=3, subplot_titles=["U", "Singular Values", "Vh"])
+    uzmax, vzmax = U.abs().max().item(), Vh.abs().max().item()
+    fig.add_trace(go.Heatmap(z=utils.to_numpy(U), zmin=-uzmax, zmax=uzmax, colorscale=colorscale,
+                             showscale=False,
+                            hovertemplate="U: %{y}<br>Singular Index: %{x}<br>Value: %{z}<extra></extra>"
+                            ),
+                row=1, col=1)
+    fig.add_trace(go.Heatmap(z=utils.to_numpy(Vh), colorscale=colorscale, zmin=-vzmax, zmax=vzmax,
+                             showscale=False,
+                            hovertemplate="Vh: %{y}<br>Singular Index: %{x}<br>Value: %{z}<extra></extra>",
+                            ),
+                row=1, col=3)
+    fig.add_trace(go.Scatter(x=np.arange(S.shape[0]), y=utils.to_numpy(S),
+                            mode='lines+markers',
+                            marker=dict(color=singular_color),
+                            line=dict(color=singular_color),
+                            hovertemplate="Singular Value: %{y}<br>Singular Index: %{x}<extra></extra>",
+                            ), row=1, col=2)
+    fig.update_layout(title=f"SVD{descr}") #, margin=dict(l=150, r=150))
+
+
+    fig.update_yaxes(range=[0, None], row=1, col=2)
+    # fig.update_yaxes(range=[0, None], row=1, col=2)
+    # fig.update_layout(yaxis_scaleanchor="x")
+    fig.update_yaxes(scaleanchor='x', row=1, col=1)
+    fig.update_yaxes(scaleanchor='x', row=1, col=3)
+
+    # fig.update_xaxes(scaleanchor='y', scaleratio=1, range=[0, U.shape[0]], row=1, col=1)
+    # fig.update_yaxes(scaleanchor='x', scaleratio=1, range=[0, U.shape[1]], row=1, col=1)
+
+    # fig.update_xaxes(scaleanchor='y', scaleratio=1, range=[0, None], row=1, col=2)
+    # fig.update_yaxes(scaleanchor='x', scaleratio=1, range=[0, S.shape[0]], row=1, col=2)
+
+    # fig.update_xaxes(scaleanchor='y', scaleratio=1, range=[0, Vh.shape[0]], row=1, col=3)
+    # fig.update_yaxes(scaleanchor='x', scaleratio=1, range=[0, Vh.shape[1]], row=1, col=3)
+
+    # fig.update_xaxes(range=[0, None], row=1, col=1)
+    # fig.update_xaxes(range=[0, None], row=1, col=2)
+    # fig.update_xaxes(range=[0, None], row=1, col=3)
+
+    # fig.update_yaxes(range=[0, None], row=1, col=1)
+    # fig.update_yaxes(range=[0, None], row=1, col=2)
+    # fig.update_yaxes(range=[0, None], row=1, col=3)
+
+    # fig.update_yaxes(title_text="Query Token", row=1, col=1)
+    fig.update_yaxes(range=[0, None], row=1, col=2)
+    # fig.update_yaxes(title_text="Key Token", row=1, col=3)
+
+    fig.show(renderer)
+
+
+    # line(S, title=f"Singular Values{descr}")
+    # imshow(U, title=f"Principal Components on U{descr}")
+    # imshow(Vh, title=f"Principal Components on Vh{descr}")
+
+
 
 # %%
 @torch.no_grad()
@@ -449,7 +503,7 @@ def calculate_OV_of_pos_embed(model: HookedTransformer, renderer=None):
     assert W_V.shape == (1, 1, d_model, d_model)
     assert W_O.shape == (1, 1, d_model, d_model)
     res = (W_pos @ W_V @ W_O @ W_U).detach()[0,0,:,:]
-    imshow(res, renderer=renderer)
+    imshow(res, title='W_pos @ W_V @ W_O @ W_U', xaxis='logit affected', yaxis='position', renderer=renderer)
     return summarize(res, name='W_pos @ W_V @ W_O @ W_U', renderer=renderer, linear_fit=True)
 
 
@@ -458,7 +512,7 @@ def calculate_OV_of_pos_embed(model: HookedTransformer, renderer=None):
 # In[ ]:
 
 
-def calculate_copying(model: HookedTransformer, renderer=None):
+def calculate_copying(model: HookedTransformer, colorscale='Picnic_r', renderer=None, scale_by_singular_value=True):
     W_U, W_E, W_pos, W_V, W_O = model.W_U, model.W_E, model.W_pos, model.W_V, model.W_O
     d_model, d_vocab, n_ctx = model.cfg.d_model, model.cfg.d_vocab, model.cfg.n_ctx
     assert W_U.shape == (d_model, d_vocab)
@@ -473,6 +527,7 @@ def calculate_copying(model: HookedTransformer, renderer=None):
     nonzero_centered = centered[torch.eye(d_vocab) == 0]
     imshow(res, title='W_E @ W_V @ W_O @ W_U', renderer=renderer,
            xaxis="logit affected", yaxis="input token")
+    analyze_svd(res, descr='W_E @ W_V @ W_O @ W_U', colorscale=colorscale, scale_by_singular_value=scale_by_singular_value, renderer=renderer)
     imshow(centered, title='copying.diag()[:,None] - copying', renderer=renderer)
     line(res.diag(), title='copying.diag()', renderer=renderer)
     # take svd of res

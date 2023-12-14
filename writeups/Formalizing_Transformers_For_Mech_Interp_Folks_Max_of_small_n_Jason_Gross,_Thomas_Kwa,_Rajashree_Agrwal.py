@@ -165,7 +165,7 @@ else:
 #@title imports
 import train_max_of_2 as max_of_2
 from tqdm.auto import tqdm
-from analysis_utils import find_size_and_query_direction, imshow, analyze_svd, line, find_backwards_attention
+from analysis_utils import find_size_and_query_direction, imshow, analyze_svd, line, find_backwards_attention, calculate_copying
 from max_of_n import acc_fn, loss_fn
 from training_utils import compute_all_tokens
 import torch
@@ -351,4 +351,12 @@ hist(min_attn[min_attn > 0])
 # analyze_svd(W_E @ W_V[0, 0] @ W_O[0, 0] @ W_U)
 # # %%
 
+# %%
+import analysis_utils
+# reload analysis_utils module
+import importlib
+importlib.reload(analysis_utils)
+analysis_utils.calculate_copying(model, scale_by_singular_value=False, colorscale='RdBu', renderer='png')
+# %%
+analysis_utils.calculate_OV_of_pos_embed(model, renderer='png')
 # %%
