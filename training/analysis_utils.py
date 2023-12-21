@@ -212,10 +212,10 @@ def center_by_mid_range(tensor: torch.Tensor, dim: Optional[int] = None) -> torc
 
 
 def analyze_svd(M, descr='', scale_by_singular_value=True, colorscale='Picnic_r', singular_color='blue', renderer=None):
-    U, S, Vh = torch.svd(M)
+    U, S, Vh = torch.linalg.svd(M)
     if scale_by_singular_value:
         U = U * S[None, :].sqrt()
-        Vh = Vh * S[None, :].sqrt()
+        Vh = Vh * S[:, None].sqrt()
     if descr: descr = f' for {descr}'
 
     fig = make_subplots(rows=1, cols=3, subplot_titles=["U", "Singular Values", "Vh"])
@@ -558,16 +558,16 @@ def calculate_copying(model: HookedTransformer, colorscale='RdBu', renderer=None
     # imshow(centered, title='copying.diag()[:,None] - copying', renderer=renderer)
     line(res.diag(), title='copying.diag()', xaxis='input token', renderer=renderer)
     # take svd of res
-    u, s, v = torch.svd(res)
+    u, s, vh = torch.linalg.svd(res)
     # plot singular values
     line(s, title='singular values of copying', renderer=renderer)
     # plot u, v
     imshow(u, title='u', renderer=renderer)
-    imshow(v, title='v.T', renderer=renderer)
+    imshow(vh, title='v.T', renderer=renderer)
 
-    # 1. We already have u, s, and v from torch.svd(res)
+    # 1. We already have u, s, and v from torch.linalg.svd(res)
     u1 = u[:, 0]
-    v1 = v[0, :]
+    v1 = vh[0, :]
 
     # 2. Fit linear models to u1 and v1
     # Fit for u's first column
@@ -575,9 +575,9 @@ def calculate_copying(model: HookedTransformer, colorscale='RdBu', renderer=None
     y_vals_u = u[:, 0].numpy()
     popt_u, _ = curve_fit(linear_func, x_vals_u, y_vals_u)
 
-    # Fit for v's first row
+    # Fit for vh's first row
     x_vals_v = np.arange(d_vocab)
-    y_vals_v = v[:, 0].numpy()
+    y_vals_v = vh[:, 0].numpy()
     popt_v, _ = curve_fit(linear_func, x_vals_v, y_vals_v)
 
     # Plot u's column against its linear fit
@@ -624,10 +624,10 @@ def calculate_copying(model: HookedTransformer, colorscale='RdBu', renderer=None
     imshow(adjusted_res, title='Adjusted res', renderer=renderer)
 
     # SVD of adjusted_res
-    u_adj, s_adj, v_adj = torch.svd(adjusted_res)
+    u_adj, s_adj, vh_adj = torch.linalg.svd(adjusted_res)
     line(s_adj, title='Singular Values of Adjusted res', renderer=renderer)
     imshow(u_adj, title='u of residuals', renderer=renderer)
-    imshow(v_adj, title='v of residuals', renderer=renderer)
+    imshow(vh_adj, title='v.T of residuals', renderer=renderer)
 
     # Extracting diagonal and off-diagonal entries
     diagonal_entries = torch.diag(adjusted_res)
@@ -1059,12 +1059,12 @@ def plot_QK_cosine_similarity(model, keypos=-1, querypos=-1, do_layernorm=True):
 
     analyze_svd(embeddings_query_waiting_for_key[0], descr="embeddings_query_waiting_for_key")
     analyze_svd(QK[0], descr="QK")
-    U, S, Vh = torch.svd(embeddings_query_waiting_for_key[0])
-    print(Vh[0])
+    U, S, Vh = torch.linalg.svd(embeddings_query_waiting_for_key[0])
     print(Vh.T[0])
-    print((U @ torch.diag(S) @ Vh.T)[0])
-    print((U @ torch.diag(S) @ Vh.T).T[0])
-    imshow(U @ torch.diag(S) @ Vh.T, title="tmp")
+    print(Vh[0])
+    print((U @ torch.diag(S) @ Vh)[0])
+    print((U @ torch.diag(S) @ Vh).T[0])
+    imshow(U @ torch.diag(S) @ Vh, title="tmp")
     #qk_circuit_attn_heatmap = einsum(
     #    "n_heads d_vocab_q d_head, n_heads d_vocab_k d_head -> ... d_vocab_q d_vocab_k",
     #    embeddings_query, embeddings_key
@@ -1183,9 +1183,9 @@ def layernorm_scales(x: torch.Tensor, eps: float = 1e-5, recip: bool = True) -> 
 # %%
 @torch.no_grad()
 def compute_singular_contribution(M: torch.Tensor, plot_heatmaps=True, yaxis=None, xaxis=None, title=None, renderer=None, description=None, singular_value_count=1, **kwargs) -> Tuple[torch.Tensor, torch.Tensor]:
-    U, S, Vh = torch.svd(M)
-    U[:, singular_value_count:], S[singular_value_count:], Vh[:, singular_value_count:] = 0, 0, 0
-    contribution = U @ torch.diag(S) @ Vh.T
+    U, S, Vh = torch.linalg.svd(M)
+    U[:, singular_value_count:], S[singular_value_count:], Vh[singular_value_count:, :] = 0, 0, 0
+    contribution = U @ torch.diag(S) @ Vh
     if plot_heatmaps:
         singular_value_str = f"first {singular_value_count} singular values" if singular_value_count != 1 else f"first singular value"
         to_description = f" to {description}" if description is not None else ""
@@ -1224,7 +1224,7 @@ def display_size_direction_stats(size_direction: torch.Tensor, query_direction: 
                                  colorscale='Plasma_r', **kwargs):
     if scale_by_singular_value:
         U = U * S[None, :].sqrt()
-        Vh = Vh * S[None, :].sqrt()
+        Vh = Vh * S[:, None].sqrt()
     imshow(QK, title="Attention<br>(W_E + W_pos[-1]) @ W_Q @ W_K.T @ (W_E + W_pos.mean(dim=0)).T", xaxis="Key Token", yaxis="Query Token", renderer=renderer, colorscale=colorscale, **kwargs)
     fig = make_subplots(rows=1, cols=3, subplot_titles=["Query-Side SVD", "Singular Values", "Key-Side SVD"])
     uzmax, vzmax = U.abs().max().item(), Vh.abs().max().item()
@@ -1244,7 +1244,7 @@ def display_size_direction_stats(size_direction: torch.Tensor, query_direction: 
                             line=dict(color='blue'),
                             hovertemplate="Singular Value: %{y}<br>Singular Index: %{x}<extra></extra>",
                             ), row=1, col=2)
-    fig.add_trace(go.Heatmap(z=utils.to_numpy(Vh), colorscale=colorscale, zmin=-vzmax, zmax=vzmax,
+    fig.add_trace(go.Heatmap(z=utils.to_numpy(Vh.T), colorscale=colorscale, zmin=-vzmax, zmax=vzmax,
                              showscale=False,
                             #  colorbar=dict(x=1.15),
                             hovertemplate="Key: %{y}<br>Singular Index: %{x}<br>Value: %{z}<extra></extra>",
@@ -1265,7 +1265,7 @@ def display_size_direction_stats(size_direction: torch.Tensor, query_direction: 
             **kwargs)
 
     # imshow(U, title="Query-Side SVD", yaxis="Query Token", renderer=renderer, **kwargs)
-    # imshow(Vh, title="Key-Side SVD", yaxis="Key Token", renderer=renderer, **kwargs)
+    # imshow(Vh.T, title="Key-Side SVD", yaxis="Key Token", renderer=renderer, **kwargs)
     # px.line({'singular values': utils.to_numpy(S)}, title="Singular Values of QK Attention").show(renderer)
 
     fig = make_subplots(rows=1, cols=2, subplot_titles=["Size", "Query"])
@@ -1384,14 +1384,14 @@ def find_size_and_query_direction(model: HookedTransformer, plot_heatmaps=False,
     assert QK.shape == (d_vocab, d_vocab), f"QK.shape = {QK.shape} != {(d_vocab, d_vocab)} = (d_vocab, d_vocab)"
 
     # take SVD:
-    U, S, Vh = torch.svd(QK)
+    U, S, Vh = torch.linalg.svd(QK)
     # adjust the free parameter of sign
     sign = torch.sign(U[:, 0].mean())
     U, Vh = U * sign, Vh * sign
 
     # the size direction is the first column of Vh, normalized
     # query direction is the first column of U, normalized
-    size_direction, query_direction = Vh[:, 0], U[:, 0]
+    size_direction, query_direction = Vh[0, :], U[:, 0]
     size_query_singular_value = S[0] * size_direction.norm() * query_direction.norm()
     size_direction, query_direction = size_direction / size_direction.norm(), query_direction / query_direction.norm()
 
@@ -1472,16 +1472,16 @@ def find_backwards_attention(model: HookedTransformer):
 #     analyze_svd(Q, descr="W_Q")
 #     analyze_svd(KT, descr="W_K.T")
 #     analyze_svd(KET, descr="(W_E + W_pos.mean(dim=0)).T")
-#     UQE, SQE, VQEh = torch.svd(QE)
-#     UQ, SQ, VQh = torch.svd(Q)
-#     UKT, SKT, VKTh = torch.svd(KT)
-#     UKET, SKET, VKETh = torch.svd(KET)
+#     UQE, SQE, VQEh = torch.linalg.svd(QE)
+#     UQ, SQ, VQh = torch.linalg.svd(Q)
+#     UKT, SKT, VKTh = torch.linalg.svd(KT)
+#     UKET, SKET, VKETh = torch.linalg.svd(KET)
 #     # # adjust the free parameter of sign
 #     # sign = torch.sign(U[:, 0].mean())
 #     # U, Vh = U * sign, Vh * sign
 
 #     # # the size direction is the first column of Vh, normalized
-#     # size_direction = Vh[:, 0]
+#     # size_direction = Vh[0, :]
 #     # size_direction = size_direction / size_direction.norm()
 
 #     # # query direction is the first column of U, normalized
