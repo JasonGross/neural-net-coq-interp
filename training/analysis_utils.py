@@ -89,8 +89,11 @@ def imshow(tensor, renderer=None, xaxis="", yaxis="", colorscale="RdBu", **kwarg
     px.imshow(utils.to_numpy(tensor), color_continuous_midpoint=0.0, color_continuous_scale=colorscale, labels={"x":xaxis, "y":yaxis}, **kwargs).show(renderer)
 
 
-def line(tensor, renderer=None, xaxis="", yaxis="", line_labels=None, **kwargs):
-    px.line(utils.to_numpy(tensor), labels={"x":xaxis, "y":yaxis}, y=line_labels, **kwargs).show(renderer)
+def line(tensor, renderer=None, xaxis="", yaxis="", line_labels=None, showlegend=None, hovertemplate=None, **kwargs):
+    fig = px.line(utils.to_numpy(tensor), labels={"index":xaxis, "value":yaxis}, y=line_labels, **kwargs)
+    if showlegend is not None: fig.update_layout(showlegend=showlegend)
+    if hovertemplate is not None: fig.update_traces(hovertemplate=hovertemplate)
+    fig.show(renderer)
 
 
 def scatter(x, y, xaxis="", yaxis="", caxis="", renderer=None, **kwargs):
@@ -213,21 +216,22 @@ def center_by_mid_range(tensor: torch.Tensor, dim: Optional[int] = None) -> torc
 
 def analyze_svd(M, descr='', scale_by_singular_value=True, colorscale='Picnic_r', singular_color='blue', renderer=None):
     U, S, Vh = torch.linalg.svd(M)
+    V = Vh.T
     if scale_by_singular_value:
         U = U * S[None, :].sqrt()
-        Vh = Vh * S[:, None].sqrt()
+        V = V * S[:, None].sqrt()
     if descr: descr = f' for {descr}'
 
-    fig = make_subplots(rows=1, cols=3, subplot_titles=["U", "Singular Values", "Vh"])
-    uzmax, vzmax = U.abs().max().item(), Vh.abs().max().item()
+    fig = make_subplots(rows=1, cols=3, subplot_titles=["U", "Singular Values", "V"])
+    uzmax, vzmax = U.abs().max().item(), V.abs().max().item()
     fig.add_trace(go.Heatmap(z=utils.to_numpy(U), zmin=-uzmax, zmax=uzmax, colorscale=colorscale,
                              showscale=False,
                             hovertemplate="U: %{y}<br>Singular Index: %{x}<br>Value: %{z}<extra></extra>"
                             ),
                 row=1, col=1)
-    fig.add_trace(go.Heatmap(z=utils.to_numpy(Vh), colorscale=colorscale, zmin=-vzmax, zmax=vzmax,
+    fig.add_trace(go.Heatmap(z=utils.to_numpy(V), colorscale=colorscale, zmin=-vzmax, zmax=vzmax,
                              showscale=False,
-                            hovertemplate="Vh: %{y}<br>Singular Index: %{x}<br>Value: %{z}<extra></extra>",
+                            hovertemplate="V: %{x}<br>Singular Index: %{y}<br>Value: %{z}<extra></extra>",
                             ),
                 row=1, col=3)
     fig.add_trace(go.Scatter(x=np.arange(S.shape[0]), y=utils.to_numpy(S),
@@ -242,8 +246,8 @@ def analyze_svd(M, descr='', scale_by_singular_value=True, colorscale='Picnic_r'
     fig.update_yaxes(range=[0, None], row=1, col=2)
     # fig.update_yaxes(range=[0, None], row=1, col=2)
     # fig.update_layout(yaxis_scaleanchor="x")
-    fig.update_yaxes(scaleanchor='x', row=1, col=1)
-    fig.update_yaxes(scaleanchor='x', row=1, col=3)
+    fig.update_yaxes(scaleanchor='x', autorange='reversed', row=1, col=1)
+    fig.update_yaxes(scaleanchor='x', autorange='reversed', row=1, col=3)
 
     # fig.update_xaxes(scaleanchor='y', scaleratio=1, range=[0, U.shape[0]], row=1, col=1)
     # fig.update_yaxes(scaleanchor='x', scaleratio=1, range=[0, U.shape[1]], row=1, col=1)
@@ -515,7 +519,12 @@ def analyze_PVOU(model: HookedTransformer, colorscale='RdBu', renderer=None):
     assert W_V.shape == (1, 1, d_model, d_model)
     assert W_O.shape == (1, 1, d_model, d_model)
     res = (W_pos @ W_V @ W_O @ W_U).detach()[0,0,:,:]
-    imshow(res, title='W_pos @ W_V @ W_O @ W_U', xaxis='logit affected', yaxis='position', colorscale=colorscale, renderer=renderer)
+    pos_indices = torch.arange(n_ctx)
+    fig = px.imshow(utils.to_numpy(res), title='W_pos @ W_V @ W_O @ W_U',
+                    labels={"x":'logit affected', "y":'position'},
+                    color_continuous_midpoint=0.0, color_continuous_scale=colorscale)
+    fig.update_yaxes(tickvals=pos_indices, ticktext=pos_indices)
+    fig.show(renderer)
 
 
 
@@ -534,7 +543,7 @@ def analyze_EVOU(model: HookedTransformer, colorscale='RdBu', renderer=None, sca
     imshow(res, title='W_E @ W_V @ W_O @ W_U', renderer=renderer,
            xaxis="logit affected", yaxis="input token")
     analyze_svd(res, descr='W_E @ W_V @ W_O @ W_U', colorscale=colorscale, scale_by_singular_value=scale_by_singular_value, renderer=renderer)
-    line(res.diag(), title='(W_E @ W_V @ W_O @ W_U).diag()', xaxis='input token', renderer=renderer)
+    line(res.diag(), title='(W_E @ W_V @ W_O @ W_U).diag()', xaxis='input token', showlegend=False, hovertemplate='Input Token: %{x}<br>Logit on %{x}: %{y}', renderer=renderer)
 
 # In[ ]:
 
@@ -559,15 +568,16 @@ def calculate_copying(model: HookedTransformer, colorscale='RdBu', renderer=None
     line(res.diag(), title='copying.diag()', xaxis='input token', renderer=renderer)
     # take svd of res
     u, s, vh = torch.linalg.svd(res)
+    v = vh.T
     # plot singular values
     line(s, title='singular values of copying', renderer=renderer)
     # plot u, v
     imshow(u, title='u', renderer=renderer)
-    imshow(vh, title='v.T', renderer=renderer)
+    imshow(v, title='v', renderer=renderer)
 
     # 1. We already have u, s, and v from torch.linalg.svd(res)
     u1 = u[:, 0]
-    v1 = vh[0, :]
+    v1 = v[:, 0]
 
     # 2. Fit linear models to u1 and v1
     # Fit for u's first column
@@ -575,9 +585,9 @@ def calculate_copying(model: HookedTransformer, colorscale='RdBu', renderer=None
     y_vals_u = u[:, 0].numpy()
     popt_u, _ = curve_fit(linear_func, x_vals_u, y_vals_u)
 
-    # Fit for vh's first row
+    # Fit for v's first column
     x_vals_v = np.arange(d_vocab)
-    y_vals_v = vh[:, 0].numpy()
+    y_vals_v = v[0, :].numpy()
     popt_v, _ = curve_fit(linear_func, x_vals_v, y_vals_v)
 
     # Plot u's column against its linear fit
@@ -627,7 +637,7 @@ def calculate_copying(model: HookedTransformer, colorscale='RdBu', renderer=None
     u_adj, s_adj, vh_adj = torch.linalg.svd(adjusted_res)
     line(s_adj, title='Singular Values of Adjusted res', renderer=renderer)
     imshow(u_adj, title='u of residuals', renderer=renderer)
-    imshow(vh_adj, title='v.T of residuals', renderer=renderer)
+    imshow(vh_adj.T, title='v of residuals', renderer=renderer)
 
     # Extracting diagonal and off-diagonal entries
     diagonal_entries = torch.diag(adjusted_res)
