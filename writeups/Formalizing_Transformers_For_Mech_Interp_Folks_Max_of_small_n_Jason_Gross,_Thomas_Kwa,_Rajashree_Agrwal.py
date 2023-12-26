@@ -358,4 +358,8 @@ import importlib
 importlib.reload(analysis_utils)
 analysis_utils.analyze_EVOU(model, scale_by_singular_value=False)
 analysis_utils.analyze_PVOU(model)
+analysis_utils.analyze_PU(model)
+analysis_utils.analyze_EU(model)
+
+
 # %%
