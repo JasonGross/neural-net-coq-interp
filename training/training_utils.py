@@ -22,7 +22,7 @@ def default_device(deterministic: bool = False) -> str:
 
 # In[ ]:
 
-DEFAULT_WANDB_ENTITY = 'tkwa-team' # 'team-jason'
+DEFAULT_WANDB_ENTITY = 'team-jason' # 'tkwa-team' # 'team-jason'
 
 # In[ ]:
 
