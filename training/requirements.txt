@@ -125,7 +125,7 @@ typing_extensions==4.8.0
 tzdata==2023.3
 urllib3==1.26.16
 wandb==0.15.10
-wcwidth==0.2.6
+wcwidth==0.2.12
 wheel==0.38.4
 xxhash==2.0.2
 yarl==1.9.3
