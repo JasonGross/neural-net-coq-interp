@@ -583,7 +583,7 @@ Module RawIndex.
     end.
     specialize (IHr ltac:(Z.to_euclidean_division_equations; nia)).
     destruct IHr as [IHr1 IHr2].
-    rewrite IHr1; repeat split; try (now destruct r); try lia; [].
+    rewrite IHr1; repeat split; try (now destruct r); try lia;
     Z.to_euclidean_division_equations; nia.
   Qed.
 
