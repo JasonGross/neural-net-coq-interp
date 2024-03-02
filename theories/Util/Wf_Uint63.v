@@ -94,7 +94,7 @@ Proof.
                 else state)
             i
             init).
-  { abstract
+  { clear dependent A; abstract
       (cbv [is_true];
        pose proof (Uint63.to_Z_bounded max);
        pose proof (Uint63.to_Z_bounded i);
