@@ -305,7 +305,7 @@ Definition is_Some {A} (x : option A) : bool
 Lemma is_None_eq_None_iff {A x} : @is_None A x = true <-> x = None.
 Proof. destruct x; cbv; split; congruence. Qed.
 
-Definition invert_Some {A} (x : option A)
+Definition invert_Some {A : Type} (x : option A)
   : (if x then A else unit)
   := match x with
      | Some x' => x'
