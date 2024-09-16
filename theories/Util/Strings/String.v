@@ -1,6 +1,6 @@
-Require Import Coq.micromega.Lia.
-Require Import Coq.Strings.String.
-Require Import Coq.Strings.Ascii.
+From Coq Require Import Lia.
+From Coq Require Import String.
+From Coq Require Import Ascii.
 Require Import NeuralNetInterp.Util.Strings.Ascii.
 
 Local Open Scope list_scope.
