@@ -210,7 +210,11 @@ Import RawIndex.UncurryNotation.
   := ((uncurry_fun i1 .. i_ => I) : RawIndex r -> True)
        (only parsing, i1 binder, i_ binder, at level 10).
 (* TODO: fix naming *)
+
+Set Default Proof Mode "Classic".
 #[export] Hint Extern 1 => progress subst_type_lets_in_goal () : typeclass_instances.
+Set Default Proof Mode "Ltac2".
+
 Declare Custom Entry einsum_args.
 (*TODO: use Ltac/Ltac2 just to strip off the unused einsums, and to push the einsums under the Tensor.uncurry.  Use Gallina to introduce einsums for all shapes.*)
 Notation "{{{ {{ i1 .. i_ , j1 .. j_ -> k1 .. k_ }} , t1 , t2 }}}"
