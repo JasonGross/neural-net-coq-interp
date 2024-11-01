@@ -29,7 +29,7 @@ gmpy2==2.1.2
 huggingface-hub==0.17.3
 idna==3.6
 importlib-metadata==7.0.0
-jaxtyping==0.2.21
+jaxtyping==0.2.34
 Jinja2==3.1.2
 kiwisolver==1.4.4
 lit==17.0.6
