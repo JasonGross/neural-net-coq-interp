@@ -100,10 +100,34 @@ Module IndexGen.
 
     Definition item : Index 1 -> IndexType := tl.
 
+    Fixpoint mapi_rev {r} (f : nat -> IndexType -> IndexType) : Index r -> Index r
+      := match r with
+         | 0%nat => fun _ => []
+         | S r => fun xs => mapi_rev (fun idx => f (S idx)) (hd xs) ::' f O (tl xs)
+         end.
+
+    Fixpoint mapi {r : Rank} (f : nat -> IndexType -> IndexType) : Index r -> Index r
+      := match r with
+         | 0%nat => fun _ => []
+         | S r => fun xs => mapi f (hd xs) ::' f (Nat.pred r) (tl xs)
+         end.
+
     Fixpoint map {r} (f : IndexType -> IndexType) : Index r -> Index r
       := match r with
          | 0%nat => fun _ => []
          | S r => fun xs => map f (hd xs) ::' f (tl xs)
+         end.
+
+    Fixpoint map2i_rev {r} (f : nat -> IndexType -> IndexType -> IndexType) : Index r -> Index r -> Index r
+      := match r with
+         | 0%nat => fun _ _ => []
+         | S r => fun xs ys => map2i_rev (fun idx => f (S idx)) (hd xs) (hd ys) ::' f O (tl xs) (tl ys)
+         end.
+
+    Fixpoint map2i {r} (f : nat -> IndexType -> IndexType -> IndexType) : Index r -> Index r -> Index r
+      := match r with
+         | 0%nat => fun _ _ => []
+         | S r => fun xs ys => map2i f (hd xs) (hd ys) ::' f (Nat.pred r) (tl xs) (tl ys)
          end.
 
     Fixpoint map2 {r} (f : IndexType -> IndexType -> IndexType) : Index r -> Index r -> Index r
@@ -113,6 +137,19 @@ Module IndexGen.
          end.
 
     (* TODO: nary *)
+
+    Fixpoint map3i_rev {r} (f : nat -> IndexType -> IndexType -> IndexType -> IndexType) : Index r -> Index r -> Index r -> Index r
+      := match r with
+         | 0%nat => fun _ _ _ => []
+         | S r => fun xs ys zs => map3i_rev (fun idx => f (S idx)) (hd xs) (hd ys) (hd zs) ::' f O (tl xs) (tl ys) (tl zs)
+         end.
+
+    Fixpoint map3i {r} (f : nat -> IndexType -> IndexType -> IndexType -> IndexType) : Index r -> Index r -> Index r -> Index r
+      := match r with
+         | 0%nat => fun _ _ _ => []
+         | S r => fun xs ys zs => map3i f (hd xs) (hd ys) (hd zs) ::' f (Nat.pred r) (tl xs) (tl ys) (tl zs)
+         end.
+
     Fixpoint map3 {r} (f : IndexType -> IndexType -> IndexType -> IndexType) : Index r -> Index r -> Index r -> Index r
       := match r with
          | 0%nat => fun _ _ _ => []
