@@ -67,7 +67,7 @@ psutil==5.9.0
 pyarrow==11.0.0
 pycparser==2.21
 Pygments==2.15.1
-pyOpenSSL==23.2.0
+pyOpenSSL==25.3.0
 pyparsing==3.0.9
 PyQt5-sip==12.11.0
 PySocks==1.7.1
