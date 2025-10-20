@@ -1,4 +1,4 @@
-From Coq Require Import Sint63 Uint63.
+From Coq Require Import Sint63 Uint63 PrimArray.
 From NeuralNetInterp.Torch Require Import Tensor.
 From NeuralNetInterp.Util Require Import Slice Arith.Classes Arith.Instances PolymorphicOption Nat Notations.
 Import Instances.Uint63.
@@ -219,44 +219,44 @@ Module SliceIndex.
     Export SliceIndexNotations0.
     Notation "t .[ x , .. , y ]"
       := (SliceIndex.slice (snoc .. (snoc nil x) .. y) t%raw_tensor)
-           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ x ,  .. ,  y ]")
+           (x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ x ,  .. ,  y ]")
         : raw_tensor_scope.
     Notation "t .[ x , .. , y ]"
       := (SliceIndex.slice (snoc .. (snoc nil x) .. y) t%tensor)
-           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ x ,  .. ,  y ]")
+           (x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ x ,  .. ,  y ]")
         : tensor_scope.
     Notation "t .[ … , x , .. , y ]"
       := (SliceIndex.slice (snoc .. (snoc elipsis x) .. y) t%raw_tensor)
-           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ … ,  x ,  .. ,  y ]")
+           (x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ … ,  x ,  .. ,  y ]")
         : raw_tensor_scope.
     Notation "t .[ … , x , .. , y ]"
       := (SliceIndex.slice (snoc .. (snoc elipsis x) .. y) t%tensor)
-           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ … ,  x ,  .. ,  y ]")
+           (x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ … ,  x ,  .. ,  y ]")
         : tensor_scope.
     Notation "t .[< i >]"
       := (SliceIndex.slice (snoc nil i) t%tensor)
-           (at level 2, i custom fancy_slice at level 60, left associativity, format "t .[< i >]")
+           (i custom fancy_slice at level 60, left associativity, format "t .[< i >]")
         : tensor_scope.
 
     Notation "t .[ x , .. , y ] <- v"
       := (SliceIndex.set_slice (snoc .. (snoc nil x) .. y) t%raw_tensor v%raw_tensor)
-           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, no associativity, format "t .[ x ,  .. ,  y ]  <-  v")
+           (x custom fancy_slice at level 60, y custom fancy_slice at level 60, no associativity, format "t .[ x ,  .. ,  y ]  <-  v")
         : raw_tensor_scope.
     Notation "t .[ x , .. , y ] <- v"
       := (SliceIndex.set_slice (snoc .. (snoc nil x) .. y) t%tensor v%tensor)
-           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, no associativity, format "t .[ x ,  .. ,  y ]  <-  v")
+           (x custom fancy_slice at level 60, y custom fancy_slice at level 60, no associativity, format "t .[ x ,  .. ,  y ]  <-  v")
         : tensor_scope.
     Notation "t .[ … , x , .. , y ] <- v"
       := (SliceIndex.set_slice (snoc .. (snoc elipsis x) .. y) t%raw_tensor v%raw_tensor)
-           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, no associativity, format "t .[ … ,  x ,  .. ,  y ]  <-  v")
+           (x custom fancy_slice at level 60, y custom fancy_slice at level 60, no associativity, format "t .[ … ,  x ,  .. ,  y ]  <-  v")
         : raw_tensor_scope.
     Notation "t .[ … , x , .. , y ] <- v"
       := (SliceIndex.set_slice (snoc .. (snoc elipsis x) .. y) t%tensor v%tensor)
-           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, no associativity, format "t .[ … ,  x ,  .. ,  y ]  <-  v")
+           (x custom fancy_slice at level 60, y custom fancy_slice at level 60, no associativity, format "t .[ … ,  x ,  .. ,  y ]  <-  v")
         : tensor_scope.
     Notation "t .[< i >] <- v"
       := (SliceIndex.set_slice (snoc nil i) t%tensor v%tensor)
-           (at level 2, i custom fancy_slice at level 60, no associativity, format "t .[< i >]  <-  v")
+           (i custom fancy_slice at level 60, no associativity, format "t .[< i >]  <-  v")
         : tensor_scope.
   End SliceIndexNotations.
 End SliceIndex.
@@ -362,23 +362,23 @@ Module FancyIndex.
     Delimit Scope fancy_raw_tensor_scope with fancy_raw_tensor.
     Notation "t .[ x , .. , y ]"
       := (FancyIndex.slice (snoc .. (snoc nil x) .. y) t%fancy_raw_tensor)
-           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ x ,  .. ,  y ]")
+           (x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ x ,  .. ,  y ]")
         : fancy_raw_tensor_scope.
     Notation "t .[ x , .. , y ]"
       := (FancyIndex.slice (snoc .. (snoc nil x) .. y) t%fancy_tensor)
-           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ x ,  .. ,  y ]")
+           (x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ x ,  .. ,  y ]")
         : fancy_tensor_scope.
     Notation "t .[ … , x , .. , y ]"
       := (FancyIndex.slice (snoc .. (snoc elipsis x) .. y) t%fancy_raw_tensor)
-           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ … ,  x ,  .. ,  y ]")
+           (x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ … ,  x ,  .. ,  y ]")
         : fancy_raw_tensor_scope.
     Notation "t .[ … , x , .. , y ]"
       := (FancyIndex.slice (snoc .. (snoc elipsis x) .. y) t%fancy_tensor)
-           (at level 2, x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ … ,  x ,  .. ,  y ]")
+           (x custom fancy_slice at level 60, y custom fancy_slice at level 60, left associativity, format "t .[ … ,  x ,  .. ,  y ]")
         : fancy_tensor_scope.
     Notation "t .[< i >]"
       := (FancyIndex.slice (snoc nil i) t%fancy_tensor)
-           (at level 2, i custom fancy_slice at level 60, left associativity, format "t .[< i >]")
+           (i custom fancy_slice at level 60, left associativity, format "t .[< i >]")
         : fancy_tensor_scope.
   End FancyIndexNotations.
 End FancyIndex.
