@@ -78,6 +78,7 @@ jobs:
         #ocaml_version: ${{ matrix.env.DOCKER_OCAML_VERSION }}
         export: CI
         custom_script: |
+          git config --global --add safe.directory "*"
           startGroup 'make'
           opam exec -- make pretty-timed -j2 TGTS="${{ matrix.env.TGTS }}"
           if [ ! -z "${{ matrix.env.INSTALL_TGTS }}" ]; then
@@ -144,6 +145,7 @@ jobs:
         ocaml_version: ${{ matrix.env.DOCKER_OCAML_VERSION }}
         export: CI
         custom_script: |
+          git config --global --add safe.directory "*"
           startGroup 'make'
           opam exec -- make pretty-timed -j2 TGTS="${{ matrix.env.TGTS }}"
           endGroup
