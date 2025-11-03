@@ -373,6 +373,9 @@ Module Reduction.
     pose proof (fun H => @in_bounds_alt_bounded start stop 1 i (ex_intro _ n H)) as H'.
     cbv [in_bounds_alt_at] in *.
     change 1%uint63 with (1 : int) in *.
+    Set Printing Depth 1000000000.
+    Set Printing Coercions.
+    Show.
     progress change (to_Z 1%core) with (1:Z) in *.
     progress change PrimInt63.mul with (Classes.mul (A:=int)) in *.
     progress change Nat.add with (Classes.add (A:=nat)) in *.
