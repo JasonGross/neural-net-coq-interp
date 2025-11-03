@@ -43,7 +43,7 @@ jobs:
         submodules: recursive
     - name: Runner Info for ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-docker-build-${{ github.head_ref || github.run_id }}
       run: true
-    - name: deps
+    - name: make ${{ matrix.env.TGTS }}
       uses: coq-community/docker-coq-action@v1
       with:
         custom_image: mathcomp/mathcomp:${{ matrix.env.DOCKER_MATHCOMP_VERSION }}-${{ matrix.env.DOCKER_COQ_NAME }}-${{ matrix.env.DOCKER_COQ_VERSION }}
@@ -71,22 +71,13 @@ jobs:
              popd
           fi
           endGroup
-    - name: make ${{ matrix.env.TGTS }}
-      uses: coq-community/docker-coq-action@v1
-      with:
-        custom_image: mathcomp/mathcomp:${{ matrix.env.DOCKER_MATHCOMP_VERSION }}-${{ matrix.env.DOCKER_COQ_NAME }}-${{ matrix.env.DOCKER_COQ_VERSION }}
-        #coq_version: ${{ matrix.env.DOCKER_COQ_VERSION }}
-        #ocaml_version: ${{ matrix.env.DOCKER_OCAML_VERSION }}
-        export: CI
-        custom_script: |
-          git config --global --add safe.directory "*"
           startGroup 'make'
-          opam exec -- make pretty-timed -j2 TGTS="${{ matrix.env.TGTS }}"
+          make pretty-timed -j2 TGTS="${{ matrix.env.TGTS }}"
           if [ ! -z "${{ matrix.env.INSTALL_TGTS }}" ]; then
-             opam exec -- make ${{ matrix.env.INSTALL_TGTS }}
+             make ${{ matrix.env.INSTALL_TGTS }}
           fi
           endGroup
-          opam exec -- make print-pretty-timed
+          make print-pretty-timed
 
   docker-build-native:
     strategy:
@@ -111,7 +102,7 @@ jobs:
         submodules: recursive
     - name: Runner Info for ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-docker-build-native-${{ github.head_ref || github.run_id }}
       run: true
-    - name: deps
+    - name: make ${{ matrix.env.TGTS }}
       uses: coq-community/docker-coq-action@v1
       with:
         coq_version: ${{ matrix.env.DOCKER_COQ_VERSION }}
@@ -139,18 +130,10 @@ jobs:
              popd
           fi
           endGroup
-    - name: make ${{ matrix.env.TGTS }}
-      uses: coq-community/docker-coq-action@v1
-      with:
-        coq_version: ${{ matrix.env.DOCKER_COQ_VERSION }}
-        ocaml_version: ${{ matrix.env.DOCKER_OCAML_VERSION }}
-        export: CI
-        custom_script: |
-          git config --global --add safe.directory "*"
           startGroup 'make'
-          opam exec -- make pretty-timed -j2 TGTS="${{ matrix.env.TGTS }}"
+          make pretty-timed -j2 TGTS="${{ matrix.env.TGTS }}"
           endGroup
-          opam exec -- make print-pretty-timed
+          make print-pretty-timed
 
 
   check-all:
