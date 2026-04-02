@@ -1230,7 +1230,7 @@ Definition arange {start : with_default "start" int 0%uint63} (stop : int) {step
   := fun idx => let idx := RawIndex.item idx in
                 (start + idx * step)%uint63.
 
-#[global] Arguments arange (_ _ _)%uint63.
+#[global] Arguments arange (_ _ _)%_uint63.
 #[global] Arguments arange {_} _ {_}, _ _ {_}, _ _ _.
 
 (* TODO: nary *)
@@ -1309,7 +1309,7 @@ Definition tril {rnk} {s : Shape rnk} {r c} {A} {zero : has_zero A}
      => if ((0 ≤? i) && (i <? r) && (Sint63.max 0 (1 + i + diagonal) ≤? j) && (j <? c))%bool
         then 0%core
         else input idxs.
-#[global] Arguments tril {rnk%nat s%shape} {r c}%uint63 {A%type_scope zero} {diagonal}%sint63 input%tensor.
+#[global] Arguments tril {rnk%_nat s%_shape} {r c}%_uint63 {A%_type_scope zero} {diagonal}%_sint63 input%_tensor.
 (** Quoting https://pytorch.org/docs/stable/generated/torch.triu.html
 
 torch.triu(input, diagonal=0, *, out=None) → Tensor
@@ -1335,7 +1335,7 @@ Definition triu {rnk} {s : Shape rnk} {r c} {A} {zero : has_zero A}
      => if ((0 ≤? i) && (i <? r) && (0 ≤? j) && (j <? Sint63.max 0 (i + diagonal)))%bool
         then 0%core
         else input idxs.
-#[global] Arguments triu {rnk%nat s%shape} {r c}%uint63 {A%type_scope zero} {diagonal}%sint63 input%tensor.
+#[global] Arguments triu {rnk%_nat s%_shape} {r c}%_uint63 {A%_type_scope zero} {diagonal}%_sint63 input%_tensor.
 
 (** Quoting
 https://pytorch.org/docs/stable/generated/torch.diagonal.html
@@ -1365,7 +1365,7 @@ Definition diagonal {b} {s : Shape b} {r c} {A}
           => input ((idxs, i - offset), i)%uint63
      else fun '(idxs, i)
           => input ((idxs, i), i + offset)%uint63.
-#[global] Arguments diagonal {b%nat s%shape} {r c}%uint63 {A%type_scope} {offset}%sint63 input%tensor.
+#[global] Arguments diagonal {b%_nat s%_shape} {r c}%_uint63 {A%_type_scope} {offset}%_sint63 input%_tensor.
 
 Definition coer_tensor {r s A B} {coerAB : has_coer A B} : @tensor r s A -> @tensor r s B
   := Tensor.map coer.

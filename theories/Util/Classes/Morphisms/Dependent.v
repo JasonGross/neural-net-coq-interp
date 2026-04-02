@@ -216,20 +216,20 @@ Notation const6 R := (match _ as F return forall A B, Hetero.relation A B -> for
                       | F => fun (A B : Type) (_ : Hetero.relation A B) (A' B' : Type) (_ : Hetero.relation A' B') (A'' B'' : Type) (_ : Hetero.relation A'' B'') (A''' B''' : Type) (_ : Hetero.relation A''' B''') (A'''' B'''' : Type) (_ : Hetero.relation A'''' B'''') (A''''' B''''' : Type) (_ : Hetero.relation A''''' B''''') => R
                       end) (only parsing).
 Notation constR6 R := (fun (A B : Type) (_ : Hetero.relation A B) (A' B' : Type) (_ : Hetero.relation A' B') (A'' B'' : Type) (_ : Hetero.relation A'' B'') (A''' B''' : Type) (_ : Hetero.relation A''' B''') (A'''' B'''' : Type) (_ : Hetero.relation A'''' B'''') (A''''' B''''' : Type) (_ : Hetero.relation A''''' B''''') => R).
-Arguments Proper {F}%type R%dependent_signature m.
-Arguments respectful {A B}%type (R R')%dependent_signature (_ _)%type _ _.
-Arguments Proper2 {F}%type R%dependent2_signature m.
-Arguments respectful2 {A B}%type (R R')%dependent2_signature (_ _)%type _ _.
-Arguments Proper3 {F}%type R%dependent3_signature m.
-Arguments respectful3 {A B}%type (R R')%dependent3_signature (_ _)%type _ _.
-Arguments Proper4 {F}%type R%dependent4_signature m.
-Arguments respectful4 {A B}%type (R R')%dependent4_signature (_ _)%type _ _.
-Arguments Proper5 {F}%type R%dependent5_signature m.
-Arguments respectful5 {A B}%type (R R')%dependent5_signature (_ _)%type _ _.
-Arguments Proper6 {F}%type R%dependent6_signature m.
-Arguments respectful6 {A B}%type (R R')%dependent6_signature (_ _)%type _ _.
-Arguments Propern {n}%nat {F}%type R%dependentn_signature m.
-Arguments respectfuln {n}%nat {A B}%type (R R')%dependentn_signature.
+Arguments Proper {F}%_type R%_dependent_signature m.
+Arguments respectful {A B}%_type (R R')%_dependent_signature (_ _)%_type _ _.
+Arguments Proper2 {F}%_type R%_dependent2_signature m.
+Arguments respectful2 {A B}%_type (R R')%_dependent2_signature (_ _)%_type _ _.
+Arguments Proper3 {F}%_type R%_dependent3_signature m.
+Arguments respectful3 {A B}%_type (R R')%_dependent3_signature (_ _)%_type _ _.
+Arguments Proper4 {F}%_type R%_dependent4_signature m.
+Arguments respectful4 {A B}%_type (R R')%_dependent4_signature (_ _)%_type _ _.
+Arguments Proper5 {F}%_type R%_dependent5_signature m.
+Arguments respectful5 {A B}%_type (R R')%_dependent5_signature (_ _)%_type _ _.
+Arguments Proper6 {F}%_type R%_dependent6_signature m.
+Arguments respectful6 {A B}%_type (R R')%_dependent6_signature (_ _)%_type _ _.
+Arguments Propern {n}%_nat {F}%_type R%_dependentn_signature m.
+Arguments respectfuln {n}%_nat {A B}%_type (R R')%_dependentn_signature.
 
 Local Open Scope dependent_signature_scope.
 
@@ -298,8 +298,8 @@ Section Relations.
 End Relations.
 
 Global Typeclasses Opaque respectful pointwise_relation forall_relation.
-Arguments forall_relation {A P}%type sig%signature _ _.
-Arguments pointwise_relation A%type {B}%type R%signature _ _.
+Arguments forall_relation {A P}%_type sig%_signature _ _.
+Arguments pointwise_relation A%_type {B}%_type R%_signature _ _.
 
 #[global]
 Hint Unfold Reflexive : core.
