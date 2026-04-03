@@ -21,10 +21,10 @@ Record sigT2 (A:Type) (P Q:A -> Type) : Type := existT2 { projT12 : A ; projT22 
 
 (* Notations *)
 
-Arguments sig (A P)%type.
-Arguments sig2 (A P Q)%type.
-Arguments sigT (A P)%type.
-Arguments sigT2 (A P Q)%type.
+Arguments sig (A P)%_type.
+Arguments sig2 (A P Q)%_type.
+Arguments sigT (A P)%_type.
+Arguments sigT2 (A P Q)%_type.
 
 Module Import Notations.
   #[export] Set Warnings "-notation-overridden".

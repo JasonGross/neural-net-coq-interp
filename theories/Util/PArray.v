@@ -203,7 +203,7 @@ Definition tril {A} {zero : has_zero A} {diagonal : with_default "diagonal" int 
            in
            set (out.[i <- row])
        }}.
-#[global] Arguments tril {A%type_scope zero diagonal%sint63} input.
+#[global] Arguments tril {A%_type_scope zero diagonal%_sint63} input.
 
 (** Quoting https://pytorch.org/docs/stable/generated/torch.triu.html
 
@@ -239,4 +239,4 @@ Definition triu {A} {zero : has_zero A} {diagonal : with_default "diagonal" int 
            in
            set (out.[i <- row])
        }}.
-#[global] Arguments triu {A%type_scope zero diagonal%sint63} input.
+#[global] Arguments triu {A%_type_scope zero diagonal%_sint63} input.
