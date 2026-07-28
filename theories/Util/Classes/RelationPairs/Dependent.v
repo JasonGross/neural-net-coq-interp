@@ -33,8 +33,13 @@ Module Export RelationPairsNotations.
   Export Morphisms.Dependent.ProperNotations.
   Infix "@@" := RelCompFun (at level 30, right associativity) : dependent_signature_scope.
 
-  Notation "R @@1" := (R @@ Fst)%dependent_signature (at level 30) : dependent_signature_scope.
-  Notation "R @@2" := (R @@ Snd)%dependent_signature (at level 30) : dependent_signature_scope.
+  (* No level is given for [@@1] / [@@2] on purpose: the homographs in
+     [Stdlib.Classes.RelationPairs] moved from level 30 to level 1 in Rocq
+     9.4, and a notation may only be redeclared at the level its grammar
+     entry already has.  Omitting the annotation inherits whichever level
+     the stdlib uses, so this works on every version. *)
+  Notation "R @@1" := (R @@ Fst)%dependent_signature : dependent_signature_scope.
+  Notation "R @@2" := (R @@ Snd)%dependent_signature : dependent_signature_scope.
 
   Infix "*" := RelProd : dependent_signature_scope.
 End RelationPairsNotations.
