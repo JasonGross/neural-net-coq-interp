@@ -1,0 +1,1 @@
+# probe: verifies that a Python-only change skips the Rocq build jobs
