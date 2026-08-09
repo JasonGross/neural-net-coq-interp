@@ -5,7 +5,10 @@
 # In[ ]:
 
 import datetime
+import json
 import os, os.path
+import shutil
+import urllib.request
 from pathlib import Path
 from typing import List, Any, Iterable, Optional
 import numpy as np
@@ -23,6 +26,21 @@ def default_device(deterministic: bool = False) -> str:
 # In[ ]:
 
 DEFAULT_WANDB_ENTITY = 'team-jason' # 'tkwa-team' # 'team-jason'
+
+WANDB_PUBLIC_GRAPHQL_URL = 'https://api.wandb.ai/graphql'
+
+_WANDB_PUBLIC_ARTIFACT_FILES_QUERY = '''
+query ArtifactFiles($entityName: String!, $projectName: String!, $artifactName: String!) {
+  project(name: $projectName, entityName: $entityName) {
+    artifact(name: $artifactName) {
+      state
+      files(first: 100) {
+        edges { node { name sizeBytes directUrl } }
+      }
+    }
+  }
+}
+'''
 
 # In[ ]:
 
@@ -162,6 +180,53 @@ def make_wandb_config(
       'device':device,
     }
 
+def _wandb_public_graphql(query: str, variables: dict, timeout: float = 60) -> dict:
+  """POST an unauthenticated query to the public wandb GraphQL API."""
+  payload = json.dumps({'query': query, 'variables': variables}).encode('utf-8')
+  request = urllib.request.Request(
+      WANDB_PUBLIC_GRAPHQL_URL,
+      data=payload,
+      headers={'Content-Type': 'application/json', 'User-Agent': 'neural-net-coq-interp'})
+  with urllib.request.urlopen(request, timeout=timeout) as response:
+    result = json.loads(response.read().decode('utf-8'))
+  if result.get('errors'):
+    raise RuntimeError(f'wandb GraphQL errors: {result["errors"]}')
+  return result['data']
+
+def download_public_wandb_artifact(wandb_artifact_path: str, dest_dir, timeout: float = 60) -> Optional[Path]:
+  """Download the files of a *public* wandb artifact without authenticating.
+
+  `wandb.Api()` insists on an API key even for public data, and `wandb login
+  --anonymously` no longer works server side, so unauthenticated CI cannot use
+  the normal client at all. Public artifacts are still readable through the
+  public GraphQL API, which hands back pre-signed storage URLs we can fetch
+  directly.
+
+  `wandb_artifact_path` is the usual `entity/project/name:alias` string.
+  Returns the directory the files were written to, or None if the artifact has
+  no files.
+  """
+  entity_name, project_name, artifact_name = wandb_artifact_path.split('/')
+  data = _wandb_public_graphql(
+      _WANDB_PUBLIC_ARTIFACT_FILES_QUERY,
+      {'entityName': entity_name, 'projectName': project_name, 'artifactName': artifact_name},
+      timeout=timeout)
+  artifact = (data.get('project') or {}).get('artifact')
+  if artifact is None:
+    raise RuntimeError(f'No such public wandb artifact: {wandb_artifact_path}')
+  edges = artifact['files']['edges']
+  if not edges: return None
+  dest_dir = Path(dest_dir)
+  os.makedirs(dest_dir, exist_ok=True)
+  for edge in edges:
+    node = edge['node']
+    if node.get('directUrl') is None: continue
+    dest_path = dest_dir / os.path.basename(node['name'])
+    with urllib.request.urlopen(node['directUrl'], timeout=timeout) as response, open(dest_path, 'wb') as dest_file:
+      shutil.copyfileobj(response, dest_file)
+    print(f'Downloaded {wandb_artifact_path} file {node["name"]} ({node["sizeBytes"]} bytes) to {dest_path}')
+  return dest_dir
+
 def load_model(model: HookedTransformer, model_pth_path: str):
   try:
     cached_data = torch.load(model_pth_path)
@@ -226,6 +291,13 @@ def train_or_load_model(
         model_dir = Path(model_at.download())
       except Exception as e:
         print(f'Could not load model {wandb_model_path} from wandb:\n', e)
+        # The wandb client needs an API key even to read a public artifact, so
+        # this is the expected path anywhere there is no key (CI, fresh
+        # checkouts); fall back to fetching the public artifact directly.
+        try:
+          model_dir = download_public_wandb_artifact(wandb_model_path, pth_base_path / 'wandb-public' / wandb_project)
+        except Exception as e:
+          print(f'Could not download public artifact {wandb_model_path} from wandb:\n', e)
       if model_dir is not None:
         for model_path in model_dir.glob('*.pth'):
           res = load_model(model, model_path)
