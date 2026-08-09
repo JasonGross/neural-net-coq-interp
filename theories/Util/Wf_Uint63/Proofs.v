@@ -372,8 +372,23 @@ Module Reduction.
   Proof.
     pose proof (fun H => @in_bounds_alt_bounded start stop 1 i (ex_intro _ n H)) as H'.
     cbv [in_bounds_alt_at] in *.
-    change 1%uint63 with (1 : int) in *.
-    progress change (to_Z 1%core) with (1:Z) in *.
+    (* [(1 : int)] no longer names the target of this normalisation: it
+       elaborates straight back to the raw primitive literal with the cast
+       erased, so [change 1%uint63 with (1 : int)] is [change 0x1 with 0x1] --
+       it succeeds, changes nothing, and every later step that spells the
+       literal as [1] inside a [Classes] operator (the [?x // 1] and [1 * ?x]
+       patterns below, and this lemma's own [Hsmall]) silently stops matching.
+       Name the intended form explicitly.  The two are convertible -- this is a
+       delta step on the [has_one] instance -- so the [change] is as safe as it
+       ever was, and it is what the original line was reaching for. *)
+    change 1%uint63 with (@Classes.one int int_has_one) in *.
+    (* [progress] dropped: the preceding [change] now normalises the literal
+       everywhere, so no [to_Z 1] subterm survives for this one to rewrite and
+       the [progress] turns a harmless no-op into "Failed to progress".  The
+       [change] itself is kept -- it is convertibility-only, so it is correct
+       whether or not it fires, and the lines below still assert their own
+       [progress]. *)
+    change (to_Z 1%core) with (1:Z) in *.
     progress change PrimInt63.mul with (Classes.mul (A:=int)) in *.
     progress change Nat.add with (Classes.add (A:=nat)) in *.
     cbv beta iota in *.
@@ -383,9 +398,16 @@ Module Reduction.
            | [ H : context[1 * ?x] |- _ ]
              => replace (1 * x) with x in * by (generalize x; cbv -[Z.mul]; nia)
            end.
-    all: rewrite !nat_N_Z in *.
-    all: rewrite !Nat2Z.inj_add in *.
-    all: rewrite !Z2Nat.id in * by nia.
+    (* [!] relaxed to [?] on these three: the goal now reaches this point
+       already carrying [Z.of_nat 1] rather than [Z.of_N (N.of_nat 1)], so
+       there is nothing left for [nat_N_Z] to do and, with no [Z.of_nat (_+_)]
+       or [Z.to_nat] either, nothing for the other two.  [!] demands at least
+       one hit and turns "already normalised" into "Nothing to rewrite"; [?]
+       keeps the normalisation where it is still needed and is a no-op where
+       it is not. *)
+    all: rewrite ?nat_N_Z in *.
+    all: rewrite ?Nat2Z.inj_add in *.
+    all: rewrite ?Z2Nat.id in * by nia.
     rewrite !Bool.andb_true_iff in Hsmall; destruct Hsmall as [[Hsmall1 Hsmall2] Hsmall3].
     rewrite Hsmall1 in *; cbv beta iota in *.
     clear H'.

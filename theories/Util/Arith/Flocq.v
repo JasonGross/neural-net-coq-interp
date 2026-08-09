@@ -1,5 +1,12 @@
 From Coq.Reals Require Import Reals.
 From Coq Require Import Lra Lia Eqdep_dec.
+(* [Zeq_bool] is used below to peel [canonical_mantissa]; it lives in
+   [ZArith.Zbool], which nothing in the requires above [Export]s -- Flocq's
+   [Zaux] only [Require Import]s ZArith, so the name is loaded but not in
+   scope.  Importing it here is version-independent: at 8.x it names the old
+   [Z.compare]-based definition, and at Rocq dev it is an abbreviation for
+   [Z.eqb], which is exactly the form [canonical_mantissa] now unfolds to. *)
+From Coq Require Import ZArith.Zbool.
 From Coq.Floats Require Import Floats.
 From Flocq.Core Require Import Raux Generic_fmt Zaux FLX.
 From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
@@ -222,7 +229,13 @@ Proof.
     cbv [SF2B].
     cbv [Operations.Fmult].
     cbv [Bmult].
-    set (pf := proj1 _); clearbody pf; revert pf.
+    (* Flocq dev builds Bmult's validity proof with the named lemma
+       [Bmult_valid ...]; older Flocq used [proj1 (Bmult_correct_aux ...)],
+       which is what [set (pf := proj1 _)] used to catch.  Read the proof
+       term off the goal instead so this does not track Flocq's spelling. *)
+    lazymatch goal with
+    | [ |- context[SF2B _ ?p] ] => set (pf := p)
+    end; clearbody pf; revert pf.
     cbv [cond_Zopp Z.opp Z.mul].
     cbv [binary_normalize].
     repeat match goal with
@@ -244,13 +257,34 @@ Proof.
                   => replace v
                     with (f (g (if b then true else false) x y) (proj1 (h (if b then true' else false') z w)))
                     by now destruct b
+                (* Flocq dev spells the branch's validity argument as the named
+                   lemma [binary_round_valid ...] with no [proj1] wrapper, so
+                   the pattern above stops firing and the [if] is never merged.
+                   Same shape, one constructor thinner.  [by now destruct b] is
+                   what keeps the looser pattern honest: a wrong match fails the
+                   [replace] and the enclosing [match goal] backtracks. *)
+                | (if ?b
+                   then ?f (?g ?true ?x ?y) (?h ?true' ?z ?w)
+                   else ?f (?g ?false ?x ?y) (?h ?false' ?z ?w))
+                  => replace v
+                    with (f (g (if b then true else false) x y) (h (if b then true' else false') z w))
+                    by now destruct b
                 end
            | [ |- context[if ?b then true else false] ]
              => replace (if b then true else false) with b by now destruct b
            | [ |- context[if ?b then false else true] ]
              => replace (if b then false else true) with (negb b) by now destruct b
            end.
-    set (pf' := proj1 _); clearbody pf'; revert pf'.
+    (* Same Flocq-dev change as at [pf] above, one level down: the merged
+       right-hand side now carries [binary_round_valid ...] where older Flocq
+       carried [proj1 (...)].  Try the old spelling first so this file still
+       builds against Flocq 4.x, then read the proof term off the equation's
+       right-hand side. *)
+    first [ set (pf' := proj1 _)
+          | lazymatch goal with
+            | [ |- forall _, _ = SF2B _ ?p ] => set (pf' := p)
+            end ];
+      clearbody pf'; revert pf'.
     cbv [binary_round] in *.
     cbv [shl_align_fexp shl_align].
     repeat match goal with
@@ -274,6 +308,18 @@ Proof.
                    else ?f (?g ?false ?x ?y) (proj1 (?h ?false' ?z ?w)))
                   => replace v
                     with (f (g (if b then true else false) x y) (proj1 (h (if b then true' else false') z w)))
+                    by now destruct b
+                (* Flocq dev spells the branch's validity argument as the named
+                   lemma [binary_round_valid ...] with no [proj1] wrapper, so
+                   the pattern above stops firing and the [if] is never merged.
+                   Same shape, one constructor thinner.  [by now destruct b] is
+                   what keeps the looser pattern honest: a wrong match fails the
+                   [replace] and the enclosing [match goal] backtracks. *)
+                | (if ?b
+                   then ?f (?g ?true ?x ?y) (?h ?true' ?z ?w)
+                   else ?f (?g ?false ?x ?y) (?h ?false' ?z ?w))
+                  => replace v
+                    with (f (g (if b then true else false) x y) (h (if b then true' else false') z w))
                     by now destruct b
                 end
            | [ |- context[if ?b then true else false] ]
@@ -369,7 +415,26 @@ Proof.
                       | progress subst
                       | progress cbn [Z.opp] in *
                       | rewrite Z.sub_diag in * ].
-    all: destruct_head'_bool; cbv [cond_Zopp xorb Z.mul Z.opp Bool.eqb] in *; break_innermost_match; try lia. }
+    all: destruct_head'_bool; cbv [cond_Zopp xorb Z.mul Z.opp Bool.eqb] in *; break_innermost_match; try lia.
+    (* Rocq dev's SpecFloat writes the alignment shift as a raw [Pos.iter xO]
+       (Stdlib.Floats.SpecFloat, [shl_align]) where Flocq's side goes through
+       [Zpower.shift_pos], so the [rewrite ?Zpower.shift_pos_correct] above
+       fires on only one side of the equation and [lia] is left comparing two
+       terms it has no theory for.  Re-fold the raw iteration into the [p] that
+       [break_innermost_match] already introduced for [Z.pow_pos 2 n].  The
+       [change] is convertibility-only ([shift_pos n z] IS [Pos.iter xO z n]),
+       so this is correct against older Flocq too, where it simply finds
+       nothing to do. *)
+    all: repeat match goal with
+                | [ H : Z.pow_pos 2 ?n = Z.pos ?p |- context[Pos.iter xO ?z ?n] ]
+                  => replace (Pos.iter xO z n) with (z * p)%positive
+                       by (apply Pos2Z.inj;
+                           change (Z.pos (Pos.iter xO z n))
+                             with (Z.pos (Zpower.shift_pos n z));
+                           rewrite Pos2Z.inj_mul, Zpower.shift_pos_correct, H;
+                           lia)
+                end.
+    all: try lia. }
 Qed.
 #[export] Hint Rewrite
   fma_equiv

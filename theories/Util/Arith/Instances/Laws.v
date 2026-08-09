@@ -227,27 +227,36 @@ Proof. cbv [eqb int_has_eqb is_true]; intros ??; lia. Qed.
 Proof. cbv [eqb int_has_eqb is_true]; intros ???; lia. Qed.
 Module Sint63.
   Import Instances.Sint63 Int63.Sint63 Arith.Classes.
+  (* Rocq states Sint63's spec lemmas with Z.le and Z.lt delta-unfolded --
+     [leb_spec] ends in [(to_Z x ?= to_Z y) <> Gt] and [ltb_spec] in
+     [(to_Z x ?= to_Z y) = Lt] (Corelib.Numbers.Cyclic.Int63.Sint63Axioms).
+     lia's preprocessor recognises the folded constants only, so it reports
+     "Cannot find witness" on the raw comparison form.  Fold them back first.
+     Both changes are convertibility-only, so this is version-independent. *)
+  Local Ltac fold_Zcmp :=
+    try change (Z.compare ?x ?y <> Gt) with (Z.le x y) in *;
+    try change (Z.compare ?x ?y = Lt) with (Z.lt x y) in *.
   #[export] Instance int_leb_Reflexive : Reflexive (leb (A:=int)) | 10.
-  Proof. cbv [leb int_has_leb is_true]; intros ?; rewrite leb_spec; lia. Qed.
+  Proof. cbv [leb int_has_leb is_true]; intros ?; rewrite leb_spec; fold_Zcmp; lia. Qed.
   #[export] Instance int_leb_Transitive : Transitive (leb (A:=int)) | 10.
-  Proof. cbv [leb int_has_leb is_true]; intros ???; rewrite !leb_spec; lia. Qed.
+  Proof. cbv [leb int_has_leb is_true]; intros ???; rewrite !leb_spec; fold_Zcmp; lia. Qed.
   (* Work around COQBUG(https://github.com/coq/coq/issues/17983) *)
   #[export] Instance int_leb_Antisymmetric : Antisymmetric int eq leb | 10.
-  Proof. cbv [leb int_has_leb is_true]; intros ??; rewrite !leb_spec; intros; apply Sint63.to_Z_inj; lia. Qed.
+  Proof. cbv [leb int_has_leb is_true]; intros ??; rewrite !leb_spec; intros; apply Sint63.to_Z_inj; fold_Zcmp; lia. Qed.
   #[export] Instance int_negb_leb_Asymmetric : Asymmetric (fun x y => negb (leb (A:=int) x y)) | 10.
-  Proof. cbv [leb int_has_leb is_true]; intros ??; rewrite !negb_true_iff, <- !not_true_iff_false, !leb_spec; lia. Qed.
+  Proof. cbv [leb int_has_leb is_true]; intros ??; rewrite !negb_true_iff, <- !not_true_iff_false, !leb_spec; fold_Zcmp; lia. Qed.
   #[export] Instance int_ltb_Transitive : Transitive (ltb (A:=int)) | 10.
-  Proof. cbv [ltb int_has_ltb is_true]; intros ???; rewrite !ltb_spec; lia. Qed.
+  Proof. cbv [ltb int_has_ltb is_true]; intros ???; rewrite !ltb_spec; fold_Zcmp; lia. Qed.
   #[export] Instance int_ltb_Irreflexive : Irreflexive (ltb (A:=int)) | 10.
-  Proof. cbv [ltb int_has_ltb is_true Irreflexive complement]; intros ?; rewrite !ltb_spec; lia. Qed.
+  Proof. cbv [ltb int_has_ltb is_true Irreflexive complement]; intros ?; rewrite !ltb_spec; fold_Zcmp; lia. Qed.
   #[export] Instance int_negb_ltb_Reflexive : Reflexive (fun x y => negb (ltb (A:=int) x y)) | 10.
-  Proof. cbv [ltb int_has_ltb is_true]; intros ?; rewrite !negb_true_iff, <- !not_true_iff_false, !ltb_spec; lia. Qed.
+  Proof. cbv [ltb int_has_ltb is_true]; intros ?; rewrite !negb_true_iff, <- !not_true_iff_false, !ltb_spec; fold_Zcmp; lia. Qed.
   #[export] Instance int_negb_ltb_Transitive : Transitive (fun x y => negb (ltb (A:=int) x y)) | 10.
-  Proof. cbv [ltb int_has_ltb is_true]; intros ???; rewrite !negb_true_iff, <- !not_true_iff_false, !ltb_spec; lia. Qed.
+  Proof. cbv [ltb int_has_ltb is_true]; intros ???; rewrite !negb_true_iff, <- !not_true_iff_false, !ltb_spec; fold_Zcmp; lia. Qed.
   #[export] Instance int_negb_ltb_Antisymmetric : Antisymmetric int eq (fun x y => negb (ltb (A:=int) x y)) | 10.
-  Proof. cbv [ltb int_has_ltb is_true]; intros ??; rewrite !negb_true_iff, <- !not_true_iff_false, !ltb_spec; intros; apply Sint63.to_Z_inj; lia. Qed.
+  Proof. cbv [ltb int_has_ltb is_true]; intros ??; rewrite !negb_true_iff, <- !not_true_iff_false, !ltb_spec; intros; apply Sint63.to_Z_inj; fold_Zcmp; lia. Qed.
   #[export] Instance int_ltb_Asymmetric : Asymmetric (ltb (A:=int)) | 10.
-  Proof. cbv [ltb int_has_ltb is_true]; intros ??; rewrite !ltb_spec; lia. Qed.
+  Proof. cbv [ltb int_has_ltb is_true]; intros ??; rewrite !ltb_spec; fold_Zcmp; lia. Qed.
 End Sint63.
 Export (hints) Sint63.
 
