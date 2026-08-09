@@ -1,4 +1,6 @@
-From Coq Require Import Sint63 Uint63 PrimArray.
+(* [PArray] rather than [PrimArray]: the latter is not a valid [Coq.]-prefixed
+   logical path before Rocq 9, and every other file here imports [PArray]. *)
+From Coq Require Import Sint63 Uint63 PArray.
 From NeuralNetInterp.Torch Require Import Tensor.
 From NeuralNetInterp.Util Require Import Slice Arith.Classes Arith.Instances PolymorphicOption Nat Notations.
 Import Instances.Uint63.
