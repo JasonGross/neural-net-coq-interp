@@ -8,7 +8,15 @@ on:
       - .github/workflows/python.yml
     branches:
       - main
+  # Safe to filter here only because no job in this workflow is a required
+  # status check: a workflow that never starts never reports one, so if
+  # `3.11` is ever made required this filter has to be replaced by the same
+  # always-runs-then-gates pattern that coq.yml uses.
   pull_request:
+    paths:
+      - training/**
+      - Makefile
+      - .github/workflows/python.yml
   workflow_dispatch:
 
 defaults:
