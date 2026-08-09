@@ -206,7 +206,10 @@ jobs:
           # source errors against a prover several majors older than the one it
           # is named after -- which is exactly what the 9.2 row did until
           # OPAM_UPDATE_CMD was added above.  Assert the version instead.
-          PROVER_VERSION="$( { rocq --version || rocqc --version || coqc --version ; } 2>&1 | head -n 1 )"
+          # Do NOT merge stderr into this capture: the action runs the script
+          # under `set -x`, so `2>&1` collects the xtrace line rather than the
+          # version string, and every row fails the case below.
+          PROVER_VERSION="$( { rocq --version || rocqc --version || coqc --version ; } | head -n 1 )"
           echo "prover after dependency installation: $PROVER_VERSION"
           case "$PROVER_VERSION" in
             *"version ${{ matrix.env.EXPECT_VERSION }}"*) ;;
