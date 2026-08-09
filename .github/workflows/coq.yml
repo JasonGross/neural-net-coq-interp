@@ -7,9 +7,14 @@ on:
       - _CoqProject
       - Makefile
       - Makefile.coq.local
+      - etc/**
       - .github/workflows/coq.yml
     branches:
       - main
+  # No `paths:` filter here on purpose: `check-all` is a required status check,
+  # and a workflow that never starts never reports it, so the PR would sit on
+  # "Expected - waiting for status to be reported" forever.  The skip is done
+  # per-job below, via the `changes` job.
   pull_request:
   workflow_dispatch:
 
@@ -17,24 +22,156 @@ permissions:
   contents: write
 
 jobs:
+  changes:
+    name: Detect Rocq-relevant changes
+    runs-on: ubuntu-latest
+    outputs:
+      coq: ${{ steps.filter.outputs.coq }}
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - id: filter
+      name: Did anything Rocq-relevant change?
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+      run: |
+        set -u
+        # Keep this in sync with the `paths:` filter on `push:` above.
+        RELEVANT='^(theories/|etc/|_CoqProject$|Makefile$|Makefile\.coq\.local$|\.github/workflows/coq\.yml$)'
+        build_everything() {
+          echo "$1; building everything"
+          echo "coq=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        }
+        case "$EVENT_NAME" in
+          push|pull_request) ;;
+          *) build_everything "event is $EVENT_NAME, not push or pull_request" ;;
+        esac
+        case "$BASE_SHA" in
+          ''|0000000000000000000000000000000000000000)
+            build_everything "no usable base sha" ;;
+        esac
+        git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null \
+          || git fetch --no-tags origin "$BASE_SHA" 2>/dev/null \
+          || true
+        git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null \
+          || build_everything "base $BASE_SHA is not resolvable"
+        CHANGED="$(git diff --name-only "$BASE_SHA" HEAD)" \
+          || build_everything "git diff against $BASE_SHA failed"
+        echo "Changed files since $BASE_SHA:"
+        printf '%s\n' "$CHANGED"
+        if printf '%s\n' "$CHANGED" | grep -qE "$RELEVANT"; then
+          echo "coq=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "No Rocq-relevant path changed; skipping the build jobs."
+          echo "coq=false" >> "$GITHUB_OUTPUT"
+        fi
+
   docker-build:
+    needs: changes
+    if: needs.changes.outputs.coq == 'true'
     strategy:
       fail-fast: false
       matrix:
         include:
-        - env: { COQ_VERSION: "master", DOCKER_COQ_VERSION: "dev" , DOCKER_MATHCOMP_VERSION: "2.4.0" , DOCKER_COQ_NAME: "rocq-prover", DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "coq-record-update coq-flocq", LAPROOF: "", TGTS: "computed", INSTALL_TGTS: "", OPAM_UPDATE_CMD: "" }
-        - env: { COQ_VERSION: "9.0"   , DOCKER_COQ_VERSION: "9.0" , DOCKER_MATHCOMP_VERSION: "2.4.0" , DOCKER_COQ_NAME: "rocq-prover", DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "coq-record-update coq-flocq coq-interval coq-mathcomp-zify coq-mathcomp-analysis coq-mathcomp-algebra-tactics coq-mathcomp-finmap"                                , LAPROOF: "" , TGTS: "", INSTALL_TGTS: "install", OPAM_UPDATE_CMD: "" }
-        - env: { COQ_VERSION: "8.20"  , DOCKER_COQ_VERSION: "8.20", DOCKER_MATHCOMP_VERSION: "2.3.0" , DOCKER_COQ_NAME: "coq"        , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "coq-record-update coq-flocq coq-interval coq-vcfloat coq-mathcomp-zify coq-mathcomp-analysis coq-mathcomp-algebra-tactics coq-mathcomp-finmap coq-vst coq-vst-lib", LAPROOF: "" , TGTS: "", INSTALL_TGTS: "install", OPAM_UPDATE_CMD: "" }
-        - env: { COQ_VERSION: "8.19"  , DOCKER_COQ_VERSION: "8.19", DOCKER_MATHCOMP_VERSION: "1.19.0", DOCKER_COQ_NAME: "coq"        , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "coq-record-update coq-flocq coq-interval coq-vcfloat coq-mathcomp-zify coq-mathcomp-analysis coq-mathcomp-algebra-tactics coq-mathcomp-finmap coq-vst coq-vst-lib", LAPROOF: "" , TGTS: "", INSTALL_TGTS: "install", OPAM_UPDATE_CMD: "" }
-        # - env: { COQ_VERSION: "8.18"  , DOCKER_COQ_VERSION: "8.18", DOCKER_MATHCOMP_VERSION: "1.18.0", DOCKER_COQ_NAME: "coq"        , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "coq-record-update coq-flocq", LAPROOF: "", TGTS: "computed", INSTALL_TGTS: "", OPAM_UPDATE_CMD: "" } # broken with   File "./theories/TransformerLens/HookedTransformer.v", line 128, characters 4-421: Error: Error: Missing notation term for variables i1 i_ j1 j_ k1   k_, probably an ill-typed expression
-        - env: { COQ_VERSION: "8.17"  , DOCKER_COQ_VERSION: "8.17", DOCKER_MATHCOMP_VERSION: "1.17.0", DOCKER_COQ_NAME: "coq"        , DOCKER_OCAML_VERSION: "default", OPAM_DEPS: "coq-record-update coq-flocq coq-interval coq-vcfloat coq-mathcomp-zify coq-mathcomp-analysis coq-mathcomp-algebra-tactics coq-mathcomp-finmap coq-vst coq-vst-lib", LAPROOF: "1", TGTS: "", INSTALL_TGTS: "install", OPAM_UPDATE_CMD: "" }
+        # The `master` rows deliberately use `rocq/rocq-prover:dev` rather than
+        # `mathcomp/mathcomp:2.4.0-rocq-prover-dev`, which is what this row used
+        # to use.  That mathcomp tag has gone stale: `rocq --version` inside it
+        # reports "The Rocq Prover, version 9.2+alpha", i.e. it is *older* than
+        # the released 9.2, so the row named "master" was not testing master.
+        # `rocq/rocq-prover:dev` reports 9.3+alpha.  Nothing in the target set
+        # below needs mathcomp, so dropping the mathcomp image costs nothing.
+        #
+        # `computed` is the fast canary: ~20 min, green on every run since at
+        # least 2025-11.  Keep it separate from the big job below so that a new
+        # break in the wider set is distinguishable from a break in the core.
+        - env: { COQ_VERSION: "master"                       , DOCKER_IMAGE: ""                                       , DOCKER_COQ_VERSION: "dev", DOCKER_OCAML_VERSION: "default", EXPECT_VERSION: "9."  , OPAM_DEPS: "coq-record-update coq-flocq"                                                                                    , LAPROOF: "", TGTS: "computed"     , INSTALL_TGTS: "", OPAM_UPDATE_CMD: "" }
+        # 152 of the 160 files in _CoqProject, against 102 for `computed`; see
+        # CI_SKIP/CI_SKIP_NO_INTERVAL in Makefile.coq.local for the measured
+        # reason behind each of the 8 that are left out.
+        - env: { COQ_VERSION: "master (everything buildable)", DOCKER_IMAGE: ""                                       , DOCKER_COQ_VERSION: "dev", DOCKER_OCAML_VERSION: "default", EXPECT_VERSION: "9."  , OPAM_DEPS: "coq-record-update coq-flocq"                                                                                    , LAPROOF: "", TGTS: "ci-all-no-interval", INSTALL_TGTS: "", OPAM_UPDATE_CMD: "" }
+        # No mathcomp image is published for 9.3, so this row gets
+        # rocq/rocq-prover:9.3 from coq_version, and therefore builds the same
+        # mathcomp-free target set as the master rows.
+        - env: { COQ_VERSION: "9.3"                          , DOCKER_IMAGE: ""                                       , DOCKER_COQ_VERSION: "9.3", DOCKER_OCAML_VERSION: "default", EXPECT_VERSION: "9.3" , OPAM_DEPS: "coq-record-update coq-flocq"                                                                                    , LAPROOF: "", TGTS: "ci-all-no-interval", INSTALL_TGTS: "", OPAM_UPDATE_CMD: "" }
+        # `OPAM_UPDATE_CMD` is load-bearing on this row and only on this row.
+        # The 9.2 image ships a frozen opam-repository snapshot in which the
+        # newest `coq-flocq` is 4.2.2 with a `coq < 8.21~` bound and there is no
+        # `rocq-flocq` at all, so `opam install coq-record-update coq-flocq`
+        # *succeeds* (exit 0) by removing rocq-core/rocq-runtime/rocq-stdlib and
+        # the whole mathcomp 2.6.0 stack and installing coq 8.16.1 in their
+        # place.  Refreshing the repository makes coq-flocq 4.2.2 resolve
+        # against coq-core 9.2.0 instead, with no removals.  See also the
+        # prover-version assertion after `opam install` below.
+        - env: { COQ_VERSION: "9.2"                          , DOCKER_IMAGE: "mathcomp/mathcomp:2.6.0-rocq-prover-9.2", DOCKER_COQ_VERSION: "9.2", DOCKER_OCAML_VERSION: "default", EXPECT_VERSION: "9.2" , OPAM_DEPS: "coq-record-update coq-flocq"                                                                                    , LAPROOF: "", TGTS: "ci-all-no-interval", INSTALL_TGTS: "", OPAM_UPDATE_CMD: "opam update -y" }
+        - env: { COQ_VERSION: "9.1"                          , DOCKER_IMAGE: "mathcomp/mathcomp:2.4.0-rocq-prover-9.1", DOCKER_COQ_VERSION: "9.1", DOCKER_OCAML_VERSION: "default", EXPECT_VERSION: "9.1" , OPAM_DEPS: "coq-record-update coq-flocq coq-interval coq-coquelicot coq-mathcomp-analysis coq-mathcomp-reals-stdlib", LAPROOF: "", TGTS: "ci-all"       , INSTALL_TGTS: "", OPAM_UPDATE_CMD: "" }
+        - env: { COQ_VERSION: "9.0"                          , DOCKER_IMAGE: "mathcomp/mathcomp:2.4.0-rocq-prover-9.0", DOCKER_COQ_VERSION: "9.0", DOCKER_OCAML_VERSION: "default", EXPECT_VERSION: "9.0" , OPAM_DEPS: "coq-record-update coq-flocq coq-interval coq-coquelicot coq-mathcomp-analysis coq-mathcomp-reals-stdlib", LAPROOF: "", TGTS: "ci-all"       , INSTALL_TGTS: "", OPAM_UPDATE_CMD: "" }
+        # 8.20 keeps its row, but on the plain `coqorg/coq` image and with only
+        # the two dependencies the target set actually needs.  It used to
+        # install the interval/vcfloat/VST stack and died *in that install*,
+        # never reaching a single `.v` file: `coq-vst.3.1beta` pulls
+        # `coq-compcert` and then rejects it ("COMPCERT VERSION MISMATCH:
+        # COMPCERT_VERSION=version=3.15 but .../compcert/VERSION=version=3.17").
+        # Nothing in `ci-all-no-interval` uses VST, so the fix is to stop
+        # installing it rather than to pin around it; with the minimal pair the
+        # row installs clean and builds the same 152 files as 9.3.
+        - env: { COQ_VERSION: "8.20"                         , DOCKER_IMAGE: ""                                       , DOCKER_COQ_VERSION: "8.20", DOCKER_OCAML_VERSION: "default", EXPECT_VERSION: "8.20", OPAM_DEPS: "coq-record-update coq-flocq"                                                                                   , LAPROOF: "", TGTS: "ci-all-no-interval", INSTALL_TGTS: "", OPAM_UPDATE_CMD: "" }
+        # Dropped rows.  All three have failed on every recorded run since
+        # 2025-11-05, and all three were re-measured on the plain coqorg/coq
+        # image with the minimal dependency pair -- i.e. the configuration that
+        # rescued 8.20 -- so these are source-side limits, not dependency-solver
+        # accidents.
+        #
+        # None of it is rot.  Three deliberate forward-ports did it, each right
+        # for the prover it was adapting to: 5b496f9 "Adapt to rocq#21211"
+        # (2025-11-05) dropped `at level 2` from 15 Slicing.v notations and
+        # added the `PrimArray` import; 6f2c7db "Adapt to rocq#21849"
+        # (2026-04-03) rewrote `%type` to `%_type` at 32 sites in 4 files; and
+        # c1f7905/58058f2 (2026-07/08) dropped the `@@1`/`@@2` levels for Rocq
+        # 9.4.  This PR takes back only the `PrimArray` import, which costs
+        # nothing anywhere.
+        #
+        # 8.19: `theories/Torch/Slicing.v`, line 222: "Error: A left-recursive
+        #   notation must have an explicit level."  106 of 160 files built.
+        #   Putting back the levels 5b496f9 removed does fix 8.19 -- measured,
+        #   152 of 160, rc 0 --
+        #   but it is NOT backwards compatible, because the level that has to
+        #   be stated changed under us.  `_ .[ _ , .. , _ ]` has to sit at the
+        #   same level as the stdlib `_ .[ _ ]` it shares a prefix with, and
+        #   that notation is at level 2 in Coq 8.19/8.20 and Rocq 9.0/9.1 but
+        #   at level 1 in Rocq 9.2 and later (read off the
+        #   notation-incompatible-prefix warnings of each build).  8.20+ infer
+        #   the right one; a literal cannot be right on both sides.  Writing
+        #   `at level 2` turned 9.2/9.3/master red at
+        #   `TransformerLens/HookedTransformer.v:115`, "Syntax error: '<-' or
+        #   ']' expected after [term level 200]".  Reverted, and 8.19 dropped.
+        # - env: { COQ_VERSION: "8.19", DOCKER_COQ_VERSION: "8.19", TGTS: "ci-all-no-interval", ... }
+        #
+        # 8.18: `theories/TransformerLens/HookedTransformer.v`, line 128,
+        #   characters 4-421: "Error: Missing notation term for variables i1 i_
+        #   j1 j_ k1 k_, probably an ill-typed expression".  83 of 160 files
+        #   built.  It also hits the same `%_type` problem 8.17 does.
+        # - env: { COQ_VERSION: "8.18", DOCKER_COQ_VERSION: "8.18", TGTS: "ci-all-no-interval", ... }
+        #
+        # 8.17: `theories/Util/PolymorphicSigma.v:24` uses the `%_type` scope
+        #   delimiter, which does not exist before 8.19 (there it is `%type`).
+        #   No form parses on both sides of 8.19, so keeping 8.17 means
+        #   reverting 6f2c7db at all 32 sites, or carrying a second spelling for
+        #   a prover four majors behind.  This is the row that was green until
+        #   2025-11-05 (last green run 19051159010 at `06a316c`, first red run
+        #   19110435928, which is 5b496f9 itself): it is dropped because keeping
+        #   it means undoing two upstream adaptations, not because it never
+        #   worked.
+        # - env: { COQ_VERSION: "8.17", DOCKER_COQ_VERSION: "8.17", TGTS: "ci-all-no-interval", ... }
 
     runs-on: ubuntu-latest
     env: ${{ matrix.env }}
     name: ${{ matrix.env.COQ_VERSION }}
 
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-docker-build-${{ github.head_ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-${{ matrix.env.TGTS }}-docker-build-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
 
     steps:
@@ -46,9 +183,12 @@ jobs:
     - name: make ${{ matrix.env.TGTS }}
       uses: coq-community/docker-coq-action@v1
       with:
-        custom_image: mathcomp/mathcomp:${{ matrix.env.DOCKER_MATHCOMP_VERSION }}-${{ matrix.env.DOCKER_COQ_NAME }}-${{ matrix.env.DOCKER_COQ_VERSION }}
-        #coq_version: ${{ matrix.env.DOCKER_COQ_VERSION }}
-        #ocaml_version: ${{ matrix.env.DOCKER_OCAML_VERSION }}
+        # An empty `custom_image` falls through to deriving the image from
+        # coq_version/ocaml_version, which is how the 9.3 row gets
+        # rocq/rocq-prover:9.3 (no mathcomp image is published for 9.3).
+        custom_image: ${{ matrix.env.DOCKER_IMAGE }}
+        coq_version: ${{ matrix.env.DOCKER_COQ_VERSION }}
+        ocaml_version: ${{ matrix.env.DOCKER_OCAML_VERSION }}
         export: CI
         custom_script: |
           eval $(opam env)
@@ -58,6 +198,20 @@ jobs:
           startGroup 'install dependencies'
           ${{ matrix.env.OPAM_UPDATE_CMD }}
           opam install -y -v ${{ matrix.env.OPAM_DEPS }}
+          endGroup
+          startGroup 'check that the prover survived dependency installation'
+          # A dependency capped at `coq < 8.21~` does not make `opam install`
+          # fail: opam satisfies it by *uninstalling* the Rocq prover and
+          # installing Coq 8.x in its place, and exits 0.  The row then reports
+          # source errors against a prover several majors older than the one it
+          # is named after -- which is exactly what the 9.2 row did until
+          # OPAM_UPDATE_CMD was added above.  Assert the version instead.
+          PROVER_VERSION="$( { rocq --version || rocqc --version || coqc --version ; } 2>&1 | head -n 1 )"
+          echo "prover after dependency installation: $PROVER_VERSION"
+          case "$PROVER_VERSION" in
+            *"version ${{ matrix.env.EXPECT_VERSION }}"*) ;;
+            *) echo "::error::expected a ${{ matrix.env.EXPECT_VERSION }} prover, got: $PROVER_VERSION"; exit 1 ;;
+          esac
           endGroup
           startGroup 'install LAProof'
           if [ ! -z "${{ matrix.env.LAPROOF }}" ]; then
@@ -80,6 +234,8 @@ jobs:
           make print-pretty-timed
 
   docker-build-native:
+    needs: changes
+    if: needs.changes.outputs.coq == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -138,17 +294,18 @@ jobs:
 
   check-all:
     runs-on: ubuntu-latest
-    needs: [docker-build, docker-build-native]
+    needs: [changes, docker-build, docker-build-native]
     if: always()
     steps:
-    - run: echo 'docker-build passed'
-      if: ${{ needs.docker-build.result == 'success' }}
-    - run: echo 'docker-build-native passed'
-      if: ${{ needs.docker-build-native.result == 'success' }}
+    - run: echo 'changes=${{ needs.changes.result }} docker-build=${{ needs.docker-build.result }} docker-build-native=${{ needs.docker-build-native.result }}'
+    # `skipped` has to count as passing: this is a required status check, and
+    # the build jobs are deliberately skipped on Python-only changes.
+    - run: echo 'changes failed' && false
+      if: ${{ needs.changes.result != 'success' }}
     - run: echo 'docker-build failed' && false
-      if: ${{ needs.docker-build.result != 'success' }}
+      if: ${{ !contains(fromJSON('["success", "skipped"]'), needs.docker-build.result) }}
     - run: echo 'docker-build-native failed' && false
-      if: ${{ needs.docker-build-native.result != 'success' }}
+      if: ${{ !contains(fromJSON('["success", "skipped"]'), needs.docker-build-native.result) }}
 
 
   update-tested:
