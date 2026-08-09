@@ -5,12 +5,12 @@ From Flocq.IEEE754 Require Import PrimFloat BinarySingleNaN.
 From NeuralNetInterp.Util.Tactics Require Import Head.
 From NeuralNetInterp.Torch Require Import Tensor Tensor.Instances.
 From NeuralNetInterp.MaxOfTwoNumbersUndertrainedSimpler Require Import Parameters Model Model.Instances Model.Flocqify Model.ExtraComputations Heuristics.
-From mathcomp.analysis Require Import Rstruct.
+From mathcomp.reals_stdlib Require Import Rstruct.
 From mathcomp Require Import matrix all_ssreflect all_algebra ssrnum bigop.
 From LAProof.accuracy_proofs Require Import dotprod_model.
 From vcfloat Require Import IEEE754_extra.
 From vcfloat Require Import FPCompCert.
-From mathcomp.ssreflect Require Import seq.
+From mathcomp Require Import seq.
 From LAProof Require Import dot_acc.
 From NeuralNetInterp.Util Require Import Default Arith.Classes Arith.Instances Arith.Instances.Reals Arith.Flocq Arith.Flocq.Instances Arith.Flocq.Definitions.
 Import (hints) Instances.Uint63.

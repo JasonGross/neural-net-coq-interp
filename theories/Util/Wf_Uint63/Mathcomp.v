@@ -3,7 +3,7 @@ From NeuralNetInterp.Util Require Import Monad Notations Arith.Classes Arith.Ins
 From NeuralNetInterp.Util.Tactics Require Import BreakMatch DestructHead UniquePose.
 From NeuralNetInterp.Util Require Import Wf_Uint63 Wf_Uint63.Proofs.
 Import Arith.Classes Arith.Instances.Uint63.
-From mathcomp.analysis Require Import Rstruct.
+From mathcomp.reals_stdlib Require Import Rstruct.
 From mathcomp Require Import matrix all_ssreflect all_algebra ssrnum bigop.
 #[local] Open Scope core_scope.
 #[local] Delimit Scope Z_scope with coq_Z.
