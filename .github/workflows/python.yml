@@ -38,7 +38,7 @@ jobs:
       cancel-in-progress: true
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         submodules: recursive
     - name: Runner Info for ${{ github.workflow }}-${{ matrix.python-version }}-${{ github.head_ref || github.run_id }}
