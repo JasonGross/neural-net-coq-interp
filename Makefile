@@ -8,8 +8,13 @@ KNOWNFILES   := Makefile _CoqProject
 
 .DEFAULT_GOAL := invoke-coqmakefile
 
+# Rocq >= 9.2 ships no `coq_makefile` binary (and no `coqc`/`rocqc`); the
+# generator is the `rocq makefile` subcommand.  Prefer coq_makefile wherever it
+# exists so Coq 8.x and Rocq 9.0/9.1 keep working exactly as before.
+COQ_MAKEFILE ?= $(shell command -v $(COQBIN)coq_makefile > /dev/null 2>&1 && echo '$(COQBIN)coq_makefile' || echo '$(COQBIN)rocq makefile')
+
 Makefile.coq: Makefile _CoqProject
-	$(COQBIN)coq_makefile -f _CoqProject -o Makefile.coq
+	$(COQ_MAKEFILE) -f _CoqProject -o Makefile.coq
 
 SRC_DIR := theories
 MOD_NAME := NeuralNetInterp

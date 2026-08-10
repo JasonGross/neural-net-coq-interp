@@ -25,3 +25,46 @@ EXTRA_COQ_CI_TARGETS := \
 
 .PHONY: coq-ci-target
 coq-ci-target: models theorem-statements $(EXTRA_COQ_CI_TARGETS)
+
+####################################################################
+##  Targets for CI rows that build "everything that can be built" ##
+####################################################################
+# Each exclusion below carries the measured reason it is excluded.  A `#` inside
+# a backslash-continued assignment comments out the rest of the *logical* line,
+# so these have to be one `+=` per entry rather than one continued list.
+
+# Files excluded from `ci-all` on every CI row.
+CI_SKIP :=
+
+# Never terminates.  Measured on mathcomp/mathcomp:2.4.0-rocq-prover-dev: still
+# the only live rocqworker after 60+ minutes at ~1 GB RSS, with no other file
+# left to compile.  Same symptom that took it out of EXTRA_COQ_CI_TARGETS above.
+CI_SKIP += theories/Util/Wf_Uint63/Proofs.v
+# Depends on Wf_Uint63/Proofs.vo (and on mathcomp's Rstruct).
+CI_SKIP += theories/Util/Wf_Uint63/Mathcomp.v
+# Depend on Wf_Uint63/Proofs.vo.
+CI_SKIP += theories/MaxOfTwoNumbersSimpler/Theorems/Attempt_01b_logit_delta.v
+CI_SKIP += theories/MaxOfTwoNumbersSimpler/Theorems/Attempt_02_SplitAttention.v
+CI_SKIP += theories/MaxOfTwoNumbersUndertrainedSimpler/Theorems/Attempt_02_SplitAttention.v
+# Need coq-vcfloat + LAProof, and no surviving CI row installs either.
+# coq-vcfloat was only ever on the 8.17/8.19/8.20 rows, and LAProof is not in
+# opam at all -- it was a from-source clone on the 8.17 row alone.
+CI_SKIP += theories/MaxOfTwoNumbersSimpler/Model/Rify.v
+CI_SKIP += theories/MaxOfTwoNumbersUndertrainedSimpler/Model/Rify.v
+
+.PHONY: ci-all
+ci-all: $(filter-out $(CI_SKIP:.v=.$(VO)),$(VFILES:.v=.$(VO)))
+
+# Same, minus the one file that needs coq-interval.  Used by the 8.20, 9.2, 9.3
+# and master rows, none of which installs the interval/coquelicot/analysis
+# stack.  On 9.2 and 9.3 that is not a choice: `opam install coq-interval
+# coq-coquelicot coq-mathcomp-analysis coq-mathcomp-reals-stdlib` is
+# `[ERROR] Package conflict!  ... not available because the package is pinned
+# to version 9.2.0 / 9.3+rc1` in both images.  On master it does resolve, but
+# only by building mathcomp dev, elpi and menhir dev from source, which is a
+# lot of runner time to gain exactly this one file.
+CI_SKIP_NO_INTERVAL := $(CI_SKIP)
+CI_SKIP_NO_INTERVAL += theories/MaxOfTwoNumbers/Theorems/Attempt_02_SplitAttention.v
+
+.PHONY: ci-all-no-interval
+ci-all-no-interval: $(filter-out $(CI_SKIP_NO_INTERVAL:.v=.$(VO)),$(VFILES:.v=.$(VO)))
