@@ -39,54 +39,60 @@ Reserved Infix "*m" (at level 40, left associativity).
 Reserved Notation "c >>= f" (at level 50, left associativity).
 Reserved Notation "f =<< c" (at level 51, right associativity).
 
+(* These levels must agree with mathcomp's bigop.v, which reserves the ASCII
+   forms itself; mathcomp 2.5.0 moved the head level from 41/36 to 34 and the
+   bound-variable levels from 50 to 60.  mathcomp omits the head level on the
+   forms that take a range or a list, but we cannot: a reservation standing on
+   its own has nothing to infer the level from and fails with "Cannot
+   determine the level". *)
 Reserved Notation "\sum_ i F"
-  (at level 41, F at level 41, i at level 0,
+  (at level 34, F at level 41, i at level 0,
     right associativity,
-    format "'[' \sum_ i '/ ' F ']'").
+    format "'[' \sum_ i '/  '  F ']'").
 Reserved Notation "∑_ i F"
-  (at level 41, F at level 41, i at level 0,
+  (at level 34, F at level 41, i at level 0,
     right associativity,
-    format "'[' ∑_ i '/ ' F ']'").
+    format "'[' ∑_ i '/  '  F ']'").
 Reserved Notation "\sum_ ( i <- r ) F"
-  (at level 41, F at level 41, i, r at level 50,
-    format "'[' \sum_ ( i <- r ) '/ ' F ']'").
+  (at level 34, F at level 41, i, r at level 60,
+    format "'[' \sum_ ( i  <-  r ) '/  '  F ']'").
 Reserved Notation "∑_ ( i <- r ) F"
-  (at level 41, F at level 41, i, r at level 50,
-    format "'[' ∑_ ( i <- r ) '/ ' F ']'").
+  (at level 34, F at level 41, i, r at level 60,
+    format "'[' ∑_ ( i  <-  r ) '/  '  F ']'").
 Reserved Notation "\prod_ i F"
-  (at level 36, F at level 36, i at level 0,
-    format "'[' \prod_ i '/ ' F ']'").
+  (at level 34, F at level 36, i at level 0,
+    format "'[' \prod_ i '/  '  F ']'").
 Reserved Notation "∏_ i F"
-  (at level 36, F at level 36, i at level 0,
-    format "'[' ∏_ i '/ ' F ']'").
+  (at level 34, F at level 36, i at level 0,
+    format "'[' ∏_ i '/  '  F ']'").
 Reserved Notation "\prod_ ( i <- r ) F"
-  (at level 36, F at level 36, i, r at level 50,
-    format "'[' \prod_ ( i <- r ) '/ ' F ']'").
+  (at level 34, F at level 36, i, r at level 60,
+    format "'[' \prod_ ( i  <-  r ) '/  '  F ']'").
 Reserved Notation "∏_ ( i <- r ) F"
-  (at level 36, F at level 36, i, r at level 50,
-    format "'[' ∏_ ( i <- r ) '/ ' F ']'").
+  (at level 34, F at level 36, i, r at level 60,
+    format "'[' ∏_ ( i  <-  r ) '/  '  F ']'").
 
 Reserved Notation "\sum_ ( m <= i < n ) F"
-  (at level 41, F at level 41, i, m, n at level 50,
-    format "'[' \sum_ ( m <= i < n ) '/ ' F ']'").
+  (at level 34, F at level 41, i, m, n at level 60,
+    format "'[' \sum_ ( m  <=  i  <  n ) '/  '  F ']'").
 Reserved Notation "\sum_ ( m ≤ i < n ) F"
-  (at level 41, F at level 41, i, m, n at level 50,
-    format "'[' \sum_ ( m ≤ i < n ) '/ ' F ']'").
+  (at level 34, F at level 41, i, m, n at level 60,
+    format "'[' \sum_ ( m  ≤  i  <  n ) '/  '  F ']'").
 Reserved Notation "∑_ ( m <= i < n ) F"
-  (at level 41, F at level 41, i, m, n at level 50,
-    format "'[' ∑_ ( m <= i < n ) '/ ' F ']'").
+  (at level 34, F at level 41, i, m, n at level 60,
+    format "'[' ∑_ ( m  <=  i  <  n ) '/  '  F ']'").
 Reserved Notation "∑_ ( m ≤ i < n ) F"
-  (at level 41, F at level 41, i, m, n at level 50,
-    format "'[' ∑_ ( m ≤ i < n ) '/ ' F ']'").
+  (at level 34, F at level 41, i, m, n at level 60,
+    format "'[' ∑_ ( m  ≤  i  <  n ) '/  '  F ']'").
 Reserved Notation "\prod_ ( m <= i < n ) F"
-  (at level 36, F at level 36, i, m, n at level 50,
-    format "'[' \prod_ ( m <= i < n ) '/ ' F ']'").
+  (at level 34, F at level 36, i, m, n at level 60,
+    format "'[' \prod_ ( m  <=  i  <  n ) '/  '  F ']'").
 Reserved Notation "\prod_ ( m ≤ i < n ) F"
-  (at level 36, F at level 36, i, m, n at level 50,
-    format "'[' \prod_ ( m ≤ i < n ) '/ ' F ']'").
+  (at level 34, F at level 36, i, m, n at level 60,
+    format "'[' \prod_ ( m  ≤  i  <  n ) '/  '  F ']'").
 Reserved Notation "∏_ ( m <= i < n ) F"
-  (at level 36, F at level 36, i, m, n at level 50,
-    format "'[' ∏_ ( m <= i < n ) '/ ' F ']'").
+  (at level 34, F at level 36, i, m, n at level 60,
+    format "'[' ∏_ ( m  <=  i  <  n ) '/  '  F ']'").
 Reserved Notation "∏_ ( m ≤ i < n ) F"
-  (at level 36, F at level 36, i, m, n at level 50,
-    format "'[' ∏_ ( m ≤ i < n ) '/ ' F ']'").
+  (at level 34, F at level 36, i, m, n at level 60,
+    format "'[' ∏_ ( m  ≤  i  <  n ) '/  '  F ']'").
