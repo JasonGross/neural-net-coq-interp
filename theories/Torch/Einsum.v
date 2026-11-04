@@ -115,7 +115,7 @@ Module Import Internals.
                            end in
                       (Int.add cur_rel 1,
                         used_rels,
-                        if cur_rel_used
+                        (if cur_rel_used
                         then
                           (* drop down rels that we dropped *)
                           let body := constr_dropn (Int.neg accumulated_shift) 1 body in
@@ -124,7 +124,7 @@ Module Import Internals.
                           (0, Constr.Unsafe.make (Constr.Unsafe.App f args))
                         else
                           (Int.sub accumulated_shift 1,
-                            body))
+                            body)))
                  | k => Control.throw (InternalEinsumBadKind k)
                  end
             | k => Control.throw (InternalEinsumBadKind k)

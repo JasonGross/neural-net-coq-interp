@@ -1,5 +1,5 @@
 From Coq Require Import Floats Sint63 Uint63 QArith Lia List PArray Morphisms RelationClasses.
-From NeuralNetInterp.Util Require Import Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool Option PrimitiveProd.
+From NeuralNetInterp.Util Require Import Notations Default Pointed PArray List Arith.Classes Arith.Instances Bool Option PrimitiveProd.
 From NeuralNetInterp.Util Require Nat Wf_Uint63.
 From NeuralNetInterp.Torch Require Import Tensor Einsum Slicing.
 From NeuralNetInterp.TransformerLens Require Import HookedTransformer HookedTransformer.Config HookedTransformer.Module.
