@@ -28,7 +28,7 @@ jobs:
     outputs:
       coq: ${{ steps.filter.outputs.coq }}
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         fetch-depth: 0
     - id: filter
@@ -175,7 +175,7 @@ jobs:
       cancel-in-progress: true
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         submodules: recursive
     - name: Runner Info for ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-docker-build-${{ github.head_ref || github.run_id }}
@@ -256,7 +256,7 @@ jobs:
       cancel-in-progress: true
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         submodules: recursive
     - name: Runner Info for ${{ github.workflow }}-${{ matrix.env.COQ_VERSION }}-docker-build-native-${{ github.head_ref || github.run_id }}
@@ -317,7 +317,7 @@ jobs:
     needs: [docker-build, docker-build-native]
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         fetch-depth: 0
     - run: pwd
