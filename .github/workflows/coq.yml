@@ -325,4 +325,37 @@ jobs:
     - run: git log --oneline --max-count=10
     - run: git log origin/tested --oneline --max-count=10
     - run: git log origin/main --oneline --max-count=10
-    - run: git push origin HEAD:tested
+    # Rocq's CI builds `tested`, so Rocq maintainers sometimes merge an
+    # overlay into it directly (#96 did).  A plain push is then rejected as
+    # non-fast-forward, and this job failed on every run from 2026-04 to
+    # 2026-11.  So: fast-forward when possible; otherwise overwrite `tested`
+    # only when everything on it is already in HEAD, and fail when not.
+    # The messages are annotations because those outlive the run's log.
+    - name: Push to tested
+      run: |
+        set -euo pipefail
+        TESTED="$(git rev-parse origin/tested)"
+        HEAD_SHA="$(git rev-parse HEAD)"
+        if git merge-base --is-ancestor HEAD "$TESTED"; then
+          echo "tested ($TESTED) already contains $HEAD_SHA; nothing to push."
+          exit 0
+        fi
+        if git merge-base --is-ancestor "$TESTED" HEAD; then
+          git push origin HEAD:tested
+          exit 0
+        fi
+        EXTRA="$(git log --format=%h HEAD.."$TESTED" | paste -sd ' ' -)"
+        echo "tested ($TESTED) has commits that $HEAD_SHA does not: $EXTRA"
+        UNMATCHED="$( { git cherry HEAD "$TESTED" | grep -v '^-' ; } || true)"
+        MERGES="$(git rev-list --merges HEAD.."$TESTED")"
+        if [ -z "$UNMATCHED" ] && [ -z "$MERGES" ]; then
+          WHY="each is already in HEAD as an equivalent patch"
+        elif MERGED="$(git merge-tree --write-tree --no-messages HEAD "$TESTED")" \
+             && [ "$MERGED" = "$(git rev-parse 'HEAD^{tree}')" ]; then
+          WHY="merging them into HEAD changes nothing"
+        else
+          echo "::error title=tested has changes main lacks::tested ($TESTED) has commits with changes that $HEAD_SHA lacks: $EXTRA. Merge them into main, or move tested by hand, then re-run this job."
+          exit 1
+        fi
+        git push --force-with-lease=refs/heads/tested:"$TESTED" origin HEAD:refs/heads/tested
+        echo "::notice title=Overwrote tested::tested was $TESTED, with commits $EXTRA not in $HEAD_SHA; $WHY."
