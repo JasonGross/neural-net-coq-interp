@@ -2,7 +2,7 @@ From Coq.Structures Require Import Equalities.
 From Coq Require Import ZArith Sint63 Uint63 List PArray Lia.
 From NeuralNetInterp.Util Require Nat.
 From NeuralNetInterp.Util.Tactics Require Import ClearAll ClearbodyAll.
-From NeuralNetInterp.Util Require Import Wf_Uint63 PArray.Proofs List.Proofs Default Pointed PArray List Notations Arith.Classes Arith.Instances Bool (*PrimitiveProd*).
+From NeuralNetInterp.Util Require Import Notations Wf_Uint63 PArray.Proofs List.Proofs Default Pointed PArray List Arith.Classes Arith.Instances Bool (*PrimitiveProd*).
 Import Util.Nat.Notations.
 Import Util.Wf_Uint63.LoopNotation.
 Import Util.Wf_Uint63.Reduction.
